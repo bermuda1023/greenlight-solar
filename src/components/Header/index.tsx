@@ -11,7 +11,7 @@ const Header = (props: {
 }) => {
   return (
     <header className="sticky top-0 z-999 flex w-full border-b border-stroke bg-white dark:border-stroke-dark dark:bg-gray-dark">
-      <div className="flex flex-grow items-center justify-between px-4 py-5 shadow-2 md:px-5 2xl:px-10">
+      <div className="flex flex-grow items-center justify-between px-4 py-4 shadow-2 md:px-5 2xl:px-10">
         <div className="flex items-center gap-2 sm:gap-4 lg:hidden">
           {/* <!-- Hamburger Toggle BTN --> */}
           <button
@@ -66,33 +66,27 @@ const Header = (props: {
           </Link>
         </div>
 
-        <div className="hidden xl:block">
+        {/* <div className="hidden xl:block">
           <div>
             <h1 className="mb-0.5 text-heading-5 font-bold text-dark dark:text-white">
               Dashboard
             </h1>
             <p className="font-medium">Next.js Admin Dashboard Solution</p>
           </div>
-        </div>
+        </div> */}
 
-        <div className="flex items-center justify-normal gap-2 2xsm:gap-4 lg:w-full lg:justify-between xl:w-auto xl:justify-normal">
-          <ul className="flex items-center gap-2 2xsm:gap-4">
-            {/* <!-- Search Form --> */}
+        {/* Main Header Content */}
+        <div className="flex flex-1 items-center justify-between">
+          {/* Left Section: Search Form */}
+          <div className="flex items-center">
             <SearchForm />
-            {/* <!-- Search Form --> */}
+          </div>
 
-            {/* <!-- Dark Mode Toggle --> */}
-            <DarkModeSwitcher />
-            {/* <!-- Dark Mode Toggle --> */}
-
-            {/* <!-- Notification Menu Area --> */}
+          {/* Right Section: Notification and User */}
+          <ul className="flex items-center gap-4">
             <DropdownNotification />
-            {/* <!-- Notification Menu Area --> */}
+            <DropdownUser />
           </ul>
-
-          {/* <!-- User Area --> */}
-          <DropdownUser />
-          {/* <!-- User Area --> */}
         </div>
       </div>
     </header>

@@ -3,6 +3,7 @@ import "jsvectormap/dist/css/jsvectormap.css";
 import "flatpickr/dist/flatpickr.min.css";
 import "@/css/satoshi.css";
 import "@/css/style.css";
+import 'flowbite';
 import React, { useEffect, useState } from "react";
 import Loader from "@/components/common/Loader";
 
