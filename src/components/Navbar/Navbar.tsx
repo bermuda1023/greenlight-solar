@@ -21,7 +21,7 @@ const Navbar: React.FC = () => {
           {/* Sign-in Button */}
           <div>
             <Link
-              href="/signin"
+              href="/"
               className="text-base font-medium text-white bg-primary px-6 py-3 rounded-lg"
             >
               Account

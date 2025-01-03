@@ -11,7 +11,7 @@ const Header = (props: {
 }) => {
   return (
     <header className="sticky top-0 z-999 flex w-full border-b border-stroke bg-white dark:border-stroke-dark dark:bg-gray-dark">
-      <div className="flex flex-grow items-center justify-between px-4 py-4 shadow-2 md:px-5 2xl:px-10">
+      <div className="flex flex-grow items-center justify-between px-4 py-4  md:px-5 2xl:px-10">
         <div className="flex items-center gap-2 sm:gap-4 lg:hidden">
           {/* <!-- Hamburger Toggle BTN --> */}
           <button
@@ -78,8 +78,10 @@ const Header = (props: {
         {/* Main Header Content */}
         <div className="flex flex-1 items-center justify-between">
           {/* Left Section: Search Form */}
-          <div className="flex items-center">
-            <SearchForm />
+          <div className="flex items-center gap-1 leading-tight">
+            <h1 className="font-medium text-dark text-lg">Welcome, James! </h1>
+            <p className="text-base">Here&apos;s a snapshot of your activity.</p>
+            {/* <SearchForm /> */}
           </div>
 
           {/* Right Section: Notification and User */}

@@ -5,11 +5,6 @@ import React from "react";
 import SignIn from "./authentication/signin/page";
 import AuthLayout from "@/components/Layouts/AuthLayout";
 
-export const metadata: Metadata = {
-  title:
-    "Next.js E-commerce Dashboard Page | NextAdmin - Next.js Dashboard Kit",
-  description: "This is Next.js Home page for NextAdmin Dashboard Kit",
-};
 
 export default function Home() {
   return (
