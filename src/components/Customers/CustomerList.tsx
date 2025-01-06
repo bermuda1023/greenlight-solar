@@ -1,8 +1,11 @@
 import React from 'react'
+import CustomersListTable from '../Tables/CustomersListTable'
 
 const CustomerList = () => {
   return (
-    <div>CustomerList</div>
+    <>
+    <CustomersListTable/>
+    </>
   )
 }
 
