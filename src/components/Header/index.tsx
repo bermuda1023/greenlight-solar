@@ -67,11 +67,11 @@ const Header = (props: {
         </div> */}
 
         {/* Main Header Content */}
-        <div className="flex flex-1 items-center justify-between">
+        <div className="flex flex-1 items-center justify-end">
           {/* Left Section: Search Form */}
-          <div className="flex items-center gap-1 leading-tight">
+          {/* <div className="flex items-center gap-1 leading-tight">
             <h1 className="font-medium text-dark text-sm md:text-lg">Dashboard Overview</h1>
-          </div>
+          </div> */}
 
           {/* Right Section: Notification and User */}
           <ul className="flex items-center gap-4">
