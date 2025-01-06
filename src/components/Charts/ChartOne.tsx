@@ -6,11 +6,11 @@ import DefaultSelectOption from "@/components/SelectOption/DefaultSelectOption";
 const ChartOne: React.FC = () => {
   const series = [
     {
-      name: "Received Amount",
+      name: "Electricity Export",
       data: [0, 20, 35, 45, 35, 55, 65, 50, 65, 75, 60, 75],
     },
     {
-      name: "Due Amount",
+      name: "Electricity Import",
       data: [15, 9, 17, 32, 25, 68, 80, 68, 84, 94, 74, 62],
     },
   ];
@@ -21,7 +21,7 @@ const ChartOne: React.FC = () => {
       position: "top",
       horizontalAlign: "left",
     },
-    colors: ["#5750F1", "#0ABEF9"],
+    colors: ["#22AD5C", "#445b49"],
     chart: {
       fontFamily: "Satoshi, sans-serif",
       height: 310,
@@ -131,12 +131,12 @@ const ChartOne: React.FC = () => {
     <div className="col-span-12 rounded-[10px] bg-white px-7.5 pb-6 pt-7.5 shadow-1 dark:bg-gray-dark dark:shadow-card xl:col-span-7">
       <div className="mb-3.5 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h4 className="text-body-2xlg font-bold text-dark dark:text-white">
-            Payments Overview
+          <h4 className="text-lg font-bold text-dark dark:text-white">
+          Electricity Import/Export Trends
           </h4>
         </div>
         <div className="flex items-center gap-2.5">
-          <p className="font-medium uppercase text-dark dark:text-dark-6">
+          <p className="font-medium text-sm uppercase text-dark dark:text-dark-6">
             Short by:
           </p>
           <DefaultSelectOption options={["Monthly", "Yearly"]} />

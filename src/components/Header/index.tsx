@@ -55,15 +55,6 @@ const Header = (props: {
             </span>
           </button>
           {/* <!-- Hamburger Toggle BTN --> */}
-
-          <Link className="block flex-shrink-0 lg:hidden" href="/">
-            <Image
-              width={32}
-              height={32}
-              src={"/images/logo/logo-icon.svg"}
-              alt="Logo"
-            />
-          </Link>
         </div>
 
         {/* <div className="hidden xl:block">
@@ -79,9 +70,7 @@ const Header = (props: {
         <div className="flex flex-1 items-center justify-between">
           {/* Left Section: Search Form */}
           <div className="flex items-center gap-1 leading-tight">
-            <h1 className="font-medium text-dark text-lg">Welcome, James! </h1>
-            <p className="text-base">Here&apos;s a snapshot of your activity.</p>
-            {/* <SearchForm /> */}
+            <h1 className="font-medium text-dark text-sm md:text-lg">Dashboard Overview</h1>
           </div>
 
           {/* Right Section: Notification and User */}

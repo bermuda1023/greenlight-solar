@@ -6,17 +6,17 @@ import DefaultSelectOption from "@/components/SelectOption/DefaultSelectOption";
 const ChartTwo: React.FC = () => {
   const series = [
     {
-      name: "Sales",
+      name: "Total Revenue",
       data: [44, 55, 41, 67, 22, 43, 65],
     },
     {
-      name: "Revenue",
+      name: "Pending Sales",
       data: [13, 23, 20, 8, 13, 27, 15],
     },
   ];
 
   const options: ApexOptions = {
-    colors: ["#5750F1", "#0ABEF9"],
+    colors: ["#50c469", "#2e4433"],
     chart: {
       fontFamily: "Satoshi, sans-serif",
       type: "bar",
@@ -97,12 +97,14 @@ const ChartTwo: React.FC = () => {
     <div className="col-span-12 rounded-[10px] bg-white px-7.5 pt-7.5 shadow-1 dark:bg-gray-dark dark:shadow-card xl:col-span-5">
       <div className="mb-4 justify-between gap-4 sm:flex">
         <div>
-          <h4 className="text-body-2xlg font-bold text-dark dark:text-white">
-            Profit this week
+          <h4 className="text-lg font-bold text-dark dark:text-white">
+            Revenue Trends
           </h4>
         </div>
         <div>
-          <DefaultSelectOption options={["This Week", "Last Week"]} />
+          <DefaultSelectOption
+            options={["Pending Payments", "Total Revenue"]}
+          />
         </div>
       </div>
 

@@ -1,9 +1,11 @@
 "use client";
 import jsVectorMap from "jsvectormap";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import "../../js/us-aea-en";
 
 const MapOne: React.FC = () => {
+  const mapInstanceRef = useRef<InstanceType<typeof jsVectorMap> | null>(null); // Correct type usage with typeof
+
   useEffect(() => {
     const mapElement = document.getElementById("mapOne");
 
@@ -12,6 +14,7 @@ const MapOne: React.FC = () => {
       return;
     }
 
+    // Initialize the jsVectorMap instance
     const vectorMapOne = new jsVectorMap({
       selector: "#mapOne",
       map: "us_aea_en",
@@ -46,9 +49,14 @@ const MapOne: React.FC = () => {
       },
     });
 
+    // Store the instance in the ref
+    mapInstanceRef.current = vectorMapOne;
+
     return () => {
-      if (vectorMapOne) {
-        vectorMapOne.destroy();
+      // Cleanup: Destroy the map instance if it exists
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.destroy();
+        mapInstanceRef.current = null; // Clear the ref after destroying
       } else {
         console.error("Vector map instance not found during cleanup");
       }
