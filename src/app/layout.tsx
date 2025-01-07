@@ -7,6 +7,7 @@ import "@/css/satoshi.css";
 import "@/css/style.css";
 import 'flowbite';
 import RootLayoutClient from './RootLayoutClient';
+import { AuthProvider } from '@/context/AuthContext';
 
 // Export metadata configuration
 export const metadata: Metadata = defaultMetadata;
@@ -19,7 +20,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <RootLayoutClient>{children}</RootLayoutClient>
+      <RootLayoutClient><AuthProvider>{children}</AuthProvider></RootLayoutClient>
     </html>
   );
 }
