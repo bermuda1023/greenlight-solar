@@ -6,7 +6,7 @@ import Link from "next/link";
 const ProfileBox = () => {
   return (
     <>
-      <div className="overflow-hidden rounded-[10px] bg-white shadow-1 dark:bg-gray-dark dark:shadow-card">
+      {/* <div className="overflow-hidden rounded-[10px] bg-white shadow-1 dark:bg-gray-dark dark:shadow-card">
         <div className="relative z-20 h-35 md:h-65">
           <Image
             src="/images/cover/cover-01.png"
@@ -280,7 +280,7 @@ const ProfileBox = () => {
             </div>
           </div>
         </div>
-      </div>
+      </div> */}
     </>
   );
 };

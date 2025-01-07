@@ -95,55 +95,57 @@ const menuGroups = [
           { label: "Reconciliation", route: "/dashboard/billing/reconciliation" },
         ],
       },
-      {
-        icon: (
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            className="icon icon-tabler icons-tabler-outline icon-tabler-clipboard-data"
-          >
-            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-            <path d="M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2" />
-            <path d="M9 3m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z" />
-            <path d="M9 17v-4" />
-            <path d="M12 17v-1" />
-            <path d="M15 17v-2" />
-            <path d="M12 17v-1" />
-          </svg>
-        ),
-        label: "Reports",
-        route: "/dashboard/reports",
-      },
-      {
-        icon: (
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            className="icon icon-tabler icons-tabler-outline icon-tabler-user-square-rounded"
-          >
-            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-            <path d="M12 13a3 3 0 1 0 0 -6a3 3 0 0 0 0 6z" />
-            <path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" />
-            <path d="M6 20.05v-.05a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v.05" />
-          </svg>
-        ),
-        label: "Profile",
-        route: "/dashboard/profile",
-      },
+//                 **no need of reports for now, so commenting it out**
+
+      // {
+      //   icon: (
+      //     <svg
+      //       xmlns="http://www.w3.org/2000/svg"
+      //       width="24"
+      //       height="24"
+      //       viewBox="0 0 24 24"
+      //       fill="none"
+      //       stroke="currentColor"
+      //       stroke-width="1.5"
+      //       stroke-linecap="round"
+      //       stroke-linejoin="round"
+      //       className="icon icon-tabler icons-tabler-outline icon-tabler-clipboard-data"
+      //     >
+      //       <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      //       <path d="M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2" />
+      //       <path d="M9 3m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z" />
+      //       <path d="M9 17v-4" />
+      //       <path d="M12 17v-1" />
+      //       <path d="M15 17v-2" />
+      //       <path d="M12 17v-1" />
+      //     </svg>
+      //   ),
+      //   label: "Reports",
+      //   route: "/dashboard/reports",
+      // },
+      // {
+      //   icon: (
+      //     <svg
+      //       xmlns="http://www.w3.org/2000/svg"
+      //       width="24"
+      //       height="24"
+      //       viewBox="0 0 24 24"
+      //       fill="none"
+      //       stroke="currentColor"
+      //       stroke-width="1.5"
+      //       stroke-linecap="round"
+      //       stroke-linejoin="round"
+      //       className="icon icon-tabler icons-tabler-outline icon-tabler-user-square-rounded"
+      //     >
+      //       <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      //       <path d="M12 13a3 3 0 1 0 0 -6a3 3 0 0 0 0 6z" />
+      //       <path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" />
+      //       <path d="M6 20.05v-.05a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v.05" />
+      //     </svg>
+      //   ),
+      //   label: "Profile",
+      //   route: "/dashboard/profile",
+      // },
       {
         icon: (
           <svg
