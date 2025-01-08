@@ -33,6 +33,34 @@
     }
 }
 
+
+/* Month Picker */
+/* #50c469 */
+
+/* Override Flatpickr Month-Year Picker styles */
+.flatpickr-monthSelect-month {
+    background-color: transparent !important;
+    color: #333 !important; /* Default text color */
+    /* border: 1px solid #ddd !important; */
+  }
+  
+  .flatpickr-monthSelect-month:hover {
+    background-color: rgb(209, 250, 229) !important; 
+    border-color: #50c469 !important;
+  }
+  
+  /* Selected Month Styling */
+  .flatpickr-monthSelect-month.selected {
+    background-color: #50c469 !important; /* Green background for the selected month */
+    border-color: #50c469 !important; /* Green border for the selected month */
+    color: #fff !important; /* White text for contrast */
+  }
+  
+  .flatpickr-monthSelect-month.selected:hover {
+    background-color: #22c55e !important; /* Darker green on hover when selected */
+  }
+    
+
 /* For Webkit-based browsers (Chrome, Edge, Safari) */
 ::-webkit-scrollbar {
     width: 10px; /* Width of the scrollbar */

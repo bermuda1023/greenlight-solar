@@ -6,12 +6,41 @@ import { FaPlus, FaArrowLeft, FaArrowRight } from "react-icons/fa";
 import { AiOutlineSearch } from "react-icons/ai";
 import { TbReceipt } from "react-icons/tb";
 import flatpickr from "flatpickr";
+import { supabase } from "@/utils/supabase/browserClient";
+
+// Type definition matching your insert operation schema
+interface Customer {
+  id: string;
+  site_name: string;
+  email: string;
+  site_id: string;
+  price_cap: string;
+  production_kwh: number;
+  self_cons_kwh: number;
+  consump_kwh: number;
+  export_kwh: number;
+  belco_price: string;
+  effective_price: string;
+  bill_period: string;
+  ex_days: number;
+  savings: string;
+  status: string;
+  created_at: string;
+}
 
 const CustomersListTable = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [dateRange, setDateRange] = useState("");
   const [siteCapacity, setSiteCapacity] = useState("");
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
+
+  const router = useRouter();
 
   useEffect(() => {
     flatpickr(".form-datepicker", {
@@ -26,51 +55,78 @@ const CustomersListTable = () => {
     });
   }, []);
 
-  const bills = [
-    {
-      siteName: "Residential Site A",
-      email: "john.smith@example.com",
-      siteID: "SITE001",
-      startDate: "Jan 1, 2024",
-      endDate: "Jan 31, 2024",
-      priceCap: "$100",
-      productionKWH: 300,
-      selfConsKWH: 100,
-      consumpKWH: 450,
-      exportKWH: 120,
-      belcoPrice: "$0.10",
-      effectivePrice: "$0.08",
-      billPeriod: "January 2024",
-      exDays: 31,
-      savings: "$25",
-      status: "Paid",
-    },
-    {
-      siteName: "Commercial Site B",
-      email: "sarah.johnson@example.com",
-      siteID: "SITE002",
-      startDate: "Jan 1, 2024",
-      endDate: "Jan 31, 2024",
-      priceCap: "$200",
-      productionKWH: 500,
-      selfConsKWH: 150,
-      consumpKWH: 780,
-      exportKWH: 250,
-      belcoPrice: "$0.12",
-      effectivePrice: "$0.10",
-      billPeriod: "January 2024",
-      exDays: 31,
-      savings: "$50",
-      status: "Pending",
-    },
-  ];
+  useEffect(() => {
+    fetchCustomers();
+  }, [searchTerm, statusFilter, dateRange, siteCapacity, currentPage, pageSize]);
 
-  const router = useRouter();
+  const fetchCustomers = async () => {
+    try {
+      setLoading(true);
+      
+      // First, get total count for pagination
+      const countQuery = supabase
+        .from('customers')
+        .select('*', { count: 'exact' });
+
+      if (searchTerm) {
+        countQuery.or(`site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+      }
+
+      if (statusFilter) {
+        countQuery.eq('status', statusFilter);
+      }
+
+      const { count } = await countQuery;
+      setTotalCount(count || 0);
+
+      // Then fetch paginated data
+      let query = supabase
+        .from('customers')
+        .select('*')
+        .range((currentPage - 1) * pageSize, currentPage * pageSize - 1)
+        .order('created_at', { ascending: false });
+
+      if (searchTerm) {
+        query = query.or(`site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+      }
+
+      if (statusFilter) {
+        query = query.eq('status', statusFilter);
+      }
+
+      const { data, error: fetchError } = await query;
+
+      if (fetchError) throw fetchError;
+      console.log("Customers Data", query);
+
+      setCustomers(data || []);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred while fetching customers');
+      setCustomers([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize);
+    setCurrentPage(1); // Reset to first page when changing page size
+  };
 
   const handleAddCustomer = (e: React.FormEvent) => {
-    e.preventDefault(); // Prevent form submission
-    router.push("/dashboard/customers/add"); // Redirect to the dashboard
+    e.preventDefault();
+    router.push("/dashboard/customers/add");
   };
+
+  // Calculate pagination values
+  const totalPages = Math.ceil(totalCount / pageSize);
+  const startIndex = (currentPage - 1) * pageSize + 1;
+  const endIndex = Math.min(currentPage * pageSize, totalCount);
 
   return (
     <>
@@ -117,8 +173,8 @@ const CustomersListTable = () => {
                   className="rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:text-white"
                 >
                   <option value="">Status: All</option>
-                  <option value="paid">Paid</option>
-                  <option value="pending">Pending</option>
+                  <option value="Paid">Paid</option>
+                  <option value="Pending">Pending</option>
                 </select>
                 <select
                   value={dateRange}
@@ -140,14 +196,21 @@ const CustomersListTable = () => {
                   <option value="5-10">5-10 kW</option>
                   <option value="10+">10+ kW</option>
                 </select>
-                <button
-                  className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-white hover:bg-green-500"
-                  onClick={handleAddCustomer}
-                >
-                  <FaPlus /> Add Customer
-                </button>
               </div>
             </div>
+
+            {/* Loading and Error States */}
+            {loading && (
+              <div className="text-center py-4">
+                <p className="text-gray-500">Loading customers...</p>
+              </div>
+            )}
+
+            {error && (
+              <div className="text-center py-4">
+                <p className="text-red-500">{error}</p>
+              </div>
+            )}
 
             {/* Bills Table */}
             <div className="rounded-[10px] border border-stroke bg-white shadow-1 dark:border-dark-3 dark:bg-gray-dark">
@@ -163,12 +226,6 @@ const CustomersListTable = () => {
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Site ID
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Start Date
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        End Date
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Price Cap
@@ -206,65 +263,59 @@ const CustomersListTable = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {bills.map((bill, index) => (
+                    {customers.map((customer) => (
                       <tr
-                        key={index}
+                        key={customer.id}
                         className="border-b border-stroke dark:border-dark-3"
                       >
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {bill.siteName}
+                          {customer.site_name}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {bill.email}
+                          {customer.email}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {bill.siteID}
+                          {customer.site_id}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {bill.startDate}
+                          {customer.price_cap}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {bill.endDate}
+                          {customer.production_kwh}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {bill.priceCap}
+                          {customer.self_cons_kwh}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {bill.productionKWH}
+                          {customer.consump_kwh}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {bill.selfConsKWH}
+                          {customer.export_kwh}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {bill.consumpKWH}
+                          {customer.belco_price}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {bill.exportKWH}
+                          {customer.effective_price}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {bill.belcoPrice}
+                          {customer.bill_period}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {bill.effectivePrice}
+                          {customer.ex_days}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {bill.billPeriod}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {bill.exDays}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {bill.savings}
+                          {customer.savings}
                         </td>
                         <td className="px-6 py-4">
                           <span
                             className={`inline-flex rounded-full px-3 py-1 text-sm font-medium ${
-                              bill.status === "Paid"
+                              customer.status === "Paid"
                                 ? "bg-success/10 text-success"
                                 : "bg-warning/10 text-warning"
                             }`}
                           >
-                            {bill.status}
+                            {customer.status}
                           </span>
                         </td>
                       </tr>
@@ -282,7 +333,7 @@ const CustomersListTable = () => {
                     <option value="50">50 per page</option>
                   </select>
                   <span className="ml-4 text-sm text-dark dark:text-white">
-                    Showing 1 to {bills.length} of {bills.length} results
+                    Showing 1 to {customers.length} of {customers.length} results
                   </span>
                 </div>
                 <div className="flex items-center space-x-2">
