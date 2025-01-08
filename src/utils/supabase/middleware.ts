@@ -17,7 +17,7 @@ export async function middleware(request: NextRequest) {
 
   // If no session, redirect to signin immediately
   if (!session) {
-    const signInUrl = new URL('/authentication/signin', request.url);
+    const signInUrl = new URL('/', request.url);
     return NextResponse.redirect(signInUrl);
   }
 

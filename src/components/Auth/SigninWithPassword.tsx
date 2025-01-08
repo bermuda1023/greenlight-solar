@@ -11,10 +11,14 @@ export default function SigninWithPassword() {
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null); // Reset error state
+
     const { error } = await supabase.auth.signInWithPassword({ email, password });
+
     if (error) {
       setError(error.message);
     } else {
+      // Redirect to the dashboard
       router.push("/dashboard");
     }
   };
@@ -61,17 +65,6 @@ export default function SigninWithPassword() {
 
       {error && <p className="text-red-500 mb-4">{error}</p>}
 
-      <div className="mb-6 flex items-center justify-between gap-2 py-2">
-        <label
-          htmlFor="remember"
-          className="flex cursor-pointer select-none items-center font-satoshi text-base font-medium text-dark dark:text-white"
-        >
-          <input type="checkbox" name="remember" id="remember" className="peer sr-only" />
-          <span className="mr-2.5 inline-flex h-5.5 w-5.5 items-center justify-center rounded-md border border-stroke bg-white text-white text-opacity-0 peer-checked:border-primary peer-checked:bg-primary peer-checked:text-opacity-100 dark:border-stroke-dark dark:bg-white/5" />
-          Remember me
-        </label>
-      </div>
-
       <div className="mb-4.5">
         <button
           type="submit"
@@ -84,4 +77,3 @@ export default function SigninWithPassword() {
     </form>
   );
 }
-

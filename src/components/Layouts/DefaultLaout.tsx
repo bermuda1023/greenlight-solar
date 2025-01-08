@@ -13,7 +13,7 @@ export default function DefaultLayout({ children }: { children: React.ReactNode 
     const checkSession = async () => {
       const { data } = await supabase.auth.getSession();
       if (!data.session) {
-        router.push("/authentication/signin");
+        router.push("/");
       }
     };
     checkSession();

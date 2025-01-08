@@ -11,7 +11,7 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.replace('/authentication/signin');
+      router.replace('/');
     }
   }, [isLoading, isAuthenticated, router]);
 

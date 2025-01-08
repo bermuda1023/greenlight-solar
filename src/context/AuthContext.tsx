@@ -26,7 +26,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setIsAuthenticated(!!session);
 
         if (pathname.startsWith('/dashboard') && !session) {
-          router.replace('/authentication/signin');
+          router.replace('/');
         }
       } catch (error) {
         console.error('Auth check failed:', error);
@@ -40,7 +40,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setIsAuthenticated(!!session);
       if (!session && pathname.startsWith('/dashboard')) {
-        router.replace('/authentication/signin');
+        router.replace('/');
       }
     });
 

@@ -4,7 +4,7 @@ import React from "react";
 import DatePickerCustomer from "../FormElements/DatePicker/DatePickerCustomer";
 
 const AddCustomer = () => {
-  const handleSubmit = (e: { preventDefault: () => void }) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     // Handle form submission logic here
   };
@@ -19,15 +19,15 @@ const AddCustomer = () => {
 
       <form onSubmit={handleSubmit}>
         <div className="p-6.5">
-          {/* Name and Email Row */}
+          {/* Site Name and Email Row */}
           <div className="mb-4.5 flex flex-col gap-4.5 xl:flex-row">
             <div className="w-full xl:w-1/2">
               <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
-                Name
+                Site Name
               </label>
               <input
                 type="text"
-                placeholder="Enter customer name"
+                placeholder="Enter site name"
                 className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
               />
             </div>
@@ -44,76 +44,51 @@ const AddCustomer = () => {
             </div>
           </div>
 
-          {/* Site Name and API Key Row */}
+          {/* Site ID and Price Cap Row */}
           <div className="mb-4.5 flex flex-col gap-4.5 xl:flex-row">
             <div className="w-full xl:w-1/2">
               <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
-                Site Name
+                Site ID
               </label>
               <input
                 type="text"
-                placeholder="Enter site name"
+                placeholder="Enter site ID"
                 className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
               />
             </div>
 
             <div className="w-full xl:w-1/2">
               <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
-                Solar API Key
+                Price Cap
               </label>
               <input
                 type="text"
-                placeholder="Enter API key"
+                placeholder="Enter price cap (e.g., $100)"
                 className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
               />
             </div>
           </div>
 
-          {/* Installation Date and Capacity Row */}
+          {/* Production and Self Consumption Row */}
           <div className="mb-4.5 flex flex-col gap-4.5 xl:flex-row">
             <div className="w-full xl:w-1/2">
               <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
-                Installation Date
-              </label>
-              <DatePickerCustomer />
-              {/* <input
-                type="date"
-                className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
-              /> */}
-            </div>
-
-            <div className="w-full xl:w-1/2">
-              <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
-                Installed Capacity
+                Production (kWh)
               </label>
               <input
-                type="text"
-                placeholder="Enter capacity (e.g., 5 kW)"
-                className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
-              />
-            </div>
-          </div>
-
-          {/* Electricity Tariff and Billing Period Row */}
-          <div className="mb-4.5 flex flex-col gap-4.5 xl:flex-row">
-            <div className="w-full xl:w-1/2">
-              <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
-                Electricity Tariff
-              </label>
-              <input
-                type="text"
-                placeholder="Enter tariff (e.g., $0.10/kWh)"
+                type="number"
+                placeholder="Enter production"
                 className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
               />
             </div>
 
             <div className="w-full xl:w-1/2">
               <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
-                Billing Period
+                Self Consumption (kWh)
               </label>
               <input
-                type="text"
-                placeholder="Enter billing period"
+                type="number"
+                placeholder="Enter self consumption"
                 className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
               />
             </div>
@@ -144,15 +119,65 @@ const AddCustomer = () => {
             </div>
           </div>
 
-          {/* Bill Amount and Status Row */}
+          {/* Belco Price and Effective Price Row */}
           <div className="mb-4.5 flex flex-col gap-4.5 xl:flex-row">
             <div className="w-full xl:w-1/2">
               <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
-                Bill Amount
+                Belco Price ($)
               </label>
               <input
                 type="text"
-                placeholder="Enter bill amount"
+                placeholder="Enter belco price"
+                className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
+              />
+            </div>
+
+            <div className="w-full xl:w-1/2">
+              <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
+                Effective Price ($)
+              </label>
+              <input
+                type="text"
+                placeholder="Enter effective price"
+                className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
+              />
+            </div>
+          </div>
+
+          {/* Billing Period and Ex. Days Row */}
+          <div className="mb-4.5 flex flex-col gap-4.5 xl:flex-row">
+            <div className="w-full xl:w-1/2">
+              <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
+                Billing Period
+              </label>
+              <input
+                type="text"
+                placeholder="Enter billing period (e.g., January 2024)"
+                className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
+              />
+            </div>
+
+            <div className="w-full xl:w-1/2">
+              <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
+                Ex. Days
+              </label>
+              <input
+                type="number"
+                placeholder="Enter days (e.g., 31)"
+                className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
+              />
+            </div>
+          </div>
+
+          {/* Savings and Status Row */}
+          <div className="mb-4.5 flex flex-col gap-4.5 xl:flex-row">
+            <div className="w-full xl:w-1/2">
+              <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
+                Savings ($)
+              </label>
+              <input
+                type="text"
+                placeholder="Enter savings"
                 className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
               />
             </div>
