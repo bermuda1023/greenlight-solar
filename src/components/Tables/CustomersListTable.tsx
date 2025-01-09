@@ -1,14 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { FaPlus, FaArrowLeft, FaArrowRight } from "react-icons/fa";
 import { AiOutlineSearch } from "react-icons/ai";
 import { TbReceipt } from "react-icons/tb";
+import { Dialog, DialogContent } from "@/components/ui/Dialog";
 import flatpickr from "flatpickr";
 import { supabase } from "@/utils/supabase/browserClient";
 
-// Type definition matching your insert operation schema
 interface Customer {
   id: string;
   site_name: string;
@@ -29,51 +29,87 @@ interface Customer {
 }
 
 const CustomersListTable = () => {
+  const today = new Date();
+  const formattedToday = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(today);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [dateRange, setDateRange] = useState("");
+  const [startDate, setStartDate] = useState<string>(formattedToday);
+  const [endDate, setEndDate] = useState<string>(formattedToday);
   const [siteCapacity, setSiteCapacity] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [totalCount, setTotalCount] = useState(0);
-
-  const router = useRouter();
+  const [showBillModal, setShowBillModal] = useState(false);
 
   useEffect(() => {
-    flatpickr(".form-datepicker", {
+    const startDatePicker = flatpickr("#startDate", {
       mode: "single",
       static: true,
       monthSelectorType: "static",
       dateFormat: "M j, Y",
-      prevArrow:
-        '<svg class="fill-current" width="7" height="11" viewBox="0 0 7 11"><path d="M5.4 10.8l1.4-1.4-4-4 4-4L5.4 0 0 5.4z" /></svg>',
-      nextArrow:
-        '<svg class="fill-current" width="7" height="11" viewBox="0 0 7 11"><path d="M1.4 10.8L0 9.4l4-4-4-4L1.4 0l5.4 5.4z" /></svg>',
+      onChange: (selectedDates) => {
+        const dateToFormat = selectedDates[0] || new Date();
+        const formattedDate = new Intl.DateTimeFormat("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        }).format(dateToFormat);
+        setStartDate(formattedDate);
+      },
     });
+
+    const endDatePicker = flatpickr("#endDate", {
+      mode: "single",
+      static: true,
+      monthSelectorType: "static",
+      dateFormat: "M j, Y",
+      onChange: (selectedDates) => {
+        const dateToFormat = selectedDates[0] || new Date();
+        const formattedDate = new Intl.DateTimeFormat("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        }).format(dateToFormat);
+        setEndDate(formattedDate);
+      },
+    });
+
+    return () => {
+      if (startDatePicker && "destroy" in startDatePicker) {
+        (startDatePicker as any).destroy();
+      }
+      if (endDatePicker && "destroy" in endDatePicker) {
+        (endDatePicker as any).destroy();
+      }
+    };
   }, []);
 
-  useEffect(() => {
-    fetchCustomers();
-  }, [searchTerm, statusFilter, dateRange, siteCapacity, currentPage, pageSize]);
-
-  const fetchCustomers = async () => {
+  const fetchCustomers = useCallback(async () => {
     try {
       setLoading(true);
-      
+
       // First, get total count for pagination
       const countQuery = supabase
-        .from('customers')
-        .select('*', { count: 'exact' });
+        .from("customers")
+        .select("*", { count: "exact" });
 
       if (searchTerm) {
-        countQuery.or(`site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+        countQuery.or(
+          `site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`,
+        );
       }
 
       if (statusFilter) {
-        countQuery.eq('status', statusFilter);
+        countQuery.eq("status", statusFilter);
       }
 
       const { count } = await countQuery;
@@ -81,52 +117,70 @@ const CustomersListTable = () => {
 
       // Then fetch paginated data
       let query = supabase
-        .from('customers')
-        .select('*')
+        .from("customers")
+        .select("*")
         .range((currentPage - 1) * pageSize, currentPage * pageSize - 1)
-        .order('created_at', { ascending: false });
+        .order("created_at", { ascending: false });
 
       if (searchTerm) {
-        query = query.or(`site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+        query = query.or(
+          `site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`,
+        );
       }
 
       if (statusFilter) {
-        query = query.eq('status', statusFilter);
+        query = query.eq("status", statusFilter);
       }
 
       const { data, error: fetchError } = await query;
 
       if (fetchError) throw fetchError;
-      console.log("Customers Data", query);
 
       setCustomers(data || []);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred while fetching customers');
+      setError(
+        err instanceof Error
+          ? err.message
+          : "An error occurred while fetching customers",
+      );
       setCustomers([]);
     } finally {
       setLoading(false);
     }
+  }, [searchTerm, statusFilter, currentPage, pageSize]); // Add all dependencies
+
+  useEffect(() => {
+    fetchCustomers();
+  }, [fetchCustomers]);
+
+  const handleSelectCustomer = (customerId: string) => {
+    setSelectedCustomers((prev) =>
+      prev.includes(customerId)
+        ? prev.filter((id) => id !== customerId)
+        : [...prev, customerId],
+    );
   };
 
-  const handlePageChange = (newPage: number) => {
-    setCurrentPage(newPage);
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedCustomers(customers.map((customer) => customer.id));
+    } else {
+      setSelectedCustomers([]);
+    }
   };
 
-  const handlePageSizeChange = (newSize: number) => {
-    setPageSize(newSize);
-    setCurrentPage(1); // Reset to first page when changing page size
+  const handleGenerateBill = () => {
+    if (selectedCustomers.length === 0) {
+      alert("Please select at least one customer");
+      return;
+    }
+    if (!startDate || !endDate) {
+      alert("Please select both start and end dates");
+      return;
+    }
+    setShowBillModal(true);
   };
-
-  const handleAddCustomer = (e: React.FormEvent) => {
-    e.preventDefault();
-    router.push("/dashboard/customers/add");
-  };
-
-  // Calculate pagination values
-  const totalPages = Math.ceil(totalCount / pageSize);
-  const startIndex = (currentPage - 1) * pageSize + 1;
-  const endIndex = Math.min(currentPage * pageSize, totalCount);
 
   return (
     <>
@@ -138,14 +192,19 @@ const CustomersListTable = () => {
         </div>
         <div className="flex items-center gap-4">
           <input
-            className="form-datepicker w-full rounded-[7px] border-[1.5px] bg-white border-stroke bg-transparent px-5 py-3 font-normal outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:focus:border-primary"
+            id="startDate"
+            className="form-datepicker w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent bg-white px-5 py-3 font-normal outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:focus:border-primary"
             placeholder="Start Date"
           />
           <input
-            className="form-datepicker w-full rounded-[7px] border-[1.5px] bg-white border-stroke bg-transparent px-5 py-3 font-normal outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:focus:border-primary"
+            id="endDate"
+            className="form-datepicker w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent bg-white px-5 py-3 font-normal outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:focus:border-primary"
             placeholder="End Date"
           />
-          <button className="hover:bg-dark-1 flex items-center gap-2 rounded-md bg-dark-2 px-4 py-3 text-white whitespace-nowrap">
+          <button
+            onClick={handleGenerateBill}
+            className="hover:bg-dark-1 flex items-center gap-2 whitespace-nowrap rounded-md bg-dark-2 px-4 py-3 text-white"
+          >
             <TbReceipt /> Generate Bill
           </button>
         </div>
@@ -176,7 +235,7 @@ const CustomersListTable = () => {
                   <option value="Paid">Paid</option>
                   <option value="Pending">Pending</option>
                 </select>
-                <select
+                {/* <select
                   value={dateRange}
                   onChange={(e) => setDateRange(e.target.value)}
                   className="rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:text-white"
@@ -185,7 +244,7 @@ const CustomersListTable = () => {
                   <option value="this-month">This Month</option>
                   <option value="last-month">Last Month</option>
                   <option value="custom">Custom Range</option>
-                </select>
+                </select> */}
                 <select
                   value={siteCapacity}
                   onChange={(e) => setSiteCapacity(e.target.value)}
@@ -201,13 +260,13 @@ const CustomersListTable = () => {
 
             {/* Loading and Error States */}
             {loading && (
-              <div className="text-center py-4">
+              <div className="py-4 text-center">
                 <p className="text-gray-500">Loading customers...</p>
               </div>
             )}
 
             {error && (
-              <div className="text-center py-4">
+              <div className="py-4 text-center">
                 <p className="text-red-500">{error}</p>
               </div>
             )}
@@ -219,7 +278,25 @@ const CustomersListTable = () => {
                   <thead>
                     <tr className="border-b border-stroke bg-gray-2 dark:border-dark-3 dark:bg-dark-2">
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                        <input
+                          type="checkbox"
+                          onChange={handleSelectAll}
+                          checked={
+                            selectedCustomers.length === customers.length &&
+                            customers.length > 0
+                          }
+                          className="custom-checkbox text-white"
+                        />
+                      </th>
+                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Site Name
+                      </th>
+                      {/* Existing columns */}
+                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                        Start Date
+                      </th>
+                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                        End Date
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Email
@@ -269,7 +346,21 @@ const CustomersListTable = () => {
                         className="border-b border-stroke dark:border-dark-3"
                       >
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
+                          <input
+                            type="checkbox"
+                            checked={selectedCustomers.includes(customer.id)}
+                            onChange={() => handleSelectCustomer(customer.id)}
+                            className="custom-checkbox text-white"
+                          />
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.site_name}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
+                          {startDate}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
+                          {endDate}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.email}
@@ -333,7 +424,8 @@ const CustomersListTable = () => {
                     <option value="50">50 per page</option>
                   </select>
                   <span className="ml-4 text-sm text-dark dark:text-white">
-                    Showing 1 to {customers.length} of {customers.length} results
+                    Showing 1 to {customers.length} of {customers.length}{" "}
+                    results
                   </span>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -355,6 +447,114 @@ const CustomersListTable = () => {
           </div>
         </div>
       </div>
+
+      {/* Bill Generation Modal */}
+      {showBillModal && (
+        <Dialog open={showBillModal} onOpenChange={setShowBillModal}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-3/50 backdrop-blur-sm" onClick={() => setShowBillModal(false)}>
+            <div className="max-h-[80vh] w-2/3 overflow-y-auto rounded-lg bg-white p-8 shadow-xl dark:bg-gray-dark" onClick={(e) => e.stopPropagation()}>
+              <h2 className="mb-6 text-center text-2xl font-bold">
+                Generated Bill
+              </h2>
+
+              {selectedCustomers.map((customerId) => {
+                const customer = customers.find((c) => c.id === customerId);
+                return (
+                  <div
+                    key={customerId}
+                    className="mb-8 rounded-lg border border-gray-200 bg-gray-50/50 p-6"
+                  >
+                    {/* Header */}
+                    <div className="mb-4 border-b pb-4">
+                      <h3 className="text-lg font-semibold text-gray-700">
+                        {customer?.site_name}
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        Billing Period: {startDate} to {endDate}
+                      </p>
+                    </div>
+
+                    {/* Invoice Details */}
+                    <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
+                      <div>
+                        <p>
+                          <strong>Site ID:</strong> {customer?.site_id}
+                        </p>
+                        <p>
+                          <strong>Production KWH:</strong>{" "}
+                          {customer?.production_kwh}
+                        </p>
+                        <p>
+                          <strong>Self Consumption KWH:</strong>{" "}
+                          {customer?.self_cons_kwh}
+                        </p>
+                        <p>
+                          <strong>Export KWH:</strong> {customer?.export_kwh}
+                        </p>
+                      </div>
+                      <div>
+                        <p>
+                          <strong>Effective Price:</strong>{" "}
+                          {customer?.effective_price}
+                        </p>
+                        <p>
+                          <strong>Savings:</strong> {customer?.savings}
+                        </p>
+                        <p>
+                          <strong>Status:</strong>{" "}
+                          <span
+                            className={`font-semibold ${
+                              customer?.status === "Paid"
+                                ? "text-green-600"
+                                : "text-red-600"
+                            }`}
+                          >
+                            {customer?.status}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Footer Actions */}
+                    <div className="mt-6 flex justify-between">
+                      <div className="text-sm text-gray-500">
+                        <p>Generated on: {new Date().toLocaleDateString()}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button className="rounded bg-green-200 px-4 py-2 font-medium text-gray-800 hover:bg-green-300">
+                          Post Bill
+                        </button>
+                        <button className="rounded bg-dark-2 px-4 py-2 text-white hover:bg-dark">
+                          Download PDF
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Modal Actions */}
+              <div className="mt-6 flex justify-end gap-4">
+                <button
+                  onClick={() => setShowBillModal(false)}
+                  className="rounded bg-gray-3 px-4 py-2 text-dark-2 hover:bg-gray-4"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    // Add print functionality here
+                    window.print();
+                  }}
+                  className="rounded bg-primary px-4 py-2 text-white hover:bg-primary/90"
+                >
+                  Print Bill
+                </button>
+              </div>
+            </div>
+          </div>
+        </Dialog>
+      )}
     </>
   );
 };
