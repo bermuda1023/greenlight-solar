@@ -131,9 +131,22 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
     const router = useRouter()
   
     const handleLogout = async () => {
+      // Sign out from Supabase
       await supabase.auth.signOut();
-      router.push("/authentication/signin");
+    
+      // Clear local storage
+      localStorage.clear();
+    
+      // Clear cookies (if applicable)
+      document.cookie.split(";").forEach((cookie) => {
+        const name = cookie.split("=")[0].trim();
+        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+      });
+    
+      // Redirect to the signin page
+      router.push("/");
     };
+    
 
   return (
     <ClickOutside onClick={() => setSidebarOpen(false)}>
