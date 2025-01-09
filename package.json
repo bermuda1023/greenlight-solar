@@ -9,6 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.4",
+    "@supabase/auth-helpers-nextjs": "^0.10.0",
+    "@supabase/supabase-js": "^2.47.10",
     "apexcharts": "^3.45.2",
     "flatpickr": "^4.6.13",
     "flowbite": "^2.5.2",

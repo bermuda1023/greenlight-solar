@@ -1,8 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
-import DefaultLayout from "@/components/Layouts/DefaultLaout";
 
 const BillingScreen = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -42,7 +40,7 @@ const BillingScreen = () => {
           </p>
         </div>
         <button className="hover:bg-primary-dark rounded-md bg-primary px-4 py-2 text-white">
-          <i className="fas fa-plus mr-2"></i> Generate Bills
+          <i className="fas fa-plus"></i> Generate Bills
         </button>
       </div>
 
