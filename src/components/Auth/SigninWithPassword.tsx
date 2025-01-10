@@ -19,7 +19,7 @@ export default function SigninWithPassword() {
       setError(error.message);
     } else {
       // Redirect to the dashboard
-      router.push("/dashboard");
+      router.push("/dashboard/customers/list");
     }
   };
 

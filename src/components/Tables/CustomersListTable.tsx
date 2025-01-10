@@ -8,6 +8,7 @@ import { TbReceipt } from "react-icons/tb";
 import { Dialog, DialogContent } from "@/components/ui/Dialog";
 import flatpickr from "flatpickr";
 import { supabase } from "@/utils/supabase/browserClient";
+import BillModal from "../Billing/BillModal";
 
 interface Customer {
   id: string;
@@ -38,8 +39,9 @@ const CustomersListTable = () => {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [startDate, setStartDate] = useState<string>(formattedToday);
-  const [endDate, setEndDate] = useState<string>(formattedToday);
+  const [startDate, setStartDate] = useState<string | null>(null);
+  const [endDate, setEndDate] = useState<string | null>(null);
+  const [dateError, setDateError] = useState<string | null>(null);
   const [siteCapacity, setSiteCapacity] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
@@ -57,13 +59,18 @@ const CustomersListTable = () => {
       monthSelectorType: "static",
       dateFormat: "M j, Y",
       onChange: (selectedDates) => {
-        const dateToFormat = selectedDates[0] || new Date();
-        const formattedDate = new Intl.DateTimeFormat("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        }).format(dateToFormat);
-        setStartDate(formattedDate);
+        if (selectedDates.length > 0) {
+          const dateToFormat = selectedDates[0];
+          const formattedDate = new Intl.DateTimeFormat("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          }).format(dateToFormat);
+          setStartDate(formattedDate);
+          setDateError(null);
+        } else {
+          setStartDate(null);
+        }
       },
     });
 
@@ -73,13 +80,18 @@ const CustomersListTable = () => {
       monthSelectorType: "static",
       dateFormat: "M j, Y",
       onChange: (selectedDates) => {
-        const dateToFormat = selectedDates[0] || new Date();
-        const formattedDate = new Intl.DateTimeFormat("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        }).format(dateToFormat);
-        setEndDate(formattedDate);
+        if (selectedDates.length > 0) {
+          const dateToFormat = selectedDates[0];
+          const formattedDate = new Intl.DateTimeFormat("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          }).format(dateToFormat);
+          setEndDate(formattedDate);
+          setDateError(null);
+        } else {
+          setEndDate(null);
+        }
       },
     });
 
@@ -170,17 +182,52 @@ const CustomersListTable = () => {
     }
   };
 
-  const handleGenerateBill = () => {
-    if (selectedCustomers.length === 0) {
-      alert("Please select at least one customer");
-      return;
-    }
+  const validateDates = () => {
     if (!startDate || !endDate) {
-      alert("Please select both start and end dates");
+      setDateError("Please select both Start Date and End Date before generating the bill.");
+      return false;
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    if (end < start) {
+      setDateError("End Date cannot be earlier than Start Date");
+      alert("End Date cannot be earlier than Start Date");
+      return false;
+    }
+
+    return true;
+  };
+
+  const validateCustomerSelection = () => {
+    if (selectedCustomers.length === 0) {
+      alert("Please select at least one customer.");
+      return false;
+    }
+    return true;
+  };
+
+  const handleGenerateBill = () => {
+    // Reset error state
+    setDateError(null);
+
+    // Validate dates first
+    const datesValid = validateDates();
+    if (!datesValid) {
       return;
     }
+
+    // Then validate customer selection
+    const customersValid = validateCustomerSelection();
+    if (!customersValid) {
+      return;
+    }
+
+    // If all validations pass, open the modal
     setShowBillModal(true);
   };
+  
 
   return (
     <>
@@ -191,22 +238,34 @@ const CustomersListTable = () => {
           <p className="text-sm text-gray-500">View and manage customers.</p>
         </div>
         <div className="flex items-center gap-4">
-          <input
-            id="startDate"
-            className="form-datepicker w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent bg-white px-5 py-3 font-normal outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:focus:border-primary"
-            placeholder="Start Date"
-          />
-          <input
-            id="endDate"
-            className="form-datepicker w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent bg-white px-5 py-3 font-normal outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:focus:border-primary"
-            placeholder="End Date"
-          />
-          <button
-            onClick={handleGenerateBill}
-            className="hover:bg-dark-1 flex items-center gap-2 whitespace-nowrap rounded-md bg-dark-2 px-4 py-3 text-white"
-          >
-            <TbReceipt /> Generate Bill
-          </button>
+            <div className="flex flex-col">
+              <input
+                id="startDate"
+                className={`form-datepicker w-full rounded-[7px] border-[1.5px] ${
+                  !startDate && dateError ? 'border-red-500' : 'border-stroke'
+                } bg-transparent bg-white px-5 py-3 font-normal outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:focus:border-primary`}
+                placeholder="Start Date *"
+                required
+                value={startDate || 'Start Date'}
+              />
+            </div>
+            <div className="flex flex-col">
+              <input
+                id="endDate"
+                className={`form-datepicker w-full rounded-[7px] border-[1.5px] ${
+                  !endDate && dateError ? 'border-red-500' : 'border-stroke'
+                } bg-transparent bg-white px-5 py-3 font-normal outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:focus:border-primary`}
+                placeholder="End Date *"
+                required
+                value={endDate || 'End Date'}
+              />
+            </div>
+            <button
+              onClick={handleGenerateBill}
+              className="hover:bg-dark-1 flex items-center gap-2 whitespace-nowrap rounded-md bg-dark-2 px-4 py-3 text-white"
+            >
+              <TbReceipt /> Generate Bill
+            </button>
         </div>
       </div>
 
@@ -357,10 +416,10 @@ const CustomersListTable = () => {
                           {customer.site_name}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {startDate}
+                        {startDate || 'Select Date'}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {endDate}
+                          {endDate || 'Select Date'}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.email}
@@ -450,110 +509,13 @@ const CustomersListTable = () => {
 
       {/* Bill Generation Modal */}
       {showBillModal && (
-        <Dialog open={showBillModal} onOpenChange={setShowBillModal}>
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-3/50 backdrop-blur-sm" onClick={() => setShowBillModal(false)}>
-            <div className="max-h-[80vh] w-2/3 overflow-y-auto rounded-lg bg-white p-8 shadow-xl dark:bg-gray-dark" onClick={(e) => e.stopPropagation()}>
-              <h2 className="mb-6 text-center text-2xl font-bold">
-                Generated Bill
-              </h2>
-
-              {selectedCustomers.map((customerId) => {
-                const customer = customers.find((c) => c.id === customerId);
-                return (
-                  <div
-                    key={customerId}
-                    className="mb-8 rounded-lg border border-gray-200 bg-gray-50/50 p-6"
-                  >
-                    {/* Header */}
-                    <div className="mb-4 border-b pb-4">
-                      <h3 className="text-lg font-semibold text-gray-700">
-                        {customer?.site_name}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        Billing Period: {startDate} to {endDate}
-                      </p>
-                    </div>
-
-                    {/* Invoice Details */}
-                    <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
-                      <div>
-                        <p>
-                          <strong>Site ID:</strong> {customer?.site_id}
-                        </p>
-                        <p>
-                          <strong>Production KWH:</strong>{" "}
-                          {customer?.production_kwh}
-                        </p>
-                        <p>
-                          <strong>Self Consumption KWH:</strong>{" "}
-                          {customer?.self_cons_kwh}
-                        </p>
-                        <p>
-                          <strong>Export KWH:</strong> {customer?.export_kwh}
-                        </p>
-                      </div>
-                      <div>
-                        <p>
-                          <strong>Effective Price:</strong>{" "}
-                          {customer?.effective_price}
-                        </p>
-                        <p>
-                          <strong>Savings:</strong> {customer?.savings}
-                        </p>
-                        <p>
-                          <strong>Status:</strong>{" "}
-                          <span
-                            className={`font-semibold ${
-                              customer?.status === "Paid"
-                                ? "text-green-600"
-                                : "text-red-600"
-                            }`}
-                          >
-                            {customer?.status}
-                          </span>
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Footer Actions */}
-                    <div className="mt-6 flex justify-between">
-                      <div className="text-sm text-gray-500">
-                        <p>Generated on: {new Date().toLocaleDateString()}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button className="rounded bg-green-200 px-4 py-2 font-medium text-gray-800 hover:bg-green-300">
-                          Post Bill
-                        </button>
-                        <button className="rounded bg-dark-2 px-4 py-2 text-white hover:bg-dark">
-                          Download PDF
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* Modal Actions */}
-              <div className="mt-6 flex justify-end gap-4">
-                <button
-                  onClick={() => setShowBillModal(false)}
-                  className="rounded bg-gray-3 px-4 py-2 text-dark-2 hover:bg-gray-4"
-                >
-                  Close
-                </button>
-                <button
-                  onClick={() => {
-                    // Add print functionality here
-                    window.print();
-                  }}
-                  className="rounded bg-primary px-4 py-2 text-white hover:bg-primary/90"
-                >
-                  Print Bill
-                </button>
-              </div>
-            </div>
-          </div>
-        </Dialog>
+        <BillModal
+        selectedCustomers={selectedCustomers}
+        customers={customers}
+        startDate={startDate}
+        endDate={endDate}
+        onClose={() => setShowBillModal(false)}
+      />
       )}
     </>
   );
