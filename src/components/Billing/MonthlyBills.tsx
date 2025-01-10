@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/utils/supabase/browserClient";
-import BillModal from "./BillModal";
-
+import ViewBillModal from "./ViewBillModal";
 interface Bill {
   id: string;
   site_name: string;
@@ -30,6 +29,11 @@ const BillingScreen = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
+  const [openbillModal, setOpenBillModal] = useState(false);
+  const closeModal = () => {
+    setOpenBillModal(false);
+  };
+
 
   const fetchBills = useCallback(async () => {
     try {
@@ -272,12 +276,12 @@ const BillingScreen = () => {
                             </span>
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white flex space-x-3">
-                            <button
-                              onClick={() => setSelectedBill(bill)}
-                              className="text-primary hover:underline"
-                            >
-                              View
-                            </button>
+                          <button
+        onClick={() => setOpenBillModal(true)}
+        className="text-primary hover:underline"
+      >
+        View
+      </button>
                             <button
                               onClick={() => handleDownloadBill(bill)}
                               className="text-primary hover:underline"
@@ -295,8 +299,11 @@ const BillingScreen = () => {
           </div>
         </div>
       </div>
-
-
+      {openbillModal && (
+        <div>
+          <ViewBillModal closeModal={closeModal} />
+        </div>
+      )}
     </>
   );
 };
