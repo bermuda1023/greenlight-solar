@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { CgImport } from "react-icons/cg";
 
 const Reconciliation = () => {
   const [activeTab, setActiveTab] = useState("matched");
@@ -10,17 +11,41 @@ const Reconciliation = () => {
   };
 
   return (
-    <div className="p-6 bg-gray-100 min-h-screen">
+    <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold">Payment Reconciliation</h1>
-        <p className="text-gray-600">
-          Match bank payments with pending bills and mark them as reconciled.
-        </p>
+        <div className="flex items-center justify-between">
+          <div className="mb-2 p-1">
+            <h1 className="text-2xl font-bold text-dark">
+              Payment Reconciliation
+            </h1>
+            <p className="text-sm text-gray-500">
+              Match bank payments with pending bills and mark them as
+              reconciled.
+            </p>
+          </div>
+          <button className="flex items-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 py-3 text-white hover:bg-green-500">
+            <CgImport /> Import
+          </button>
+        </div>
+
+      {/* Summary Section */}
+      <div className="mt-4 grid grid-cols-3 gap-4">
+        <div className="rounded-lg bg-white p-6 text-center shadow">
+          <h3 className="text-lg font-medium text-gray-600">Total Bills</h3>
+          <p className="text-2xl font-semibold text-gray-800">120</p>
+        </div>
+        <div className="rounded-lg bg-white p-6 text-center shadow">
+          <h3 className="text-lg font-medium text-gray-600">Matched Bills</h3>
+          <p className="text-2xl font-semibold text-green-600">80</p>
+        </div>
+        <div className="rounded-lg bg-white p-6 text-center shadow">
+          <h3 className="text-lg font-medium text-gray-600">Pending Bills</h3>
+          <p className="text-2xl font-semibold text-red-600">40</p>
+        </div>
       </div>
 
       {/* File Upload Section */}
-      <div className="bg-white p-6 rounded-lg shadow mb-8">
+      {/* <div className="mt-8 bg-white p-6 rounded-lg shadow mb-8">
         <h2 className="text-xl font-medium mb-4">Upload Bank Statement</h2>
         <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
           <p className="text-gray-500 mb-4">
@@ -34,11 +59,11 @@ const Reconciliation = () => {
         <button className="mt-4 px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
           Upload Statement
         </button>
-      </div>
+      </div> */}
 
       {/* Tabs for Reconciliation Results */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div className="flex mb-4">
+      <div className="mt-8 rounded-lg bg-white p-6 shadow">
+        <div className="mb-4 flex">
           {["matched", "partially-matched", "unmatched"].map((tab) => (
             <button
               key={tab}
@@ -52,14 +77,14 @@ const Reconciliation = () => {
               {tab === "matched"
                 ? "Matched Bills"
                 : tab === "partially-matched"
-                ? "Partially Matched"
-                : "Unmatched Bills"}
+                  ? "Partially Matched"
+                  : "Unmatched Bills"}
             </button>
           ))}
         </div>
 
         {/* Reconciliation Table */}
-        <table className="w-full text-left border-collapse">
+        <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b">
               <th className="px-4 py-2 text-gray-600">Customer Name</th>
@@ -81,7 +106,7 @@ const Reconciliation = () => {
               <td className="px-4 py-2">$50</td>
               <td className="px-4 py-2 text-yellow-500">Partially Matched</td>
               <td className="px-4 py-2">
-                <button className="px-4 py-1 text-white bg-green-600 rounded hover:bg-green-700">
+                <button className="rounded bg-green-600 px-4 py-1 text-white hover:bg-green-700">
                   Mark as Reconciled
                 </button>
               </td>
@@ -89,29 +114,6 @@ const Reconciliation = () => {
             {/* Add more rows dynamically */}
           </tbody>
         </table>
-      </div>
-
-      {/* Summary Section */}
-      <div className="mt-8 grid grid-cols-3 gap-4">
-        <div className="bg-white p-6 rounded-lg shadow text-center">
-          <h3 className="text-lg font-medium text-gray-600">Total Bills</h3>
-          <p className="text-2xl font-semibold text-gray-800">120</p>
-        </div>
-        <div className="bg-white p-6 rounded-lg shadow text-center">
-          <h3 className="text-lg font-medium text-gray-600">Matched Bills</h3>
-          <p className="text-2xl font-semibold text-green-600">80</p>
-        </div>
-        <div className="bg-white p-6 rounded-lg shadow text-center">
-          <h3 className="text-lg font-medium text-gray-600">Pending Bills</h3>
-          <p className="text-2xl font-semibold text-red-600">40</p>
-        </div>
-      </div>
-
-      {/* Download Button */}
-      <div className="mt-8 text-center">
-        <button className="px-6 py-2 bg-gray-800 text-white rounded hover:bg-gray-900">
-          Download Reconciliation Report
-        </button>
       </div>
     </div>
   );

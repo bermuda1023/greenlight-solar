@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -93,7 +93,10 @@ const menuGroups = [
         route: "#",
         children: [
           { label: "Monthly Bills", route: "/dashboard/billing/monthly" },
-          { label: "Reconciliation", route: "/dashboard/billing/reconciliation" },
+          {
+            label: "Reconciliation",
+            route: "/dashboard/billing/reconciliation",
+          },
         ],
       },
       {
@@ -120,33 +123,45 @@ const menuGroups = [
       },
     ],
   },
-
 ];
 
 const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
-  const pathname = usePathname();
-
   const [pageName, setPageName] = useLocalStorage("selectedMenu", "dashboard");
 
-    const router = useRouter()
-  
-    const handleLogout = async () => {
-      // Sign out from Supabase
-      await supabase.auth.signOut();
-    
-      // Clear local storage
-      localStorage.clear();
-    
-      // Clear cookies (if applicable)
-      document.cookie.split(";").forEach((cookie) => {
-        const name = cookie.split("=")[0].trim();
-        document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
-      });
-    
-      // Redirect to the signin page
-      router.push("/");
-    };
-    
+  const router = useRouter();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    const activeItem = menuGroups
+      .flatMap((group) => group.menuItems)
+      .find(
+        (item) =>
+          item.route === pathname ||
+          (item.children &&
+            item.children.some((child) => child.route === pathname)),
+      );
+
+    if (activeItem) {
+      setPageName(activeItem.label.toLowerCase());
+    }
+  }, [pathname, setPageName]);
+
+  const handleLogout = async () => {
+    // Sign out from Supabase
+    await supabase.auth.signOut();
+
+    // Clear local storage
+    localStorage.clear();
+
+    // Clear cookies (if applicable)
+    document.cookie.split(";").forEach((cookie) => {
+      const name = cookie.split("=")[0].trim();
+      document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+    });
+
+    // Redirect to the signin page
+    router.push("/");
+  };
 
   return (
     <ClickOutside onClick={() => setSidebarOpen(false)}>
