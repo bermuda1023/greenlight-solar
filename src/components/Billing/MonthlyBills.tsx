@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/utils/supabase/browserClient";
 import ViewBillModal from "./ViewBillModal";
@@ -88,7 +87,6 @@ const BillingScreen = () => {
 
       if (error) throw error;
       setBills(data || []);
-      console.log("Bill Data", data)
     } catch (err) {
       console.error("Error fetching bills:", err);
       setError("Failed to fetch bills. Please try again later.");
@@ -109,6 +107,11 @@ const BillingScreen = () => {
 
   const handleDownloadBill = (bill: Bill) => {
     alert(`Downloading bill for ${bill.site_name}`);
+  };
+
+  const handleOpenBillModal = (bill: Bill) => {
+    setSelectedBill(bill);
+    setOpenBillModal(true);
   };
 
   return (
@@ -274,12 +277,22 @@ const BillingScreen = () => {
                           </td>
                           <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">
                             <button
-                              onClick={() => setOpenBillModal(true)}
-                              className="text-primary hover:underline flex gap-1 pt-2"
+                              key={bill.id}
+                              onClick={() => handleOpenBillModal(bill)}
+                              className="flex gap-1 pt-2 text-primary hover:underline"
                             >
-                              <span className="text-xl"><BsFiletypePdf /></span> Download
+                              <span className="text-xl">
+                                <BsFiletypePdf />
+                              </span>{" "}
+                              Download
                             </button>
                           </td>
+                          {openbillModal && selectedBill && (
+                            <ViewBillModal
+                              closeModal={() => setOpenBillModal(false)}
+                              bill={selectedBill}
+                            />
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -290,11 +303,6 @@ const BillingScreen = () => {
           </div>
         </div>
       </div>
-      {openbillModal && (
-        <div>
-          <ViewBillModal closeModal={closeModal} />
-        </div>
-      )}
     </>
   );
 };

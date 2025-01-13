@@ -1,8 +1,26 @@
 import React, { useRef } from "react";
 import html2pdf from "html2pdf.js";
+interface Bill {
+  id: string;
+  site_name: string;
+  email: string;
+  address: string;
+  billing_period_start: string;
+  billing_period_end: string;
+  production_kwh: number;
+  self_consumption_kwh: number;
+  export_kwh: number;
+  total_cost: number;
+  energy_rate: number;
+  total_revenue: number;
+  savings: number;
+  status: string;
+  created_at: string;
+}
 
-const ViewBillModal: React.FC<{ closeModal: () => void }> = ({
+const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
   closeModal,
+  bill,
 }) => {
   const invoiceRef = useRef<HTMLDivElement>(null);
 
@@ -12,8 +30,8 @@ const ViewBillModal: React.FC<{ closeModal: () => void }> = ({
         margin: [-1, -1, -1, -1], // Top, Left, Bottom, Right margins in mm
         filename: "invoice.pdf",
         html2canvas: {
-          scale: 3, // Increase scale for better resolution
-          logging: true, // Enable logging for debugging styles
+          scale: 3,
+          logging: true,
         },
         jsPDF: {
           unit: "mm",
@@ -27,25 +45,18 @@ const ViewBillModal: React.FC<{ closeModal: () => void }> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-gray-600 bg-opacity-50">
-      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto overflow-x-hidden rounded-lg bg-white p-6 shadow-lg">
-        {/* Close Button */}
-        <button
-          onClick={closeModal}
-          className="mb-4 ml-auto block text-xl text-red-500 hover:text-red-700"
-          aria-label="Close"
-        >
-          &times;
-        </button>
-
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-gray-600 bg-opacity-50"
+      onClick={closeModal}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-6 shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Invoice Content */}
         <div
           ref={invoiceRef}
           className="mx-auto h-[297mm] w-full max-w-[210mm] border border-gray-300 bg-white px-12 pb-12 shadow-lg"
-          style={{
-            fontFamily: "Arial, sans-serif",
-            padding: "12mm",
-          }}
         >
           <header className="flex items-center justify-between py-16">
             <img
@@ -71,25 +82,27 @@ const ViewBillModal: React.FC<{ closeModal: () => void }> = ({
                   <td className="pr-4 text-sm font-semibold text-black">
                     Name:
                   </td>
-                  <td className="text-xs">Boyd Vallis</td>
+                  <td className="text-xs">{bill.site_name}</td>
                   <td className="pr-4 text-sm font-semibold text-black">
                     Phone Number:
                   </td>
-                  <td className="text-xs">(+1) 123-456-7890</td>
+                  <td className="text-xs">123-456-7890</td>
                   <td className="pr-4 text-sm font-semibold text-black">
                     Date:
                   </td>
-                  <td className="text-xs">03-01-25</td>
+                  <td className="text-xs">
+                    {new Date(bill.created_at).toLocaleDateString()}
+                  </td>
                 </tr>
                 <tr>
                   <td className="pr-4 text-sm font-semibold text-black">
                     Address:
                   </td>
-                  <td className="text-xs">Error</td>
+                  <td className="text-xs">{bill.email}</td>
                   <td className="pr-4 text-sm font-semibold text-black">
                     Email:
                   </td>
-                  <td className="text-xs">zakihasan555@gmail.com</td>
+                  <td className="text-xs">{bill.email}</td>
                   <td></td>
                   <td></td>
                 </tr>
@@ -110,12 +123,16 @@ const ViewBillModal: React.FC<{ closeModal: () => void }> = ({
             </thead>
             <tbody>
               <tr>
-                <td className="p-3 text-gray-600">16-12-25</td>
-                <td className="p-3 text-gray-600">15-01-25</td>
-                <td className="p-3 text-gray-600">Energy Produced</td>
-                <td className="p-3 text-gray-600">0</td>
-                <td className="p-3 text-gray-600">$0.0000</td>
-                <td className="p-3 text-gray-600">$0.00</td>
+                <td className="p-3 text-gray-600">
+                  {bill.billing_period_start}
+                </td>
+                <td className="p-3 text-gray-600">{bill.billing_period_end}</td>
+                <td className="p-3 text-gray-600">
+                  Description Not Availble for now
+                </td>
+                <td className="p-3 text-gray-600">{bill.export_kwh}</td>
+                <td className="p-3 text-gray-600">{bill.energy_rate}</td>
+                <td className="p-3 text-gray-600">{bill.total_revenue}</td>
               </tr>
             </tbody>
           </table>
@@ -171,15 +188,23 @@ const ViewBillModal: React.FC<{ closeModal: () => void }> = ({
         </div>
 
         {/* Button to generate PDF */}
-        <button
-          onClick={generatePDF}
-          className="mt-4 w-full rounded-lg bg-blue-500 py-2 text-white hover:bg-blue-700"
-        >
-          Download PDF
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={closeModal}
+            className="mt-4 w-full rounded-lg bg-gray-200 text-dark-2 hover:text-red-700"
+            aria-label="Close"
+          >
+            Close
+          </button>
+          <button
+            onClick={generatePDF}
+            className="mt-4 w-full rounded-lg bg-primary py-2 text-white hover:bg-green-500"
+          >
+            Download PDF
+          </button>
+        </div>
       </div>
     </div>
   );
 };
-
 export default ViewBillModal;
