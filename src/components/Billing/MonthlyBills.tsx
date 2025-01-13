@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/utils/supabase/browserClient";
 import ViewBillModal from "./ViewBillModal";
-import { BsFiletypePdf } from "react-icons/bs";
+import { FaRegFilePdf, FaRegTrashAlt } from "react-icons/fa";
 interface Bill {
   id: string;
   site_name: string;
@@ -105,8 +105,23 @@ const BillingScreen = () => {
     return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
   };
 
-  const handleDownloadBill = (bill: Bill) => {
-    alert(`Downloading bill for ${bill.site_name}`);
+  const handleDeleteBill = async (billId: string) => {
+    try {
+      const { error } = await supabase
+        .from("monthly_bills")
+        .delete()
+        .eq("id", billId);
+
+      if (error) throw error;
+
+      // Update the state to remove the deleted bill from the UI
+      setBills((prevBills) => prevBills.filter((bill) => bill.id !== billId));
+
+      alert("Bill deleted successfully.");
+    } catch (err) {
+      console.error("Error deleting bill:", err);
+      alert("Failed to delete the bill. Please try again.");
+    }
   };
 
   const handleOpenBillModal = (bill: Bill) => {
@@ -279,12 +294,19 @@ const BillingScreen = () => {
                             <button
                               key={bill.id}
                               onClick={() => handleOpenBillModal(bill)}
-                              className="flex gap-1 pt-2 text-primary hover:underline"
+                              className="rounded-lg bg-green-50 text-primary hover:text-green-50 p-2 transition hover:bg-primary"
                             >
                               <span className="text-xl">
-                                <BsFiletypePdf />
-                              </span>{" "}
-                              Download
+                              <FaRegFilePdf />
+                              </span>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteBill(bill.id)}
+                              className="rounded-lg bg-red-50 text-red-600 hover:text-red-50 p-2 transition hover:bg-red-600"
+                            >
+                              <span className="text-xl">
+                                <FaRegTrashAlt />
+                              </span>
                             </button>
                           </td>
                           {openbillModal && selectedBill && (
