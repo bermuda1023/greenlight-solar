@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/utils/supabase/browserClient";
 import ViewBillModal from "./ViewBillModal";
+import { BsFiletypePdf } from "react-icons/bs";
 interface Bill {
   id: string;
   site_name: string;
@@ -34,7 +35,6 @@ const BillingScreen = () => {
     setOpenBillModal(false);
   };
 
-
   const fetchBills = useCallback(async () => {
     try {
       setLoading(true);
@@ -46,7 +46,7 @@ const BillingScreen = () => {
       // Apply filters
       if (searchTerm) {
         query = query.or(
-          `site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`
+          `site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`,
         );
       }
 
@@ -56,15 +56,11 @@ const BillingScreen = () => {
 
       if (dateRange) {
         const now = new Date();
-        const firstDayOfMonth = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          1
-        );
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         const lastDayOfMonth = new Date(
           now.getFullYear(),
           now.getMonth() + 1,
-          0
+          0,
         );
 
         if (dateRange === "this-month") {
@@ -75,12 +71,12 @@ const BillingScreen = () => {
           const firstDayLastMonth = new Date(
             now.getFullYear(),
             now.getMonth() - 1,
-            1
+            1,
           );
           const lastDayLastMonth = new Date(
             now.getFullYear(),
             now.getMonth(),
-            0
+            0,
           );
           query = query
             .gte("billing_period_start", firstDayLastMonth.toISOString())
@@ -92,6 +88,7 @@ const BillingScreen = () => {
 
       if (error) throw error;
       setBills(data || []);
+      console.log("Bill Data", data)
     } catch (err) {
       console.error("Error fetching bills:", err);
       setError("Failed to fetch bills. Please try again later.");
@@ -164,7 +161,7 @@ const BillingScreen = () => {
 
             {/* Error Message */}
             {error && (
-              <div className="mb-4 rounded-md bg-danger/10 p-4 text-danger">
+              <div className="bg-danger/10 text-danger mb-4 rounded-md p-4">
                 {error}
               </div>
             )}
@@ -240,7 +237,7 @@ const BillingScreen = () => {
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             {formatBillingPeriod(
                               bill.billing_period_start,
-                              bill.billing_period_end
+                              bill.billing_period_end,
                             )}
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
@@ -275,18 +272,12 @@ const BillingScreen = () => {
                               {bill.status}
                             </span>
                           </td>
-                          <td className="px-6.5 py-4 text-sm dark:text-white flex space-x-3">
-                          <button
-        onClick={() => setOpenBillModal(true)}
-        className="text-primary hover:underline"
-      >
-        View
-      </button>
+                          <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">
                             <button
-                              onClick={() => handleDownloadBill(bill)}
-                              className="text-primary hover:underline"
+                              onClick={() => setOpenBillModal(true)}
+                              className="text-primary hover:underline flex gap-1 pt-2"
                             >
-                              Download
+                              <span className="text-xl"><BsFiletypePdf /></span> Download
                             </button>
                           </td>
                         </tr>
