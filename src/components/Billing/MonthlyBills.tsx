@@ -1,9 +1,8 @@
 "use client";
-
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/utils/supabase/browserClient";
-import BillModal from "./BillModal";
-
+import ViewBillModal from "./ViewBillModal";
+import { BsFiletypePdf } from "react-icons/bs";
 interface Bill {
   id: string;
   site_name: string;
@@ -30,6 +29,10 @@ const BillingScreen = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
+  const [openbillModal, setOpenBillModal] = useState(false);
+  const closeModal = () => {
+    setOpenBillModal(false);
+  };
 
   const fetchBills = useCallback(async () => {
     try {
@@ -42,7 +45,7 @@ const BillingScreen = () => {
       // Apply filters
       if (searchTerm) {
         query = query.or(
-          `site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`
+          `site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`,
         );
       }
 
@@ -52,15 +55,11 @@ const BillingScreen = () => {
 
       if (dateRange) {
         const now = new Date();
-        const firstDayOfMonth = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          1
-        );
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         const lastDayOfMonth = new Date(
           now.getFullYear(),
           now.getMonth() + 1,
-          0
+          0,
         );
 
         if (dateRange === "this-month") {
@@ -71,12 +70,12 @@ const BillingScreen = () => {
           const firstDayLastMonth = new Date(
             now.getFullYear(),
             now.getMonth() - 1,
-            1
+            1,
           );
           const lastDayLastMonth = new Date(
             now.getFullYear(),
             now.getMonth(),
-            0
+            0,
           );
           query = query
             .gte("billing_period_start", firstDayLastMonth.toISOString())
@@ -108,6 +107,11 @@ const BillingScreen = () => {
 
   const handleDownloadBill = (bill: Bill) => {
     alert(`Downloading bill for ${bill.site_name}`);
+  };
+
+  const handleOpenBillModal = (bill: Bill) => {
+    setSelectedBill(bill);
+    setOpenBillModal(true);
   };
 
   return (
@@ -160,7 +164,7 @@ const BillingScreen = () => {
 
             {/* Error Message */}
             {error && (
-              <div className="mb-4 rounded-md bg-danger/10 p-4 text-danger">
+              <div className="bg-danger/10 text-danger mb-4 rounded-md p-4">
                 {error}
               </div>
             )}
@@ -236,7 +240,7 @@ const BillingScreen = () => {
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             {formatBillingPeriod(
                               bill.billing_period_start,
-                              bill.billing_period_end
+                              bill.billing_period_end,
                             )}
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
@@ -271,20 +275,24 @@ const BillingScreen = () => {
                               {bill.status}
                             </span>
                           </td>
-                          <td className="px-6.5 py-4 text-sm dark:text-white flex space-x-3">
+                          <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">
                             <button
-                              onClick={() => setSelectedBill(bill)}
-                              className="text-primary hover:underline"
+                              key={bill.id}
+                              onClick={() => handleOpenBillModal(bill)}
+                              className="flex gap-1 pt-2 text-primary hover:underline"
                             >
-                              View
-                            </button>
-                            <button
-                              onClick={() => handleDownloadBill(bill)}
-                              className="text-primary hover:underline"
-                            >
+                              <span className="text-xl">
+                                <BsFiletypePdf />
+                              </span>{" "}
                               Download
                             </button>
                           </td>
+                          {openbillModal && selectedBill && (
+                            <ViewBillModal
+                              closeModal={() => setOpenBillModal(false)}
+                              bill={selectedBill}
+                            />
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -295,8 +303,6 @@ const BillingScreen = () => {
           </div>
         </div>
       </div>
-
-
     </>
   );
 };
