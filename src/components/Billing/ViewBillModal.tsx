@@ -1,24 +1,3 @@
-// import React from 'react';
-
-// const ViewBillModal: React.FC<{ closeModal: () => void }> = ({ closeModal }) => {
-//   return (
-//     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex justify-center items-center z-9999">
-//       <div className="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full">
-//         <button 
-//           onClick={closeModal} 
-//           className="text-red-500 hover:text-red-700 text-sm mb-4 block ml-auto"
-//         >
-//           Close
-//         </button>
-//         <h2 className="text-xl font-semibold">hello modal with</h2>
-//         {/* Add additional content here */}
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default ViewBillModal;
-
 import React, { useRef } from 'react';
 import html2pdf from 'html2pdf.js';
 
@@ -28,7 +7,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void }> = ({ closeModal }) => 
   const generatePDF = () => {
     if (invoiceRef.current) {
       const options = {
-        margin: [10, 10, 10, 10],  // Top, Left, Bottom, Right margins in mm
+        margin: [-1,-1,-1,-1],  // Top, Left, Bottom, Right margins in mm
         filename: 'invoice.pdf',
         html2canvas: {
           scale: 3,  // Increase scale for better resolution
@@ -40,7 +19,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void }> = ({ closeModal }) => 
           orientation: 'portrait',
         },
       };
-
+      
       html2pdf()
         .from(invoiceRef.current)
         .set(options)
@@ -53,11 +32,13 @@ const ViewBillModal: React.FC<{ closeModal: () => void }> = ({ closeModal }) => 
       <div className="bg-white p-6 rounded-lg shadow-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto overflow-x-hidden">
         {/* Close Button */}
         <button
-          onClick={closeModal}
-          className="text-red-500 hover:text-red-700 text-sm mb-4 block ml-auto"
-        >
-          Close
-        </button>
+  onClick={closeModal}
+  className="text-red-500 hover:text-red-700 text-xl mb-4 block ml-auto"
+  aria-label="Close"
+>
+  &times;  
+</button>
+
 
         {/* Invoice Content */}
         <div
@@ -68,6 +49,8 @@ const ViewBillModal: React.FC<{ closeModal: () => void }> = ({ closeModal }) => 
             padding: '12mm',
           }}
         >
+
+         
           <header className="flex justify-between items-center py-16">
             <img
               src="/images/logo/logo.svg"
@@ -105,6 +88,9 @@ const ViewBillModal: React.FC<{ closeModal: () => void }> = ({ closeModal }) => 
               </tbody>
             </table>
           </section>
+
+
+
 
           <table className="w-full mb-18 text-left text-sm">
             <thead className="text-gray-700 border-b-2 border-green-300">
@@ -176,5 +162,6 @@ const ViewBillModal: React.FC<{ closeModal: () => void }> = ({ closeModal }) => 
 };
 
 export default ViewBillModal;
+
 
 
