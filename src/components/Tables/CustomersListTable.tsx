@@ -1,15 +1,26 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import React, { useState, useEffect, useCallback } from "react";
-import { FaPlus, FaArrowLeft, FaArrowRight } from "react-icons/fa";
+import { FaArrowLeft, FaArrowRight, FaRegTrashAlt, FaRegUser } from "react-icons/fa";
 import { AiOutlineSearch } from "react-icons/ai";
 import { TbReceipt } from "react-icons/tb";
-import { Dialog, DialogContent } from "@/components/ui/Dialog";
 import flatpickr from "flatpickr";
 import { supabase } from "@/utils/supabase/browserClient";
 import BillModal from "../Billing/BillModal";
 
+// interface Customer {
+//   id: string;
+//   name: string;
+//   site_name: string;
+//   solar_api_key: string;
+//   installation_date: string;
+//   installed_capacity: number;
+//   electricity_tariff: number;
+//   status: string;
+// } this is the main interface
+  
+
+// This is just temporary interface
 interface Customer {
   id: string;
   site_name: string;
@@ -184,7 +195,9 @@ const CustomersListTable = () => {
 
   const validateDates = () => {
     if (!startDate || !endDate) {
-      setDateError("Please select both Start Date and End Date before generating the bill.");
+      setDateError(
+        "Please select both Start Date and End Date before generating the bill.",
+      );
       return false;
     }
 
@@ -227,7 +240,6 @@ const CustomersListTable = () => {
     // If all validations pass, open the modal
     setShowBillModal(true);
   };
-  
 
   return (
     <>
@@ -348,54 +360,29 @@ const CustomersListTable = () => {
                         />
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                        Name
+                      </th>
+                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Site Name
                       </th>
-                      {/* Existing columns */}
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Start Date
+                        Solar API Key
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        End Date
+                        Installation Date
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Email
+                        Installed Capacity
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Site ID
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Price Cap
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Production KWH
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Self Cons. KWH
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Consump. KWH
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Export KWH
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Belco Price
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Effective Price
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Bill Period
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Ex. Days
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Savings
+                        Electricity Tariff
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Status
                       </th>
+                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                          Action
+                        </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -416,43 +403,16 @@ const CustomersListTable = () => {
                           {customer.site_name}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                        {startDate || 'Select Date'}
+                          {customer.site_name}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {endDate || 'Select Date'}
+                          {customer.id}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.email}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.site_id}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.price_cap}
+                        {new Date(customer.created_at).toLocaleDateString()}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.production_kwh}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.self_cons_kwh}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.consump_kwh}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.export_kwh}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.belco_price}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.effective_price}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.bill_period}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.ex_days}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.savings}
@@ -468,6 +428,27 @@ const CustomersListTable = () => {
                             {customer.status}
                           </span>
                         </td>
+                        {/* Action button */}
+                          <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">
+                            <button
+                              // key={customer.id}
+                              onClick={() =>{}}
+                              className="rounded-lg bg-green-50 text-primary hover:text-green-50 p-2 transition hover:bg-primary"
+                            >
+                              <span className="text-xl">
+                              <FaRegUser  />
+                              </span>
+                            </button>
+                            <button
+                              onClick={() => {}}
+                              className="rounded-lg bg-red-50 text-red-600 hover:text-red-50 p-2 transition hover:bg-red-600"
+                            >
+                              <span className="text-xl">
+                                <FaRegTrashAlt />
+                              </span>
+                            </button>
+                          </td>
+
                       </tr>
                     ))}
                   </tbody>
@@ -510,12 +491,12 @@ const CustomersListTable = () => {
       {/* Bill Generation Modal */}
       {showBillModal && (
         <BillModal
-        selectedCustomers={selectedCustomers}
-        customers={customers}
-        startDate={startDate}
-        endDate={endDate}
-        onClose={() => setShowBillModal(false)}
-      />
+          selectedCustomers={selectedCustomers}
+          customers={customers}
+          startDate={startDate}
+          endDate={endDate}
+          onClose={() => setShowBillModal(false)}
+        />
       )}
     </>
   );
