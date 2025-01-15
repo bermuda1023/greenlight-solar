@@ -23,23 +23,21 @@ const BillModal: React.FC<BillModalProps> = ({
   const handlePostBill = async (billData: any) => {
     try {
       // Check if a bill already exists for this customer and billing period
-      const { data: existingBill, error: fetchError } = await supabase
+      const { data: existingBills, error: fetchError } = await supabase
         .from("monthly_bills")
         .select("id")
         .eq("site_name", billData.site_name)
         .eq("email", billData.email)
         .eq("billing_period_start", billData.billing_period_start)
-        .eq("billing_period_end", billData.billing_period_end)
-        .single();
-
-      if (fetchError && fetchError.code !== "PGRST116") {
-        // PGRST116 means no rows returned, which is fine
+        .eq("billing_period_end", billData.billing_period_end);
+  
+      if (fetchError) {
         throw fetchError;
       }
-
+  
       let result;
-      if (existingBill) {
-        // Update existing bill
+      // If we found an existing bill, update it
+      if (existingBills && existingBills.length > 0) {
         result = await supabase
           .from("monthly_bills")
           .update({
@@ -52,22 +50,74 @@ const BillModal: React.FC<BillModalProps> = ({
             savings: billData.savings,
             status: billData.status,
           })
-          .eq("id", existingBill.id);
-        
-        alert("Bill updated successfully!");
+          .eq("id", existingBills[0].id);
       } else {
-        // Insert new bill
+        // Insert new bill if none exists
         result = await supabase
           .from("monthly_bills")
           .insert([billData]);
-        
-        alert("Bill posted successfully!");
       }
-
+  
       if (result.error) throw result.error;
+      return true;
     } catch (error) {
       console.error("Error handling bill:", error);
-      alert("Failed to process bill. Please try again.");
+      return false;
+    }
+  };
+
+  const handlePostAllBills = async () => {
+    const billsToProcess = selectedCustomers.map((customerId) => {
+      const customer = customers.find((c) => c.id === customerId);
+      if (!customer) return null;
+
+      const billResult = calculateSolarBill({
+        consumption: customer?.consump_kwh || 0,
+        selfConsumption: customer?.self_cons_kwh || 0,
+        export: customer?.export_kwh || 0,
+        production: customer?.production_kwh || 0,
+        price: parseFloat(customer?.price_cap) || 0,
+        feedInPrice: customer?.feed_in_price || 0.1,
+        scaling: customer?.scaling || 1,
+        fixedFeeSaving: customer?.fixed_fee_saving || 0,
+        startDate: new Date(startDate || ""),
+        endDate: new Date(endDate || ""),
+        fuelRate: 0.14304,
+      });
+
+      return {
+        site_name: customer?.site_name || "N/A",
+        email: customer?.email || "N/A",
+        address: customer?.address || "N/A",
+        billing_period_start: startDate,
+        billing_period_end: endDate,
+        production_kwh: customer?.production_kwh || 0,
+        self_consumption_kwh: customer?.self_cons_kwh || 0,
+        export_kwh: customer?.export_kwh || 0,
+        total_cost: billResult.totalBelcoCost.toFixed(2),
+        energy_rate: billResult.effectiveRate.toFixed(2),
+        total_revenue: billResult.revenue.toFixed(2),
+        savings: billResult.savings.toFixed(2),
+        status: "Pending",
+      };
+    }).filter(Boolean);
+
+    let successCount = 0;
+    let failureCount = 0;
+
+    for (const billData of billsToProcess) {
+      const success = await handlePostBill(billData);
+      if (success) {
+        successCount++;
+      } else {
+        failureCount++;
+      }
+    }
+
+    if (failureCount === 0) {
+      alert(`Successfully posted all ${successCount} bills!`);
+    } else {
+      alert(`Posted ${successCount} bills successfully. Failed to post ${failureCount} bills. Check console for details.`);
     }
   };
 
@@ -219,12 +269,10 @@ const BillModal: React.FC<BillModalProps> = ({
               Close
             </button>
             <button
-              onClick={() => {
-                window.print();
-              }}
+              onClick={handlePostAllBills}
               className="rounded bg-primary px-4 py-2 text-white hover:bg-primary/90"
             >
-              Print Bill
+              Post All
             </button>
           </div>
         </div>

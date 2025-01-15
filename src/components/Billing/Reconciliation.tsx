@@ -1,31 +1,38 @@
 "use client";
 
 import { supabase } from "@/utils/supabase/browserClient";
+import { useRouter } from "next/navigation";
 import React, { useState, ChangeEvent, useEffect, useCallback } from "react";
 import { IoMdCloudUpload } from "react-icons/io";
 import { MdFileUpload, MdOutlineCancel } from "react-icons/md";
 
-
-const Alert: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
-  <div className={`rounded-lg border border-red-200 bg-red-50 p-4 ${className}`}>
+const Alert: React.FC<{ children: React.ReactNode; className?: string }> = ({
+  children,
+  className,
+}) => (
+  <div
+    className={`rounded-lg border border-red-200 bg-red-50 p-4 ${className}`}
+  >
     {children}
   </div>
 );
 
-const AlertDescription: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="text-sm text-red-800">{children}</div>
-);
+const AlertDescription: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => <div className="text-sm text-red-800">{children}</div>;
+
+interface SuggestionMatch extends BillData {
+  monthlyBillId?: string; // Add monthlyBillId to track which monthly bill matches
+}
 
 interface ColumnMapping {
   date: string;
   description: string;
   amount: string;
-  customerName: string;
 }
 
 interface BillData {
   id: number;
-  customerName: string;
   date: string;
   description: string;
   amount: number;
@@ -46,55 +53,145 @@ interface DateFormatOption {
   example: string;
 }
 
+interface MonthlyBill {
+  id: string; // uuid
+  site_name: string;
+  email: string;
+  address: string;
+  billing_period_start: string;
+  billing_period_end: string;
+  production_kwh: number;
+  self_consumption: number;
+  export_kwh: number;
+  total_cost: number;
+  energy_rate: number;
+  total_revenue: number;
+  savings: number;
+  arrears: number;
+  status: string;
+  created_at: string;
+}
+
+// Update ReconcileModalProps
 interface ReconcileModalProps {
   bill: BillData;
   onClose: () => void;
-  onReconcile: (id: number, paidAmount: number) => void;
+  onReconcile: (
+    billId: number,
+    paidAmount: number,
+    monthlyBillId: string,
+    arrearsAmount: number,
+  ) => Promise<void>;
+  monthlyBills: MonthlyBill[];
 }
 
 const DATE_FORMAT_OPTIONS: DateFormatOption[] = [
   { label: "DD/MM/YYYY", value: "dd/MM/yyyy", example: "31/12/2023" },
   { label: "MM/DD/YYYY", value: "MM/dd/yyyy", example: "12/31/2023" },
-  { label: "YYYY-MM-DD", value: "yyyy-MM-dd", example: "2023-12-31" }
+  { label: "YYYY-MM-DD", value: "yyyy-MM-dd", example: "2023-12-31" },
 ];
 
 const ReconcileModal: React.FC<ReconcileModalProps> = ({
   bill,
   onClose,
   onReconcile,
+  monthlyBills,
 }) => {
-  const [paidAmount, setPaidAmount] = useState(0);
+  const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
+  const [selectedMonthlyBill, setSelectedMonthlyBill] = useState<MonthlyBill | null>(null);
 
-  const handleReconcile = () => {
-    onReconcile(bill.id, paidAmount);
-    onClose();
+  // Helper function to determine matching status
+  const getMatchStatus = (difference: number) => {
+    if (difference === 0) return { status: "Matched", className: "text-green-600" };
+    if (difference <= 1) return { status: "Partially Matched", className: "text-yellow-600" };
+    return { status: "Unmatched", className: "text-red-600" };
+  };
+
+  const handleBillSelection = (monthlyBill: MonthlyBill) => {
+    setSelectedBillId(monthlyBill.id);
+    setSelectedMonthlyBill(monthlyBill);
+  };
+
+  const handleReconcile = async () => {
+    if (selectedBillId && selectedMonthlyBill) {
+      const difference = Math.abs(bill.amount - selectedMonthlyBill.total_revenue);
+      await onReconcile(
+        bill.id,
+        selectedMonthlyBill.total_revenue,
+        selectedBillId,
+        difference
+      );
+      onClose();
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="w-96 rounded-lg bg-white p-6">
+      <div className="w-[800px] rounded-lg bg-white p-6">
         <h2 className="mb-4 text-lg font-semibold">Reconcile Transaction</h2>
+
         <div className="mb-4">
-          <p>
-            <strong>Customer:</strong> {bill.customerName}
-          </p>
-          <p>
-            <strong>Amount:</strong> ${bill.amount.toFixed(2)}
-          </p>
-          <p>
-            <strong>Pending:</strong> ${bill.pendingAmount.toFixed(2)}
-          </p>
+          <p><strong>Amount to Reconcile:</strong> ${bill.amount.toFixed(2)}</p>
+          {selectedMonthlyBill && (
+            <>
+              <p><strong>Selected Bill Revenue:</strong> ${selectedMonthlyBill.total_revenue.toFixed(2)}</p>
+              {Math.abs(bill.amount - selectedMonthlyBill.total_revenue) > 0 && (
+                <p className={getMatchStatus(Math.abs(bill.amount - selectedMonthlyBill.total_revenue)).className}>
+                  <strong>Status:</strong> {getMatchStatus(Math.abs(bill.amount - selectedMonthlyBill.total_revenue)).status}
+                </p>
+              )}
+            </>
+          )}
         </div>
+
         <div className="mb-4">
-          <label className="mb-2 block">Paid Amount</label>
-          <input
-            type="number"
-            max={bill.pendingAmount}
-            value={paidAmount}
-            onChange={(e) => setPaidAmount(Number(e.target.value))}
-            className="w-full rounded border p-2"
-          />
+          <h3 className="mb-2 font-semibold">Select Monthly Bill to Match</h3>
+          <div className="max-h-60 overflow-y-auto">
+            <table className="w-full">
+              <thead className="sticky top-0 bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left">Select</th>
+                  <th className="px-4 py-2 text-left">Site Name</th>
+                  <th className="px-4 py-2 text-left">Revenue Amount</th>
+                  <th className="px-4 py-2 text-left">Status</th>
+                  <th className="px-4 py-2 text-left">Match Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyBills
+                  .filter((monthlyBill) => monthlyBill.status.toLowerCase() === "pending")
+                  .map((monthlyBill) => {
+                    const difference = Math.abs(monthlyBill.total_revenue - bill.amount);
+                    const matchStatus = getMatchStatus(difference);
+                    return (
+                      <tr
+                        key={monthlyBill.id}
+                        className={`hover:bg-gray-50 ${difference === 0 ? "bg-green-50" : ""}`}
+                      >
+                        <td className="px-4 py-2">
+                          <input
+                            type="radio"
+                            name="selectedBill"
+                            onChange={() => handleBillSelection(monthlyBill)}
+                            checked={selectedBillId === monthlyBill.id}
+                          />
+                        </td>
+                        <td className="px-4 py-2">{monthlyBill.site_name}</td>
+                        <td className="px-4 py-2">${monthlyBill.total_revenue.toFixed(2)}</td>
+                        <td className="px-4 py-2">{monthlyBill.status}</td>
+                        <td className="px-4 py-2">
+                          <span className={matchStatus.className}>
+                            {matchStatus.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
+
         <div className="flex justify-end gap-2">
           <button
             onClick={onClose}
@@ -105,7 +202,7 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
           <button
             onClick={handleReconcile}
             className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-            disabled={paidAmount <= 0 || paidAmount > bill.pendingAmount}
+            disabled={!selectedBillId}
           >
             Reconcile
           </button>
@@ -118,7 +215,7 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
 const Reconciliation = () => {
   const [activeTab, setActiveTab] = useState<string>("all");
   const [mappedData, setMappedData] = useState<BillData[]>([]);
-    const [csvColumns, setCsvColumns] = useState<string[]>([]);
+  const [csvColumns, setCsvColumns] = useState<string[]>([]);
   const [csvData, setCSVData] = useState<CSVRow[]>([]);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [showMappingModal, setShowMappingModal] = useState(false);
@@ -128,14 +225,31 @@ const Reconciliation = () => {
     date: "",
     description: "",
     amount: "",
-    customerName: "",
   });
   const [dateFormat, setDateFormat] = useState<string>("dd/MM/yyyy");
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
-  const [suggestions, setSuggestions] = useState<BillData[]>([]);
+  const [suggestions, setSuggestions] = useState<SuggestionMatch[]>([]);
   const [autoMatchThreshold] = useState(0.9);
+  const [monthlyBills, setMonthlyBills] = useState<MonthlyBill[]>([]);
+
+  const router = useRouter();
 
   const BUCKET_NAME = "csv-uploads";
+  const fetchMonthlyBills = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("monthly_bills")
+        .select("*")
+        .eq("status", "Pending")
+        .order("billing_period_start", { ascending: false });
+
+      if (error) throw error;
+      setMonthlyBills(data || []);
+    } catch (error) {
+      console.error("Error fetching monthly bills:", error);
+      alert("Error fetching monthly bills. Please try again.");
+    }
+  };
 
   const fetchSavedFile = useCallback(async () => {
     try {
@@ -166,13 +280,12 @@ const Reconciliation = () => {
             return {
               id: index,
               date: values[headers.indexOf("date")],
-              customerName: values[headers.indexOf("customerName")],
               description: values[headers.indexOf("description")],
               amount: parseFloat(values[headers.indexOf("amount")]),
               status: values[headers.indexOf("status")] as BillData["status"], // Cast to union type
               paidAmount: parseFloat(values[headers.indexOf("paidAmount")]),
               pendingAmount: parseFloat(
-                values[headers.indexOf("pendingAmount")]
+                values[headers.indexOf("pendingAmount")],
               ),
             };
           });
@@ -186,6 +299,7 @@ const Reconciliation = () => {
 
   useEffect(() => {
     fetchSavedFile();
+    fetchMonthlyBills();
   }, [fetchSavedFile]);
 
   const isValidDate = (dateStr: string): boolean => {
@@ -241,34 +355,62 @@ const Reconciliation = () => {
     return errors;
   };
 
-  const handleReconcile = async (id: number, paidAmount: number) => {
-    const updatedData = mappedData.map((bill) => {
-      if (bill.id === id) {
-        const newPendingAmount = bill.pendingAmount - paidAmount;
-        const newPaidAmount = bill.paidAmount + paidAmount;
-        const newStatus: "Matched" | "Partially Matched" =
-          newPendingAmount === 0 ? "Matched" : "Partially Matched"; // Explicitly typed status
-  
-        return {
-          ...bill,
-          status: newStatus,
-          paidAmount: newPaidAmount,
-          pendingAmount: newPendingAmount,
-        };
+  const handleReconcile = async (
+    csvBillId: number,
+    paidAmount: number,
+    monthlyBillId: string,
+    arrearsAmount: number,
+  ) => {
+    try {
+      // First, create the arrears column if it doesn't exist
+      try {
+        await supabase.rpc("add_arrears_column_if_not_exists");
+      } catch (error) {
+        console.error("Error checking/creating arrears column:", error);
       }
-      return bill;
-    });
-  
-    setMappedData(updatedData); // No type mismatch now
-    await updateCSVFile(updatedData);
+
+      // Update the monthly bill in Supabase
+      const { error: updateError } = await supabase
+        .from("monthly_bills")
+        .update({
+          status: "Reconciled",
+          arrears: arrearsAmount,
+        })
+        .eq("id", monthlyBillId);
+
+      if (updateError) throw updateError;
+
+      // Update the CSV data
+      const updatedData = mappedData.map((bill) => {
+        if (bill.id === csvBillId) {
+          return {
+            ...bill,
+            status:
+              arrearsAmount > 0
+                ? ("Partially Matched" as const)
+                : ("Matched" as const),
+            paidAmount: paidAmount,
+            pendingAmount: arrearsAmount,
+          };
+        }
+        return bill;
+      });
+
+      setMappedData(updatedData);
+      await updateCSVFile(updatedData);
+
+      // Redirect to monthly bills page
+      router.push(`/dashboard/billing/monthly?highlightId=${monthlyBillId}`);
+    } catch (error) {
+      console.error("Error during reconciliation:", error);
+      alert("Error updating the reconciliation. Please try again.");
+    }
   };
-  
 
   const updateCSVFile = async (data: BillData[]) => {
     // Convert data back to CSV format
     const headers = [
       "date",
-      "customerName",
       "description",
       "amount",
       "status",
@@ -280,7 +422,6 @@ const Reconciliation = () => {
       ...data.map((row) =>
         [
           row.date,
-          row.customerName,
           row.description,
           row.amount,
           row.status,
@@ -346,7 +487,6 @@ const Reconciliation = () => {
     }
   };
 
-
   const parseCSV = (text: string) => {
     const lines = text.split("\n");
     const headers = lines[0]
@@ -383,7 +523,6 @@ const Reconciliation = () => {
       const amountValue = parseFloat(row[columnMapping.amount]);
       return {
         id: index,
-        customerName: row[columnMapping.customerName],
         date: row[columnMapping.date],
         description: row[columnMapping.description],
         amount: isNaN(amountValue) ? 0 : amountValue,
@@ -500,7 +639,6 @@ const Reconciliation = () => {
               Date: "date",
               Description: "description",
               Amount: "amount",
-              "Customer Name": "customerName",
             } as const).map(([label, key]) => (
               <div key={key} className="grid grid-cols-2 items-center gap-4">
                 <div>
@@ -562,8 +700,9 @@ const Reconciliation = () => {
     </div>
   );
 
-  const findSimilarTransactions = (bill: BillData): BillData[] => {
-    return mappedData.filter((transaction) => {
+  const findSimilarTransactions = (bill: BillData): SuggestionMatch[] => {
+    // First find matching transactions from CSV data
+    const matchingTransactions = mappedData.filter((transaction) => {
       if (transaction.id === bill.id) return false;
 
       const amountDiff = Math.abs(transaction.amount - bill.amount);
@@ -580,6 +719,19 @@ const Reconciliation = () => {
         dateDiff <= 7 * 24 * 60 * 60 * 1000 && // Within 7 days
         descriptionSimilarity > autoMatchThreshold
       );
+    });
+
+    // Then find matching monthly bills and combine the information
+    return matchingTransactions.map((transaction) => {
+      const matchingMonthlyBill = monthlyBills.find(
+        (monthlyBill) =>
+          Math.abs(monthlyBill.total_revenue - transaction.amount) < 0.01,
+      );
+
+      return {
+        ...transaction,
+        monthlyBillId: matchingMonthlyBill?.id,
+      };
     });
   };
 
@@ -638,12 +790,37 @@ const Reconciliation = () => {
                   </p>
                 </div>
                 <button
-                  onClick={() =>
-                    handleReconcile(suggestion.id, suggestion.amount)
-                  }
-                  className="rounded-md bg-blue-600 px-3 py-1 text-sm text-white"
+                  onClick={() => {
+                    if (suggestion.monthlyBillId) {
+                      const matchingMonthlyBill = monthlyBills.find(
+                        (bill) => bill.id === suggestion.monthlyBillId,
+                      );
+
+                      if (matchingMonthlyBill) {
+                        const arrearsAmount = Math.abs(
+                          suggestion.amount - matchingMonthlyBill.total_revenue,
+                        );
+                        handleReconcile(
+                          suggestion.id,
+                          matchingMonthlyBill.total_revenue,
+                          suggestion.monthlyBillId,
+                          arrearsAmount,
+                        );
+                      }
+                    } else {
+                      alert("No matching monthly bill found");
+                    }
+                  }}
+                  className={`rounded-md px-3 py-1 text-sm text-white ${
+                    suggestion.monthlyBillId
+                      ? "bg-blue-600 hover:bg-blue-700"
+                      : "cursor-not-allowed bg-gray-400"
+                  }`}
+                  disabled={!suggestion.monthlyBillId}
                 >
-                  Accept Match
+                  {suggestion.monthlyBillId
+                    ? "Accept Match"
+                    : "No Monthly Bill Match"}
                 </button>
               </div>
             ))}
@@ -743,9 +920,6 @@ const Reconciliation = () => {
                   Date
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Customer Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                   Description
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
@@ -769,9 +943,6 @@ const Reconciliation = () => {
               {filteredData.map((row) => (
                 <tr key={row.id}>
                   <td className="whitespace-nowrap px-6 py-4">{row.date}</td>
-                  <td className="whitespace-nowrap px-6 py-4">
-                    {row.customerName}
-                  </td>
                   <td className="px-6 py-4">{row.description}</td>
                   <td className="whitespace-nowrap px-6 py-4">
                     {row.amount.toFixed(2)}
@@ -804,7 +975,7 @@ const Reconciliation = () => {
                       }}
                       disabled={row.status === "Matched"}
                     >
-                      Reconcile
+                      Match
                     </button>
                   </td>
                 </tr>
@@ -818,6 +989,7 @@ const Reconciliation = () => {
       {showReconcileModal && selectedBill && (
         <ReconcileModal
           bill={selectedBill}
+          monthlyBills={monthlyBills}
           onClose={() => {
             setShowReconcileModal(false);
             setSelectedBill(null);

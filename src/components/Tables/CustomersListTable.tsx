@@ -5,7 +5,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { FaPlus, FaArrowLeft, FaArrowRight } from "react-icons/fa";
 import { AiOutlineSearch } from "react-icons/ai";
 import { TbReceipt } from "react-icons/tb";
-import { Dialog, DialogContent } from "@/components/ui/Dialog";
 import flatpickr from "flatpickr";
 import { supabase } from "@/utils/supabase/browserClient";
 import BillModal from "../Billing/BillModal";

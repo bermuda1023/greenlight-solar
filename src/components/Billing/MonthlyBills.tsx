@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/utils/supabase/browserClient";
 import ViewBillModal from "./ViewBillModal";
 import { FaRegFilePdf, FaRegTrashAlt } from "react-icons/fa";
+import { useSearchParams } from "next/navigation";
 interface Bill {
   id: string;
   site_name: string;
@@ -30,6 +31,11 @@ const BillingScreen = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [openbillModal, setOpenBillModal] = useState(false);
+
+  const searchParams = useSearchParams();
+  const highlightId = searchParams.get('highlightId');
+
+
   const closeModal = () => {
     setOpenBillModal(false);
   };
@@ -241,7 +247,7 @@ const BillingScreen = () => {
                       {bills.map((bill) => (
                         <tr
                           key={bill.id}
-                          className="border-b border-stroke dark:border-dark-3"
+                          className={`${bill.id === highlightId ? 'bg-yellow-100 transition-colors duration-1000' : 'border-b border-stroke dark:border-dark-3'}`}
                         >
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             {bill.site_name}
