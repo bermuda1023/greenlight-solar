@@ -53,10 +53,10 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
         className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-6 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Invoice Content */}
+        {/* Invoice Content main Div */}
         <div
           ref={invoiceRef}
-          className="mx-auto h-[297mm] w-full max-w-[210mm] border border-gray-300 bg-white px-12 pb-12 shadow-lg"
+          className="mx-auto h-[297mm] w-full max-w-[210mm] border border-gray-300 bg-white px-8 pb-12 shadow-lg"
         >
           <header className="flex items-center justify-between py-16">
             <img
@@ -113,26 +113,26 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
           <table className="mb-18 w-full text-left text-sm">
             <thead className="border-b-2 border-green-300 text-gray-700">
               <tr>
-                <th className="p-3">Period Start</th>
-                <th className="p-3">Period End</th>
-                <th className="p-3 ">Description</th>
-                <th className="p-3">Energy PTS</th>
-                <th className="p-3">Per Unit</th>
-                <th className="p-3">Total</th>
+                <th className="p-3 text-sm">Period Start</th>
+                <th className="p-3 text-sm">Period End</th>
+                <th className="p-3 text-sm">Description</th>
+                <th className="p-3 text-sm">Energy PTS</th>
+                <th className="p-3 text-sm">Per Unit</th>
+                <th className="p-3 text-sm">Total</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td className="p-3 text-gray-600">
+                <td className="p-3 text-gray-600 text-xs">
                   {bill.billing_period_start}
                 </td>
-                <td className="p-3 text-gray-600">{bill.billing_period_end}</td>
-                <td className="p-3 text-gray-600">
+                <td className="p-3 text-gray-600 text-xs">{bill.billing_period_end}</td>
+                <td className="p-3 text-gray-600 text-xs">
                   Description Not Availble for now
                 </td>
-                <td className="p-3 text-gray-600">{bill.export_kwh}</td>
-                <td className="p-3 text-gray-600">{bill.energy_rate}</td>
-                <td className="p-3 text-gray-600">{bill.total_revenue}</td>
+                <td className="p-3 text-gray-600 text-xs">{bill.export_kwh}</td>
+                <td className="p-3 text-gray-600 text-xs">{bill.energy_rate}</td>
+                <td className="p-3 text-gray-600 text-xs">{bill.total_revenue}</td>
               </tr>
             </tbody>
           </table>
@@ -154,32 +154,32 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
             <h3 className="mb-4 w-1/2 border-b-2 border-green-300 p-2 font-semibold text-black">
               DIRECT DEPOSIT
             </h3>
-            <p>
+            <p className="text-sm">
               Bank Name:{" "}
-              <span className="font-semibold">Bank of Butterfield</span>
+              <span className="font-semibold text-xs">Bank of Butterfield</span>
             </p>
-            <p>
-              Account Name: <span className="font-semibold"></span>
+            <p className="text-sm">
+              Account Name: <span className="font-semibold text-xs"></span>
             </p>
-            <p>
+            <p className="text-sm">
               Account Number:{" "}
-              <span className="font-semibold">060400 6770 014</span>
+              <span className="font-semibold text-xs">060400 6770 014</span>
             </p>
           </section>
 
           <footer className="mt-30 grid grid-cols-3 gap-12 text-gray-800">
             <div className="col-span-1">
-              <p className=" text-center text-xl">
+              <p className=" text-center text-sm">
                 Thank you for doing business with us!
               </p>
             </div>
-            <div className="col-span-1 text-sm ">
+            <div className="col-span-1 text-xs ">
               <p>
                 Greenlight Financing Ltd. #48 Par-la-ville Road, Suite 1543,
                 Hamilton, HM11
               </p>
             </div>
-            <div className=" col-span-1 text-sm">
+            <div className=" col-span-1 text-xs">
               <a className="text-blue-700 underline">
                 billing@greenlightenergy.bm Phone: 1 (441) 705 3033
               </a>
@@ -187,7 +187,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
           </footer>
         </div>
 
-        {/* Button to generate PDF */}
+        {/* Button to close PDF */}
         <div className="flex gap-2">
           <button
             onClick={closeModal}
@@ -196,6 +196,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
           >
             Close
           </button>
+          {/* Button to generate PDF */}
           <button
             onClick={generatePDF}
             className="mt-4 w-full rounded-lg bg-primary py-2 text-white hover:bg-green-500"
