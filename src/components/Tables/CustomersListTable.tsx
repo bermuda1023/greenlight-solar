@@ -1,53 +1,32 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { FaArrowLeft, FaArrowRight, FaRegTrashAlt, FaRegUser } from "react-icons/fa";
+import { FaArrowLeft, FaArrowRight, FaRegTrashAlt } from "react-icons/fa";
+import { HiOutlineTrash, HiOutlineUser } from "react-icons/hi2";
 import { AiOutlineSearch } from "react-icons/ai";
 import { TbReceipt } from "react-icons/tb";
 import flatpickr from "flatpickr";
 import { supabase } from "@/utils/supabase/browserClient";
 import BillModal from "../Billing/BillModal";
 
-// interface Customer {
-//   id: string;
-//   name: string;
-//   site_name: string;
-//   solar_api_key: string;
-//   installation_date: string;
-//   installed_capacity: number;
-//   electricity_tariff: number;
-//   status: string;
-// } this is the main interface
-  
-
-// This is just temporary interface
 interface Customer {
   id: string;
   site_name: string;
   email: string;
-  site_id: string;
-  price_cap: string;
-  production_kwh: number;
-  self_cons_kwh: number;
-  consump_kwh: number;
-  export_kwh: number;
-  belco_price: string;
-  effective_price: string;
-  bill_period: string;
-  ex_days: number;
-  savings: string;
-  status: string;
+  address: string;
+  solar_api_key: string;
+  installation_date: string;
+  installed_capacity: number;
+  electricity_tariff: number;
   created_at: string;
+  consump_kwh: number; // Total consumption
+  self_cons_kwh: number; // Self-consumption
+  export_kwh: number; // Energy exported
+  production_kwh: number; // Energy produced
 }
 
-const CustomersListTable = () => {
-  const today = new Date();
-  const formattedToday = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(today);
 
+const CustomersListTable = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [startDate, setStartDate] = useState<string | null>(null);
@@ -250,34 +229,34 @@ const CustomersListTable = () => {
           <p className="text-sm text-gray-500">View and manage customers.</p>
         </div>
         <div className="flex items-center gap-4">
-            <div className="flex flex-col">
-              <input
-                id="startDate"
-                className={`form-datepicker w-full rounded-[7px] border-[1.5px] ${
-                  !startDate && dateError ? 'border-red-500' : 'border-stroke'
-                } bg-transparent bg-white px-5 py-3 font-normal outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:focus:border-primary`}
-                placeholder="Start Date *"
-                required
-                value={startDate || 'Start Date'}
-              />
-            </div>
-            <div className="flex flex-col">
-              <input
-                id="endDate"
-                className={`form-datepicker w-full rounded-[7px] border-[1.5px] ${
-                  !endDate && dateError ? 'border-red-500' : 'border-stroke'
-                } bg-transparent bg-white px-5 py-3 font-normal outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:focus:border-primary`}
-                placeholder="End Date *"
-                required
-                value={endDate || 'End Date'}
-              />
-            </div>
-            <button
-              onClick={handleGenerateBill}
-              className="hover:bg-dark-1 flex items-center gap-2 whitespace-nowrap rounded-md bg-dark-2 px-4 py-3 text-white"
-            >
-              <TbReceipt /> Generate Bill
-            </button>
+          <div className="flex flex-col">
+            <input
+              id="startDate"
+              className={`form-datepicker w-full rounded-[7px] border-[1.5px] ${
+                !startDate && dateError ? "border-red-500" : "border-stroke"
+              } bg-transparent bg-white px-5 py-3 font-normal outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:focus:border-primary`}
+              placeholder="Start Date *"
+              required
+              value={startDate || "Start Date"}
+            />
+          </div>
+          <div className="flex flex-col">
+            <input
+              id="endDate"
+              className={`form-datepicker w-full rounded-[7px] border-[1.5px] ${
+                !endDate && dateError ? "border-red-500" : "border-stroke"
+              } bg-transparent bg-white px-5 py-3 font-normal outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:focus:border-primary`}
+              placeholder="End Date *"
+              required
+              value={endDate || "End Date"}
+            />
+          </div>
+          <button
+            onClick={handleGenerateBill}
+            className="hover:bg-dark-1 flex items-center gap-2 whitespace-nowrap rounded-md bg-dark-2 px-4 py-3 text-white"
+          >
+            <TbReceipt /> Generate Bill
+          </button>
         </div>
       </div>
 
@@ -306,16 +285,7 @@ const CustomersListTable = () => {
                   <option value="Paid">Paid</option>
                   <option value="Pending">Pending</option>
                 </select>
-                {/* <select
-                  value={dateRange}
-                  onChange={(e) => setDateRange(e.target.value)}
-                  className="rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:text-white"
-                >
-                  <option value="">Date Range</option>
-                  <option value="this-month">This Month</option>
-                  <option value="last-month">Last Month</option>
-                  <option value="custom">Custom Range</option>
-                </select> */}
+
                 <select
                   value={siteCapacity}
                   onChange={(e) => setSiteCapacity(e.target.value)}
@@ -360,10 +330,13 @@ const CustomersListTable = () => {
                         />
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Name
+                        Site Name
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Site Name
+                        Email
+                      </th>
+                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                        Address
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Solar API Key
@@ -378,11 +351,8 @@ const CustomersListTable = () => {
                         Electricity Tariff
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Status
+                        Action
                       </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Action
-                        </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -403,52 +373,47 @@ const CustomersListTable = () => {
                           {customer.site_name}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.site_name}
+                          {customer.email}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.id}
+                          {customer.address}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
+                          {customer.solar_api_key}
+                        </td>
+                        {/* <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                         {new Date(customer.created_at).toLocaleDateString()}
+                        </td> */}
+                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
+                          {customer.installation_date}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.production_kwh}
+                          {customer.installed_capacity}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.savings}
+                          {customer.electricity_tariff}
                         </td>
-                        <td className="px-6 py-4">
-                          <span
-                            className={`inline-flex rounded-full px-3 py-1 text-sm font-medium ${
-                              customer.status === "Paid"
-                                ? "bg-success/10 text-success"
-                                : "bg-warning/10 text-warning"
-                            }`}
-                          >
-                            {customer.status}
-                          </span>
-                        </td>
-                        {/* Action button */}
-                          <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">
-                            <button
-                              // key={customer.id}
-                              onClick={() =>{}}
-                              className="rounded-lg bg-green-50 text-primary hover:text-green-50 p-2 transition hover:bg-primary"
-                            >
-                              <span className="text-xl">
-                              <FaRegUser  />
-                              </span>
-                            </button>
-                            <button
-                              onClick={() => {}}
-                              className="rounded-lg bg-red-50 text-red-600 hover:text-red-50 p-2 transition hover:bg-red-600"
-                            >
-                              <span className="text-xl">
-                                <FaRegTrashAlt />
-                              </span>
-                            </button>
-                          </td>
 
+                        {/* Action button */}
+                        <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">
+                          <button
+                            // key={customer.id}
+                            onClick={() => {}}
+                            className="rounded-lg bg-green-50 p-2 text-primary transition hover:bg-primary hover:text-green-50"
+                          >
+                            <span className="text-xl">
+                              <HiOutlineUser />
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => {}}
+                            className="rounded-lg bg-red-50 p-2 text-red-600 transition hover:bg-red-600 hover:text-red-50"
+                          >
+                            <span className="text-xl">
+                              <HiOutlineTrash />
+                            </span>
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

@@ -1,5 +1,7 @@
 import React, { useRef } from "react";
 import html2pdf from "html2pdf.js";
+import Image from "next/image";
+
 interface Bill {
   id: string;
   site_name: string;
@@ -16,6 +18,8 @@ interface Bill {
   savings: number;
   status: string;
   created_at: string;
+  arrears: number;
+  invoice_number: string;
 }
 
 const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
@@ -28,7 +32,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
     if (invoiceRef.current) {
       const options = {
         margin: [-1, -1, -1, -1], // Top, Left, Bottom, Right margins in mm
-        filename: "invoice.pdf",
+        filename: `Invoice-${bill.id}.pdf`,
         html2canvas: {
           scale: 3,
           logging: true,
@@ -43,6 +47,11 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
       html2pdf().from(invoiceRef.current).set(options).save();
     }
   };
+
+  // Calculate totals
+  const totalPeriodBalance = bill.total_cost - bill.total_revenue;
+  const overdueBalance = bill.arrears || 0;
+  const balanceDue = totalPeriodBalance + overdueBalance;
 
   return (
     <div
@@ -59,16 +68,17 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
           className="mx-auto h-[297mm] w-full max-w-[210mm] border border-gray-300 bg-white px-8 pb-12 shadow-lg"
         >
           <header className="flex items-center justify-between py-16">
-            <img
-              src="/images/logo/logo.svg"
+            <Image
+              src="/images/logo/logo.svg" // Ensure this file exists in the "public/images/logo" folder
               alt="Logo"
               width={360}
               height={60}
+              priority // Ensures the logo is loaded as soon as possible, optimizing LCP
               className="max-w-full"
             />
           </header>
 
-          <section className="mb-32">
+          <section className="mb-8">
             <div className="flex items-center justify-between pb-2">
               <h2 className="text-md text-black">RECIPIENT</h2>
               <div className="pr-3 text-2xl font-semibold text-black">
@@ -84,9 +94,9 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                   </td>
                   <td className="text-xs">{bill.site_name}</td>
                   <td className="pr-4 text-sm font-semibold text-black">
-                    Phone Number:
+                    Email:
                   </td>
-                  <td className="text-xs">123-456-7890</td>
+                  <td className="text-xs">{bill.email}</td>
                   <td className="pr-4 text-sm font-semibold text-black">
                     Date:
                   </td>
@@ -98,11 +108,11 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                   <td className="pr-4 text-sm font-semibold text-black">
                     Address:
                   </td>
-                  <td className="text-xs">{bill.email}</td>
+                  <td className="text-xs">{bill.address || "N/A"}</td>
                   <td className="pr-4 text-sm font-semibold text-black">
-                    Email:
+                    Invoice Number:
                   </td>
-                  <td className="text-xs">{bill.email}</td>
+                  <td className="text-xs">{bill.invoice_number}</td>
                   <td></td>
                   <td></td>
                 </tr>
@@ -110,7 +120,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
             </table>
           </section>
 
-          <table className="mb-18 w-full text-left text-sm">
+          <table className="mb-12 w-full text-left text-sm">
             <thead className="border-b-2 border-green-300 text-gray-700">
               <tr>
                 <th className="p-3 text-sm">Period Start</th>
@@ -123,16 +133,22 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
             </thead>
             <tbody>
               <tr>
-                <td className="p-3 text-gray-600 text-xs">
+                <td className="p-3 text-xs text-gray-600">
                   {bill.billing_period_start}
                 </td>
-                <td className="p-3 text-gray-600 text-xs">{bill.billing_period_end}</td>
-                <td className="p-3 text-gray-600 text-xs">
-                  Description Not Availble for now
+                <td className="p-3 text-xs text-gray-600">
+                  {bill.billing_period_end}
                 </td>
-                <td className="p-3 text-gray-600 text-xs">{bill.export_kwh}</td>
-                <td className="p-3 text-gray-600 text-xs">{bill.energy_rate}</td>
-                <td className="p-3 text-gray-600 text-xs">{bill.total_revenue}</td>
+                <td className="p-3 text-xs text-gray-600">Energy Produced</td>
+                <td className="p-3 text-xs text-gray-600">
+                  {bill.production_kwh}
+                </td>
+                <td className="p-3 text-xs text-gray-600">
+                  ${bill.energy_rate.toFixed(4)}
+                </td>
+                <td className="p-3 text-xs text-gray-600">
+                  ${bill.total_cost.toFixed(2)}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -140,13 +156,17 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
           <section className="mb-6 space-y-4 text-right">
             <p className="text-sm font-semibold text-gray-800">
               TOTAL PERIOD BALANCE{" "}
-              <span className="ml-20 text-black">$0.00</span>
+              <span className="ml-20 text-black">
+                ${totalPeriodBalance.toFixed(2)}
+              </span>
             </p>
             <p className="text-sm font-bold text-black">
-              OVERDUE BALANCE <span className=" ml-20">$443.26</span>
+              OVERDUE BALANCE{" "}
+              <span className=" ml-20">${overdueBalance.toFixed(2)}</span>
             </p>
             <p className="text-sm font-bold text-red-600">
-              BALANCE DUE <span className=" ml-20">$443.26</span>
+              BALANCE DUE{" "}
+              <span className=" ml-20">${balanceDue.toFixed(2)}</span>
             </p>
           </section>
 
@@ -156,20 +176,20 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
             </h3>
             <p className="text-sm">
               Bank Name:{" "}
-              <span className="font-semibold text-xs">Bank of Butterfield</span>
+              <span className="text-xs font-semibold">Bank of Butterfield</span>
             </p>
             <p className="text-sm">
-              Account Name: <span className="font-semibold text-xs"></span>
+              Account Name: <span className="text-xs font-semibold">N/A</span>
             </p>
             <p className="text-sm">
               Account Number:{" "}
-              <span className="font-semibold text-xs">060400 6770 014</span>
+              <span className="text-xs font-semibold">060400 6770 014</span>
             </p>
           </section>
 
-          <footer className="mt-30 grid grid-cols-3 gap-12 text-gray-800">
+          <footer className="mt-12 grid grid-cols-3 gap-12 text-gray-800">
             <div className="col-span-1">
-              <p className=" text-center text-sm">
+              <p className="text-center text-sm">
                 Thank you for doing business with us!
               </p>
             </div>
@@ -179,24 +199,25 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                 Hamilton, HM11
               </p>
             </div>
-            <div className=" col-span-1 text-xs">
-              <a className="text-blue-700 underline">
+            <div className="col-span-1 text-xs">
+              <a
+                href="mailto:billing@greenlightenergy.bm"
+                className="text-blue-700 underline"
+              >
                 billing@greenlightenergy.bm Phone: 1 (441) 705 3033
               </a>
             </div>
           </footer>
         </div>
 
-        {/* Button to close PDF */}
+        {/* Buttons */}
         <div className="flex gap-2">
           <button
             onClick={closeModal}
             className="mt-4 w-full rounded-lg bg-gray-200 text-dark-2 hover:text-red-700"
-            aria-label="Close"
           >
             Close
           </button>
-          {/* Button to generate PDF */}
           <button
             onClick={generatePDF}
             className="mt-4 w-full rounded-lg bg-primary py-2 text-white hover:bg-green-500"
@@ -208,4 +229,5 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
     </div>
   );
 };
+
 export default ViewBillModal;

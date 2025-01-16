@@ -1,10 +1,9 @@
 "use client";
 
 import { supabase } from "@/utils/supabase/browserClient";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import React, { useState, ChangeEvent, useEffect, useCallback } from "react";
 import { IoMdCloudUpload } from "react-icons/io";
-import { MdFileUpload, MdOutlineCancel } from "react-icons/md";
 
 const Alert: React.FC<{ children: React.ReactNode; className?: string }> = ({
   children,
@@ -32,15 +31,24 @@ interface ColumnMapping {
 }
 
 interface BillData {
-  id: number;
+  id: string;
   date: string;
   description: string;
   amount: number;
   status: "Unmatched" | "Matched" | "Partially Matched";
-  paidAmount: number;
-  pendingAmount: number;
-  transactionType?: string;
-  category?: string;
+  paid_amount: number;
+  pending_amount: number;
+  bill_id?: string;
+}
+
+interface MonthlyBill {
+  id: string;
+  site_name: string;
+  billing_period_start: string;
+  billing_period_end: string;
+  total_revenue: number;
+  status: string;
+  arrears: number;
 }
 
 interface CSVRow {
@@ -77,9 +85,9 @@ interface ReconcileModalProps {
   bill: BillData;
   onClose: () => void;
   onReconcile: (
-    billId: number,
+    transactionId: string,
     paidAmount: number,
-    monthlyBillId: string,
+    billId: string,
     arrearsAmount: number,
   ) => Promise<void>;
   monthlyBills: MonthlyBill[];
@@ -98,14 +106,8 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
   monthlyBills,
 }) => {
   const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
-  const [selectedMonthlyBill, setSelectedMonthlyBill] = useState<MonthlyBill | null>(null);
-
-  // Helper function to determine matching status
-  const getMatchStatus = (difference: number) => {
-    if (difference === 0) return { status: "Matched", className: "text-green-600" };
-    if (difference <= 1) return { status: "Partially Matched", className: "text-yellow-600" };
-    return { status: "Unmatched", className: "text-red-600" };
-  };
+  const [selectedMonthlyBill, setSelectedMonthlyBill] =
+    useState<MonthlyBill | null>(null);
 
   const handleBillSelection = (monthlyBill: MonthlyBill) => {
     setSelectedBillId(monthlyBill.id);
@@ -114,15 +116,24 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
 
   const handleReconcile = async () => {
     if (selectedBillId && selectedMonthlyBill) {
-      const difference = Math.abs(bill.amount - selectedMonthlyBill.total_revenue);
+      const arrearsAmount = Math.abs(
+        bill.amount - selectedMonthlyBill.total_revenue,
+      );
       await onReconcile(
         bill.id,
         selectedMonthlyBill.total_revenue,
         selectedBillId,
-        difference
+        arrearsAmount,
       );
-      onClose();
     }
+  };
+
+  const getMatchStatus = (difference: number) => {
+    if (difference === 0)
+      return { status: "Matched", className: "text-green-600" };
+    if (difference <= 1)
+      return { status: "Partially Matched", className: "text-yellow-600" };
+    return { status: "Unmatched", className: "text-red-600" };
   };
 
   return (
@@ -131,37 +142,59 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
         <h2 className="mb-4 text-lg font-semibold">Reconcile Transaction</h2>
 
         <div className="mb-4">
-          <p><strong>Amount to Reconcile:</strong> ${bill.amount.toFixed(2)}</p>
+          <p>
+            <strong>Transaction Amount:</strong> ${bill.amount.toFixed(2)}
+          </p>
           {selectedMonthlyBill && (
             <>
-              <p><strong>Selected Bill Revenue:</strong> ${selectedMonthlyBill.total_revenue.toFixed(2)}</p>
-              {Math.abs(bill.amount - selectedMonthlyBill.total_revenue) > 0 && (
-                <p className={getMatchStatus(Math.abs(bill.amount - selectedMonthlyBill.total_revenue)).className}>
-                  <strong>Status:</strong> {getMatchStatus(Math.abs(bill.amount - selectedMonthlyBill.total_revenue)).status}
-                </p>
-              )}
+              <p>
+                <strong>Selected Bill Amount:</strong> $
+                {selectedMonthlyBill.total_revenue.toFixed(2)}
+              </p>
+              <p>
+                <strong>Difference:</strong> $
+                {Math.abs(
+                  bill.amount - selectedMonthlyBill.total_revenue,
+                ).toFixed(2)}
+              </p>
+              <p
+                className={
+                  getMatchStatus(
+                    Math.abs(bill.amount - selectedMonthlyBill.total_revenue),
+                  ).className
+                }
+              >
+                <strong>Match Status:</strong>{" "}
+                {
+                  getMatchStatus(
+                    Math.abs(bill.amount - selectedMonthlyBill.total_revenue),
+                  ).status
+                }
+              </p>
             </>
           )}
         </div>
 
         <div className="mb-4">
-          <h3 className="mb-2 font-semibold">Select Monthly Bill to Match</h3>
+          <h3 className="mb-2 font-semibold">Available Bills</h3>
           <div className="max-h-60 overflow-y-auto">
             <table className="w-full">
               <thead className="sticky top-0 bg-gray-50">
                 <tr>
                   <th className="px-4 py-2 text-left">Select</th>
                   <th className="px-4 py-2 text-left">Site Name</th>
-                  <th className="px-4 py-2 text-left">Revenue Amount</th>
-                  <th className="px-4 py-2 text-left">Status</th>
+                  <th className="px-4 py-2 text-left">Period</th>
+                  <th className="px-4 py-2 text-left">Amount</th>
                   <th className="px-4 py-2 text-left">Match Status</th>
                 </tr>
               </thead>
               <tbody>
                 {monthlyBills
-                  .filter((monthlyBill) => monthlyBill.status.toLowerCase() === "pending")
+                  .filter((monthlyBill) => monthlyBill.status === "Pending")
                   .map((monthlyBill) => {
-                    const difference = Math.abs(monthlyBill.total_revenue - bill.amount);
+                    const difference = Math.abs(
+                      monthlyBill.total_revenue - bill.amount,
+                    );
                     const matchStatus = getMatchStatus(difference);
                     return (
                       <tr
@@ -177,8 +210,18 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
                           />
                         </td>
                         <td className="px-4 py-2">{monthlyBill.site_name}</td>
-                        <td className="px-4 py-2">${monthlyBill.total_revenue.toFixed(2)}</td>
-                        <td className="px-4 py-2">{monthlyBill.status}</td>
+                        <td className="px-4 py-2">
+                          {new Date(
+                            monthlyBill.billing_period_start,
+                          ).toLocaleDateString()}{" "}
+                          -
+                          {new Date(
+                            monthlyBill.billing_period_end,
+                          ).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-2">
+                          ${monthlyBill.total_revenue.toFixed(2)}
+                        </td>
                         <td className="px-4 py-2">
                           <span className={matchStatus.className}>
                             {matchStatus.status}
@@ -186,7 +229,7 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
                         </td>
                       </tr>
                     );
-                })}
+                  })}
               </tbody>
             </table>
           </div>
@@ -234,6 +277,22 @@ const Reconciliation = () => {
 
   const router = useRouter();
 
+  const searchParams = useSearchParams();
+  const highlightId = searchParams.get("highlightId");
+
+  useEffect(() => {
+    if (highlightId) {
+      const element = document.getElementById(`transaction-${highlightId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
+        element.classList.add("bg-yellow-100"); // Add a highlight class
+        setTimeout(() => {
+          element.classList.remove("bg-yellow-100");
+        }, 3000); // Remove highlight after 3 seconds
+      }
+    }
+  }, [highlightId]);
+
   const BUCKET_NAME = "csv-uploads";
   const fetchMonthlyBills = async () => {
     try {
@@ -271,20 +330,19 @@ const Reconciliation = () => {
         setUploadedFileName(fileName);
         parseCSV(text);
 
-        // If the file contains status information, use it directly
         if (text.includes("status,paidAmount,pendingAmount")) {
           const lines = text.split("\n");
           const headers = lines[0].split(",").map((h) => h.trim());
-          const data = lines.slice(1).map((line, index) => {
+          const data: BillData[] = lines.slice(1).map((line, index) => {
             const values = line.split(",").map((v) => v.trim());
             return {
-              id: index,
+              id: index.toString(),
               date: values[headers.indexOf("date")],
               description: values[headers.indexOf("description")],
               amount: parseFloat(values[headers.indexOf("amount")]),
-              status: values[headers.indexOf("status")] as BillData["status"], // Cast to union type
-              paidAmount: parseFloat(values[headers.indexOf("paidAmount")]),
-              pendingAmount: parseFloat(
+              status: values[headers.indexOf("status")] as BillData["status"],
+              paid_amount: parseFloat(values[headers.indexOf("paidAmount")]),
+              pending_amount: parseFloat(
                 values[headers.indexOf("pendingAmount")],
               ),
             };
@@ -302,15 +360,32 @@ const Reconciliation = () => {
     fetchMonthlyBills();
   }, [fetchSavedFile]);
 
-  const isValidDate = (dateStr: string): boolean => {
-    const format = dateFormat.toLowerCase();
-    const parts = dateStr.split(/[-/]/);
+  const fetchData = useCallback(async () => {
+    try {
+      const { data: transactions, error } = await supabase
+        .from("reconciliation")
+        .select("*")
+        .order("date", { ascending: false });
 
+      if (error) throw error;
+
+      setMappedData(transactions || []);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const isValidDate = (dateStr: string, format: string): boolean => {
+    const parts = dateStr.split(/[-/]/);
     if (parts.length !== 3) return false;
 
     let year, month, day;
 
-    switch (format) {
+    switch (format.toLowerCase()) {
       case "dd/mm/yyyy":
         [day, month, year] = parts.map(Number);
         break;
@@ -326,27 +401,37 @@ const Reconciliation = () => {
 
     const date = new Date(year, month - 1, day);
     return (
+      date.getFullYear() === year &&
       date.getMonth() === month - 1 &&
-      date.getDate() === day &&
-      date.getFullYear() === year
+      date.getDate() === day
     );
   };
 
-  const validateData = (data: CSVRow[]): string[] => {
+  const validateData = (
+    data: CSVRow[],
+    columnMapping: ColumnMapping,
+    dateFormat: string,
+  ): string[] => {
     const errors: string[] = [];
 
     data.forEach((row, index) => {
-      const lineNumber = index + 2; // Adding 2 to account for header row and 0-based index
+      const lineNumber = index + 2;
 
-      if (!isValidDate(row[columnMapping.date])) {
-        errors.push(`Invalid date format in row ${lineNumber}`);
+      // Validate date
+      const dateValue = row[columnMapping.date];
+      if (!dateValue || !isValidDate(dateValue, dateFormat)) {
+        errors.push(`Invalid date in row ${lineNumber}: ${dateValue}`);
       }
 
-      const amount = parseFloat(row[columnMapping.amount]);
-      if (isNaN(amount)) {
-        errors.push(`Invalid amount in row ${lineNumber}`);
+      // Validate amount
+      const amountValue = parseFloat(row[columnMapping.amount]);
+      if (isNaN(amountValue)) {
+        errors.push(
+          `Invalid amount in row ${lineNumber}: ${row[columnMapping.amount]}`,
+        );
       }
 
+      // Validate description
       if (!row[columnMapping.description]?.trim()) {
         errors.push(`Missing description in row ${lineNumber}`);
       }
@@ -355,94 +440,140 @@ const Reconciliation = () => {
     return errors;
   };
 
-  const handleReconcile = async (
-    csvBillId: number,
-    paidAmount: number,
-    monthlyBillId: string,
-    arrearsAmount: number,
-  ) => {
-    try {
-      // First, create the arrears column if it doesn't exist
-      try {
-        await supabase.rpc("add_arrears_column_if_not_exists");
-      } catch (error) {
-        console.error("Error checking/creating arrears column:", error);
-      }
-
-      // Update the monthly bill in Supabase
-      const { error: updateError } = await supabase
-        .from("monthly_bills")
-        .update({
-          status: "Reconciled",
-          arrears: arrearsAmount,
-        })
-        .eq("id", monthlyBillId);
-
-      if (updateError) throw updateError;
-
-      // Update the CSV data
-      const updatedData = mappedData.map((bill) => {
-        if (bill.id === csvBillId) {
-          return {
-            ...bill,
-            status:
-              arrearsAmount > 0
-                ? ("Partially Matched" as const)
-                : ("Matched" as const),
-            paidAmount: paidAmount,
-            pendingAmount: arrearsAmount,
-          };
+  const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files[0] && files[0].type === "text/csv") {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target?.result as string;
+        if (text) {
+          parseCSV(text); // Extract and set headers
+          setShowMappingModal(true); // Show the mapping modal
         }
-        return bill;
-      });
-
-      setMappedData(updatedData);
-      await updateCSVFile(updatedData);
-
-      // Redirect to monthly bills page
-      router.push(`/dashboard/billing/monthly?highlightId=${monthlyBillId}`);
-    } catch (error) {
-      console.error("Error during reconciliation:", error);
-      alert("Error updating the reconciliation. Please try again.");
+      };
+      reader.readAsText(files[0]);
+    } else {
+      alert("Please upload a valid CSV file.");
     }
   };
 
-  const updateCSVFile = async (data: BillData[]) => {
-    // Convert data back to CSV format
-    const headers = [
-      "date",
-      "description",
-      "amount",
-      "status",
-      "paidAmount",
-      "pendingAmount",
-    ];
-    const csvContent = [
-      headers.join(","),
-      ...data.map((row) =>
-        [
-          row.date,
-          row.description,
-          row.amount,
-          row.status,
-          row.paidAmount,
-          row.pendingAmount,
-        ].join(","),
-      ),
-    ].join("\n");
+  const handleMapping = async () => {
+    const errors = validateData(csvData, columnMapping, dateFormat);
+    setValidationErrors(errors);
 
-    const fileName = uploadedFileName || "reconciliation-data.csv";
-    const file = new File([csvContent], fileName, { type: "text/csv" });
+    if (errors.length > 0) return;
 
     try {
-      const { error } = await supabase.storage
-        .from(BUCKET_NAME)
-        .upload(fileName, file, { upsert: true });
+      const processedData = csvData.map((row) => ({
+        date: row[columnMapping.date],
+        description: row[columnMapping.description],
+        amount: parseFloat(row[columnMapping.amount]),
+        status: "Unmatched",
+        paid_amount: 0,
+        pending_amount: parseFloat(row[columnMapping.amount]),
+      }));
+
+      const { error } = await supabase
+        .from("reconciliation")
+        .insert(processedData);
 
       if (error) throw error;
+
+      await fetchData();
+      setShowMappingModal(false);
     } catch (error) {
-      console.error("Error updating CSV file:", error);
-      alert("Error updating the data. Please try again.");
+      console.error("Error uploading transactions:", error);
+      alert("Error saving transactions. Please try again.");
+    }
+  };
+
+  const handleReconcile = async (
+    transactionId: string,
+    paidAmount: number,
+    billId: string,
+    arrearsAmount: number,
+  ) => {
+    try {
+      // Update reconciliation record
+      const { error: reconcileError } = await supabase
+        .from("reconciliation")
+        .update({
+          status: arrearsAmount > 0 ? "Partially Matched" : "Matched",
+          paid_amount: paidAmount,
+          pending_amount: arrearsAmount,
+          bill_id: billId,
+        })
+        .eq("id", transactionId);
+
+      if (reconcileError) throw reconcileError;
+
+      // Update monthly bill
+      const { error: billError } = await supabase
+        .from("monthly_bills")
+        .update({
+          status: "Matched",
+          arrears: arrearsAmount,
+        })
+        .eq("id", billId);
+
+      if (billError) throw billError;
+
+      await fetchData();
+      setShowReconcileModal(false);
+      setSelectedBill(null);
+    } catch (error) {
+      console.error("Error during reconciliation:", error);
+      alert("Error updating reconciliation. Please try again.");
+    }
+  };
+
+  const handleUndo = async (transaction: BillData) => {
+    try {
+      // Reset reconciliation record
+      const { error: reconcileError } = await supabase
+        .from("reconciliation")
+        .update({
+          status: "Unmatched",
+          paid_amount: 0,
+          pending_amount: transaction.amount,
+          bill_id: null,
+        })
+        .eq("id", transaction.id);
+
+      if (reconcileError) throw reconcileError;
+
+      // Reset bill record
+      if (transaction.bill_id) {
+        const { error: billError } = await supabase
+          .from("monthly_bills")
+          .update({
+            status: "Pending",
+            arrears: 0,
+          })
+          .eq("id", transaction.bill_id);
+
+        if (billError) throw billError;
+      }
+
+      await fetchData();
+    } catch (error) {
+      console.error("Error resetting reconciliation:", error);
+      alert("Failed to reset reconciliation. Please try again.");
+    }
+  };
+
+  const handleDelete = async (transactionId: string) => {
+    try {
+      const { error } = await supabase
+        .from("reconciliation")
+        .delete()
+        .eq("id", transactionId);
+
+      if (error) throw error;
+      await fetchData();
+    } catch (error) {
+      console.error("Error deleting transaction:", error);
+      alert("Error deleting transaction. Please try again.");
     }
   };
 
@@ -450,250 +581,113 @@ const Reconciliation = () => {
     setActiveTab(tab);
   };
 
-  const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (files && files[0] && files[0].type === "text/csv") {
-      const file = files[0];
-      const fileName = `reconciliation-data.csv`;
-
-      try {
-        if (uploadedFileName) {
-          await supabase.storage.from(BUCKET_NAME).remove([uploadedFileName]);
-        }
-
-        const { error: uploadError } = await supabase.storage
-          .from(BUCKET_NAME)
-          .upload(fileName, file, { upsert: true });
-
-        if (uploadError) throw uploadError;
-
-        setUploadedFileName(fileName);
-
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const text = e.target?.result as string;
-          if (text) {
-            parseCSV(text);
-            setShowMappingModal(true);
-          }
-        };
-        reader.readAsText(file);
-      } catch (error) {
-        console.error("Error uploading file:", error);
-        alert("Error uploading file. Please try again.");
-      }
-    } else {
-      alert("Please upload a valid CSV file.");
-    }
-  };
-
   const parseCSV = (text: string) => {
-    const lines = text.split("\n");
-    const headers = lines[0]
-      .split(",")
-      .map((header) => header.replace(/["'\r]/g, "").trim());
+    const lines = text.split("\n").filter((line) => line.trim());
+    if (lines.length === 0) return;
+
+    const headers = lines[0].split(",").map((header) => header.trim());
     setCsvColumns(headers);
 
-    const data = lines
-      .slice(1)
-      .map((line) => {
-        const values = line
-          .split(",")
-          .map((value) => value.replace(/["'\r]/g, "").trim());
-        const row: CSVRow = {};
-        headers.forEach((header, index) => {
-          row[header] = values[index] || "";
-        });
-        return row;
-      })
-      .filter((row) => Object.values(row).some((value) => value));
+    const data = lines.slice(1).map((line) => {
+      const values = line.split(",").map((value) => value.trim());
+      const row: CSVRow = {};
+      headers.forEach((header, index) => {
+        row[header] = values[index] || "";
+      });
+      return row;
+    });
 
     setCSVData(data);
   };
 
-  const handleMapping = async () => {
-    const errors = validateData(csvData);
-    setValidationErrors(errors);
+  const MappingModal: React.FC<{
+    onClose: () => void;
+    onConfirm: () => void;
+    csvColumns: string[];
+    columnMapping: ColumnMapping;
+    setColumnMapping: (mapping: ColumnMapping) => void;
+    dateFormat: string;
+    setDateFormat: (format: string) => void;
+    validationErrors: string[];
+  }> = ({
+    onClose,
+    onConfirm,
+    csvColumns,
+    columnMapping,
+    setColumnMapping,
+    dateFormat,
+    setDateFormat,
+    validationErrors,
+  }) => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+      <div className="w-[600px] rounded-lg bg-white p-6">
+        <h2 className="mb-4 text-lg font-semibold">Map CSV Columns</h2>
 
-    if (errors.length > 0) {
-      return;
-    }
-
-    const processedData: BillData[] = csvData.map((row, index) => {
-      const amountValue = parseFloat(row[columnMapping.amount]);
-      return {
-        id: index,
-        date: row[columnMapping.date],
-        description: row[columnMapping.description],
-        amount: isNaN(amountValue) ? 0 : amountValue,
-        status: "Unmatched",
-        paidAmount: 0,
-        pendingAmount: amountValue,
-        transactionType: detectTransactionType(row[columnMapping.description]),
-        category: detectCategory(row[columnMapping.description]),
-      };
-    });
-
-    // Auto-match similar transactions
-    processedData.forEach((bill) => {
-      const similarTransactions = findSimilarTransactions(bill);
-      if (similarTransactions.length > 0) {
-        setSuggestions((prev) => [...prev, ...similarTransactions]);
-      }
-    });
-
-    setMappedData(processedData);
-    setShowMappingModal(false);
-    await updateCSVFile(processedData);
-  };
-
-  const detectTransactionType = (description: string): string => {
-    description = description.toLowerCase();
-    if (description.includes("invoice") || description.includes("bill"))
-      return "Bill";
-    if (description.includes("payment") || description.includes("transfer"))
-      return "Payment";
-    return "Other";
-  };
-
-  const detectCategory = (description: string): string => {
-    description = description.toLowerCase();
-    if (description.includes("service")) return "Services";
-    if (description.includes("product") || description.includes("goods"))
-      return "Products";
-    if (description.includes("consulting")) return "Consulting";
-    return "Uncategorized";
-  };
-
-  const handleDeleteFile = async () => {
-    if (!uploadedFileName) return;
-
-    try {
-      const { error } = await supabase.storage
-        .from(BUCKET_NAME)
-        .remove([uploadedFileName]);
-
-      if (error) throw error;
-
-      setMappedData([]);
-      setCSVData([]);
-      setCsvColumns([]);
-      setUploadedFileName(null);
-    } catch (error) {
-      console.error("Error deleting file:", error);
-    }
-  };
-
-  const handleColumnMappingChange = (
-    key: keyof ColumnMapping,
-    value: string,
-  ) => {
-    setColumnMapping((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-  };
-
-  const MappingModal = () => (
-    <div className="fixed inset-0 z-9999 flex items-center justify-center bg-gray-5 bg-opacity-50 backdrop-blur-sm">
-      <div className="w-2/3 max-w-2xl rounded-lg bg-white p-8">
-        <div className="mb-6">
-          <h2 className="text-xl font-semibold text-gray-900">File Setup</h2>
-          <p className="text-sm text-gray-500">
-            Let&apos;s set up your file for reconciliation
-          </p>
+        <div className="mb-4">
+          <label className="block text-sm font-medium">Date Format</label>
+          <select
+            className="mt-1 w-full rounded border p-2"
+            value={dateFormat}
+            onChange={(e) => setDateFormat(e.target.value)}
+          >
+            {DATE_FORMAT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label} (e.g., {option.example})
+              </option>
+            ))}
+          </select>
         </div>
 
-        {/* Step 1: Basic Format */}
-        <div className="mb-6">
-          <h3 className="mb-4 text-lg font-medium">
-            Step 1: Tell us about your data format
-          </h3>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Date Format
+        {csvColumns.length > 0 ? (
+          Object.entries(columnMapping).map(([key, value]) => (
+            <div key={key} className="mb-4">
+              <label className="block text-sm font-medium capitalize">
+                {key}
               </label>
               <select
-                className="mt-1 block w-full rounded-md border p-2"
-                value={dateFormat}
-                onChange={(e) => setDateFormat(e.target.value)}
+                className="mt-1 w-full rounded border p-2"
+                value={value}
+                onChange={(e) =>
+                  setColumnMapping({ ...columnMapping, [key]: e.target.value })
+                }
               >
-                {DATE_FORMAT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label} (e.g., {option.example})
+                <option value="">Select column</option>
+                {csvColumns.map((col) => (
+                  <option key={col} value={col}>
+                    {col}
                   </option>
                 ))}
               </select>
             </div>
-          </div>
-        </div>
-
-        {/* Step 2: Column Mapping */}
-        <div className="mb-6">
-          <h3 className="mb-4 text-lg font-medium">Step 2: Map your columns</h3>
-
-          <div className="space-y-4">
-            {Object.entries({
-              Date: "date",
-              Description: "description",
-              Amount: "amount",
-            } as const).map(([label, key]) => (
-              <div key={key} className="grid grid-cols-2 items-center gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    {label}
-                  </label>
-                  <p className="text-xs text-gray-500">
-                    {key === "date" && `Format: ${dateFormat}`}
-                    {key === "amount" && "Numeric values only"}
-                  </p>
-                </div>
-                <select
-                  className="block w-full rounded-md border p-2"
-                  value={columnMapping[key]}
-                  onChange={(e) =>
-                    handleColumnMappingChange(key, e.target.value)
-                  }
-                >
-                  <option value="">Select column</option>
-                  {csvColumns.map((column, index) => (
-                    <option key={index} value={column}>
-                      {column}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Validation Errors */}
-        {validationErrors.length > 0 && (
-          <Alert className="mb-4">
-            <AlertDescription>
-              <ul className="list-inside list-disc">
-                {validationErrors.map((error, index) => (
-                  <li key={index}>{error}</li>
-                ))}
-              </ul>
-            </AlertDescription>
-          </Alert>
+          ))
+        ) : (
+          <p className="text-sm text-red-500">
+            No columns found in the uploaded file.
+          </p>
         )}
 
-        <div className="mt-6 flex justify-end gap-2">
+        {validationErrors.length > 0 && (
+          <div className="mb-4 rounded border-red-200 bg-red-50 p-4">
+            <ul className="list-inside list-disc text-sm text-red-800">
+              {validationErrors.map((error, index) => (
+                <li key={index}>{error}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2">
           <button
-            className="rounded-md border px-4 py-2"
-            onClick={() => setShowMappingModal(false)}
+            className="rounded bg-gray-200 px-4 py-2 hover:bg-gray-300"
+            onClick={onClose}
           >
             Cancel
           </button>
           <button
-            className="rounded-md bg-blue-600 px-4 py-2 text-white"
-            onClick={handleMapping}
+            className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+            onClick={onConfirm}
           >
-            Import Data
+            Confirm Mapping
           </button>
         </div>
       </div>
@@ -834,27 +828,18 @@ const Reconciliation = () => {
             Payment Reconciliation
           </h1>
           <p className="text-sm text-gray-500">
-            Match bank payments with pending bills and mark them as reconciled.
+            Match payments with pending bills
           </p>
         </div>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={handleDeleteFile}
-            className="flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700"
-            disabled={!uploadedFileName}
-          >
-            <MdOutlineCancel className="h-5 w-5" /> Remove Data
-          </button>
-          <label className="flex cursor-pointer items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
-            <IoMdCloudUpload className="h-5 w-5" /> Import
-            <input
-              type="file"
-              className="hidden"
-              accept=".csv"
-              onChange={handleFileUpload}
-            />
-          </label>
-        </div>
+        <label className="flex cursor-pointer items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
+          <IoMdCloudUpload className="h-5 w-5" /> Import CSV
+          <input
+            type="file"
+            className="hidden"
+            accept=".csv"
+            onChange={handleFileUpload}
+          />
+        </label>
       </div>
 
       {/* Summary Cards */}
@@ -935,23 +920,31 @@ const Reconciliation = () => {
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Action
+                  Actions
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredData.map((row) => (
-                <tr key={row.id}>
+                <tr
+                  key={row.id}
+                  id={`transaction-${row.id}`} // Add this ID for scrolling
+                  className={`${
+                    row.id === highlightId
+                      ? "bg-yellow-100 transition-colors duration-1000"
+                      : ""
+                  }`}
+                >
                   <td className="whitespace-nowrap px-6 py-4">{row.date}</td>
                   <td className="px-6 py-4">{row.description}</td>
                   <td className="whitespace-nowrap px-6 py-4">
                     {row.amount.toFixed(2)}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4">
-                    {row.paidAmount.toFixed(2)}
+                    {row.paid_amount.toFixed(2)}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4">
-                    {row.pendingAmount.toFixed(2)}
+                    {row.pending_amount.toFixed(2)}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4">
                     <span
@@ -966,17 +959,45 @@ const Reconciliation = () => {
                       {row.status}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4">
-                    <button
-                      className="text-blue-600 hover:text-blue-900"
-                      onClick={() => {
-                        setSelectedBill(row);
-                        setShowReconcileModal(true);
-                      }}
-                      disabled={row.status === "Matched"}
-                    >
-                      Match
-                    </button>
+                  <td className="space-x-2 whitespace-nowrap px-6 py-4">
+                    {row.status === "Unmatched" ? (
+                      <>
+                        <button
+                          className="text-blue-600 hover:text-blue-900"
+                          onClick={() => {
+                            setSelectedBill(row);
+                            setShowReconcileModal(true);
+                          }}
+                        >
+                          Match
+                        </button>
+                        <button
+                          className="text-red-600 hover:text-red-900"
+                          onClick={() => handleDelete(row.id)}
+                        >
+                          Delete
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          className="text-blue-600 hover:text-blue-900"
+                          onClick={() =>
+                            router.push(
+                              `/dashboard/billing/monthly?highlightId=${row.bill_id}`,
+                            )
+                          }
+                        >
+                          View Bill
+                        </button>
+                        <button
+                          className="text-yellow-600 hover:text-yellow-900"
+                          onClick={() => handleUndo(row)}
+                        >
+                          Undo
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -985,7 +1006,18 @@ const Reconciliation = () => {
         </div>
       </div>
 
-      {showMappingModal && <MappingModal />}
+      {showMappingModal && (
+        <MappingModal
+          onClose={() => setShowMappingModal(false)}
+          onConfirm={handleMapping}
+          csvColumns={csvColumns}
+          columnMapping={columnMapping}
+          setColumnMapping={setColumnMapping}
+          dateFormat={dateFormat}
+          setDateFormat={setDateFormat}
+          validationErrors={validationErrors}
+        />
+      )}
       {showReconcileModal && selectedBill && (
         <ReconcileModal
           bill={selectedBill}

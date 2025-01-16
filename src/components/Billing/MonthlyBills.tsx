@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/utils/supabase/browserClient";
 import ViewBillModal from "./ViewBillModal";
 import { FaRegFilePdf, FaRegTrashAlt } from "react-icons/fa";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 interface Bill {
   id: string;
   site_name: string;
@@ -20,6 +20,8 @@ interface Bill {
   savings: number;
   status: string;
   created_at: string;
+  arrears: number;
+  invoice_number: string;
 }
 
 const BillingScreen = () => {
@@ -33,12 +35,19 @@ const BillingScreen = () => {
   const [openbillModal, setOpenBillModal] = useState(false);
 
   const searchParams = useSearchParams();
-  const highlightId = searchParams.get('highlightId');
+  const highlightId = searchParams.get("highlightId");
+  
 
+  const router = useRouter();
 
   const closeModal = () => {
     setOpenBillModal(false);
   };
+
+  const handleViewTransactions = (billId: string) => {
+    router.push(`/dashboard/billing/reconciliation?highlightId=${billId}`);
+  };
+  
 
   const fetchBills = useCallback(async () => {
     try {
@@ -247,7 +256,7 @@ const BillingScreen = () => {
                       {bills.map((bill) => (
                         <tr
                           key={bill.id}
-                          className={`${bill.id === highlightId ? 'bg-yellow-100 transition-colors duration-1000' : 'border-b border-stroke dark:border-dark-3'}`}
+                          className={`${bill.id === highlightId ? "bg-yellow-100 transition-colors duration-1000" : "border-b border-stroke dark:border-dark-3"}`}
                         >
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             {bill.site_name}
@@ -298,17 +307,23 @@ const BillingScreen = () => {
                           </td>
                           <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">
                             <button
+                              onClick={() => handleViewTransactions(bill.id)}
+                              className="rounded bg-primary px-4 py-2 text-white whitespace-nowrap"
+                            >
+                              View Transactions
+                            </button>
+                            <button
                               key={bill.id}
                               onClick={() => handleOpenBillModal(bill)}
-                              className="rounded-lg bg-green-50 text-primary hover:text-green-50 p-2 transition hover:bg-primary"
+                              className="rounded-lg bg-green-50 p-2 text-primary transition hover:bg-primary hover:text-green-50"
                             >
                               <span className="text-xl">
-                              <FaRegFilePdf />
+                                <FaRegFilePdf />
                               </span>
                             </button>
                             <button
                               onClick={() => handleDeleteBill(bill.id)}
-                              className="rounded-lg bg-red-50 text-red-600 hover:text-red-50 p-2 transition hover:bg-red-600"
+                              className="rounded-lg bg-red-50 p-2 text-red-600 transition hover:bg-red-600 hover:text-red-50"
                             >
                               <span className="text-xl">
                                 <FaRegTrashAlt />

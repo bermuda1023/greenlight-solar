@@ -22,7 +22,7 @@ const BillModal: React.FC<BillModalProps> = ({
 }) => {
   const handlePostBill = async (billData: any) => {
     try {
-      // Check if a bill already exists for this customer and billing period
+      const invoiceNumber = await generateInvoiceNumber();
       const { data: existingBills, error: fetchError } = await supabase
         .from("monthly_bills")
         .select("id")
@@ -30,11 +30,11 @@ const BillModal: React.FC<BillModalProps> = ({
         .eq("email", billData.email)
         .eq("billing_period_start", billData.billing_period_start)
         .eq("billing_period_end", billData.billing_period_end);
-  
+
       if (fetchError) {
         throw fetchError;
       }
-  
+
       let result;
       // If we found an existing bill, update it
       if (existingBills && existingBills.length > 0) {
@@ -53,11 +53,14 @@ const BillModal: React.FC<BillModalProps> = ({
           .eq("id", existingBills[0].id);
       } else {
         // Insert new bill if none exists
-        result = await supabase
-          .from("monthly_bills")
-          .insert([billData]);
+        result = await supabase.from("monthly_bills").insert([
+          {
+            ...billData,
+            invoice_number: invoiceNumber,
+          },
+        ]);
       }
-  
+
       if (result.error) throw result.error;
       return true;
     } catch (error) {
@@ -66,41 +69,57 @@ const BillModal: React.FC<BillModalProps> = ({
     }
   };
 
+  const generateInvoiceNumber = async (): Promise<string> => {
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, ""); // YYYYMMDD format
+    const { count, error } = await supabase
+      .from("monthly_bills")
+      .select("*", { count: "exact" })
+      .like("invoice_number", `INV-${today}-%`);
+
+    if (error) throw new Error("Error fetching invoice count");
+
+    const sequentialNumber = (count || 0) + 1; // Increment based on today's count
+    return `INV-${today}-${sequentialNumber.toString().padStart(3, "0")}`;
+  };
+
   const handlePostAllBills = async () => {
-    const billsToProcess = selectedCustomers.map((customerId) => {
-      const customer = customers.find((c) => c.id === customerId);
-      if (!customer) return null;
+    const billsToProcess = selectedCustomers
+      .map((customerId) => {
+        const customer = customers.find((c) => c.id === customerId);
+        if (!customer) return null;
 
-      const billResult = calculateSolarBill({
-        consumption: customer?.consump_kwh || 0,
-        selfConsumption: customer?.self_cons_kwh || 0,
-        export: customer?.export_kwh || 0,
-        production: customer?.production_kwh || 0,
-        price: parseFloat(customer?.price_cap) || 0,
-        feedInPrice: customer?.feed_in_price || 0.1,
-        scaling: customer?.scaling || 1,
-        fixedFeeSaving: customer?.fixed_fee_saving || 0,
-        startDate: new Date(startDate || ""),
-        endDate: new Date(endDate || ""),
-        fuelRate: 0.14304,
-      });
+        const billResult = calculateSolarBill({
+          consumption: customer?.consump_kwh || 0,
+          selfConsumption: customer?.self_cons_kwh || 0,
+          export: customer?.export_kwh || 0,
+          production: customer?.production_kwh || 0,
+          price: parseFloat(customer?.price_cap) || 0.31,
+          feedInPrice: customer?.feed_in_price || 0.1915,
+          scaling: customer?.scaling || 1,
+          fixedFeeSaving: customer?.fixed_fee_saving || 54.37,
+          startDate: new Date(startDate || ""),
+          endDate: new Date(endDate || ""),
+          fuelRate: 0.14304,
+        });
 
-      return {
-        site_name: customer?.site_name || "N/A",
-        email: customer?.email || "N/A",
-        address: customer?.address || "N/A",
-        billing_period_start: startDate,
-        billing_period_end: endDate,
-        production_kwh: customer?.production_kwh || 0,
-        self_consumption_kwh: customer?.self_cons_kwh || 0,
-        export_kwh: customer?.export_kwh || 0,
-        total_cost: billResult.totalBelcoCost.toFixed(2),
-        energy_rate: billResult.effectiveRate.toFixed(2),
-        total_revenue: billResult.revenue.toFixed(2),
-        savings: billResult.savings.toFixed(2),
-        status: "Pending",
-      };
-    }).filter(Boolean);
+        return {
+          customer_id: customer.id,
+          site_name: customer?.site_name || "N/A",
+          email: customer?.email || "N/A",
+          address: customer?.address || "N/A",
+          billing_period_start: startDate,
+          billing_period_end: endDate,
+          production_kwh: customer?.production_kwh || 0,
+          self_consumption_kwh: customer?.self_cons_kwh || 0,
+          export_kwh: customer?.export_kwh || 0,
+          total_cost: billResult.totalBelcoCost.toFixed(2),
+          energy_rate: billResult.effectiveRate.toFixed(2),
+          total_revenue: billResult.revenue.toFixed(2),
+          savings: billResult.savings.toFixed(2),
+          status: "Pending",
+        };
+      })
+      .filter(Boolean);
 
     let successCount = 0;
     let failureCount = 0;
@@ -117,7 +136,9 @@ const BillModal: React.FC<BillModalProps> = ({
     if (failureCount === 0) {
       alert(`Successfully posted all ${successCount} bills!`);
     } else {
-      alert(`Posted ${successCount} bills successfully. Failed to post ${failureCount} bills. Check console for details.`);
+      alert(
+        `Posted ${successCount} bills successfully. Failed to post ${failureCount} bills. Check console for details.`,
+      );
     }
   };
 
@@ -158,8 +179,8 @@ const BillModal: React.FC<BillModalProps> = ({
               billResult.savings > 0
                 ? "Credit"
                 : billResult.savings < 0
-                ? "Balance Due"
-                : "No Balance";
+                  ? "Balance Due"
+                  : "No Balance";
             const balanceAmount = Math.abs(billResult.savings).toFixed(2);
 
             const billData = {
@@ -240,19 +261,19 @@ const BillModal: React.FC<BillModalProps> = ({
                 </div>
 
                 {/* Footer Actions */}
-                <div className="flex justify-between items-end">
+                <div className="flex items-end justify-between">
                   <div className="text-sm text-gray-500">
                     <p>Generated on: {new Date().toLocaleDateString()}</p>
                   </div>
                   <div className="flex gap-2">
+                    <button className="rounded bg-green-200 px-4 py-2 text-gray-800 hover:bg-green-300">
+                      Post and Email
+                    </button>
                     <button
                       onClick={() => handlePostBill(billData)}
-                      className="rounded bg-green-200 px-4 py-2 font-medium text-gray-800 hover:bg-green-300"
+                      className="rounded bg-dark-2 px-4 py-2 font-medium text-white hover:bg-dark"
                     >
                       Post Bill
-                    </button>
-                    <button className="rounded bg-dark-2 px-4 py-2 text-white hover:bg-dark">
-                      Download PDF
                     </button>
                   </div>
                 </div>
