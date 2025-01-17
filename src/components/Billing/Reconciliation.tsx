@@ -494,6 +494,15 @@ const Reconciliation = () => {
     arrearsAmount: number,
   ) => {
     try {
+      // Get existing reconciliation IDs for the bill
+      const { data: billData, error: billFetchError } = await supabase
+        .from("monthly_bills")
+        .select("reconciliation_ids")
+        .eq("id", billId)
+        .single();
+  
+      if (billFetchError) throw billFetchError;
+  
       // Update reconciliation record
       const { error: reconcileError } = await supabase
         .from("reconciliation")
@@ -504,20 +513,27 @@ const Reconciliation = () => {
           bill_id: billId,
         })
         .eq("id", transactionId);
-
+  
       if (reconcileError) throw reconcileError;
-
+  
+      // Prepare the new reconciliation_ids array
+      const existingIds = billData?.reconciliation_ids || [];
+      const updatedIds = Array.isArray(existingIds) 
+        ? [...existingIds, transactionId]
+        : [transactionId];
+  
       // Update monthly bill
       const { error: billError } = await supabase
         .from("monthly_bills")
         .update({
           status: "Matched",
           arrears: arrearsAmount,
+          reconciliation_ids: updatedIds,
         })
         .eq("id", billId);
-
+  
       if (billError) throw billError;
-
+  
       await fetchData();
       setShowReconcileModal(false);
       setSelectedBill(null);

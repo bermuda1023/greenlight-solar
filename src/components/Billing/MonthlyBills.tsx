@@ -22,6 +22,7 @@ interface Bill {
   created_at: string;
   arrears: number;
   invoice_number: string;
+  reconciliation_ids: string[] | null;
 }
 
 const BillingScreen = () => {
@@ -36,18 +37,12 @@ const BillingScreen = () => {
 
   const searchParams = useSearchParams();
   const highlightId = searchParams.get("highlightId");
-  
 
   const router = useRouter();
 
   const closeModal = () => {
     setOpenBillModal(false);
   };
-
-  const handleViewTransactions = (billId: string) => {
-    router.push(`/dashboard/billing/reconciliation?highlightId=${billId}`);
-  };
-  
 
   const fetchBills = useCallback(async () => {
     try {
@@ -118,6 +113,16 @@ const BillingScreen = () => {
     const start = new Date(startDate);
     const end = new Date(endDate);
     return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
+  };
+
+  const handleViewTransactions = (billId: string) => {
+    const bill = bills.find((b) => b.id === billId);
+    if (bill?.reconciliation_ids && bill.reconciliation_ids.length > 0) {
+      // Redirect to reconciliation page with highlighting for the first transaction
+      router.push(
+        `/dashboard/billing/reconciliation?highlightId=${bill.reconciliation_ids[0]}`,
+      );
+    }
   };
 
   const handleDeleteBill = async (billId: string) => {
@@ -306,12 +311,17 @@ const BillingScreen = () => {
                             </span>
                           </td>
                           <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">
-                            <button
-                              onClick={() => handleViewTransactions(bill.id)}
-                              className="rounded bg-primary px-4 py-2 text-white whitespace-nowrap"
-                            >
-                              View Transactions
-                            </button>
+                            {bill.reconciliation_ids &&
+                              bill.reconciliation_ids.length > 0 && (
+                                <button
+                                  onClick={() =>
+                                    handleViewTransactions(bill.id)
+                                  }
+                                  className="whitespace-nowrap rounded bg-primary px-4 py-2 text-white"
+                                >
+                                  View Transactions
+                                </button>
+                              )}
                             <button
                               key={bill.id}
                               onClick={() => handleOpenBillModal(bill)}
