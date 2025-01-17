@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Dialog } from "@/components/ui/Dialog";
-import { calculateSolarBill } from "@/utils/bill-calculate/calculateSolarBill";
+import { calculateBilling } from "@/utils/bill-calculate/billingutils";
 import { supabase } from "@/utils/supabase/browserClient";
 
 interface BillModalProps {
@@ -88,18 +88,14 @@ const BillModal: React.FC<BillModalProps> = ({
         const customer = customers.find((c) => c.id === customerId);
         if (!customer) return null;
 
-        const billResult = calculateSolarBill({
-          consumption: customer?.consump_kwh || 0,
-          selfConsumption: customer?.self_cons_kwh || 0,
-          export: customer?.export_kwh || 0,
-          production: customer?.production_kwh || 0,
-          price: parseFloat(customer?.price_cap) || 0.31,
-          feedInPrice: customer?.feed_in_price || 0.1915,
-          scaling: customer?.scaling || 1,
-          fixedFeeSaving: customer?.fixed_fee_saving || 54.37,
+        const billResult = calculateBilling({
+          energyConsumed: 500,
           startDate: new Date(startDate || ""),
           endDate: new Date(endDate || ""),
           fuelRate: 0.14304,
+          energyExported: 150,
+          basePrice: 0.15,
+          feedInPrice: 0.5,
         });
 
         return {
@@ -112,10 +108,10 @@ const BillModal: React.FC<BillModalProps> = ({
           production_kwh: customer?.production_kwh || 0,
           self_consumption_kwh: customer?.self_cons_kwh || 0,
           export_kwh: customer?.export_kwh || 0,
-          total_cost: billResult.totalBelcoCost.toFixed(2),
-          energy_rate: billResult.effectiveRate.toFixed(2),
-          total_revenue: billResult.revenue.toFixed(2),
-          savings: billResult.savings.toFixed(2),
+          total_cost: billResult.belcoTotal.toFixed(2),
+          energy_rate: billResult.belcoPerKwh.toFixed(2),
+          total_revenue: billResult.finalRevenue.toFixed(2),
+          total_PTS: billResult.totalpts || 666999,
           status: "Pending",
         };
       })
@@ -161,27 +157,23 @@ const BillModal: React.FC<BillModalProps> = ({
 
             if (!customer) return null;
 
-            const billResult = calculateSolarBill({
-              consumption: customer?.consump_kwh || 0,
-              selfConsumption: customer?.self_cons_kwh || 0,
-              export: customer?.export_kwh || 0,
-              production: customer?.production_kwh || 0,
-              price: parseFloat(customer?.price_cap) || 0,
-              feedInPrice: customer?.feed_in_price || 0.1,
-              scaling: customer?.scaling || 1,
-              fixedFeeSaving: customer?.fixed_fee_saving || 0,
+            const billResult = calculateBilling({
+              energyConsumed: 500,
               startDate: new Date(startDate || ""),
               endDate: new Date(endDate || ""),
               fuelRate: 0.14304,
+              energyExported: 50,
+              basePrice: 0.15,
+              feedInPrice: 0.5,
             });
 
-            const balanceStatus =
-              billResult.savings > 0
-                ? "Credit"
-                : billResult.savings < 0
-                  ? "Balance Due"
-                  : "No Balance";
-            const balanceAmount = Math.abs(billResult.savings).toFixed(2);
+            // const balanceStatus =
+            //   billResult.savings > 0
+            //     ? "Credit"
+            //     : billResult.savings < 0
+            //       ? "Balance Due"
+            //       : "No Balance";
+            // const balanceAmount = Math.abs(billResult.savings).toFixed(2);
 
             const billData = {
               site_name: customer?.site_name || "N/A",
@@ -192,10 +184,10 @@ const BillModal: React.FC<BillModalProps> = ({
               production_kwh: customer?.production_kwh || 0,
               self_consumption_kwh: customer?.self_cons_kwh || 0,
               export_kwh: customer?.export_kwh || 0,
-              total_cost: billResult.totalBelcoCost.toFixed(2),
-              energy_rate: billResult.effectiveRate.toFixed(2),
-              total_revenue: billResult.revenue.toFixed(2),
-              savings: billResult.savings.toFixed(2),
+              total_cost: billResult.belcoTotal.toFixed(2),
+              energy_rate: billResult.belcoPerKwh.toFixed(2),
+              total_revenue: billResult.finalRevenue.toFixed(2),
+              total_PTS: billResult.totalpts || 666999,
               status: "Pending",
             };
 
@@ -229,33 +221,21 @@ const BillModal: React.FC<BillModalProps> = ({
                 <div className="mb-4 grid grid-cols-2 gap-4 text-sm text-gray-600">
                   <div>
                     <p>
-                      <strong>Energy Produced:</strong>{" "}
-                      {customer?.production_kwh || "N/A"} kWh
+                      <strong>Total PTS:</strong>
+                      {billResult.totalpts.toFixed(2)}
                     </p>
                     <p>
-                      <strong>Self Consumption:</strong>{" "}
-                      {customer?.self_cons_kwh || "N/A"} kWh
-                    </p>
-                    <p>
-                      <strong>Energy Exported:</strong>{" "}
-                      {customer?.export_kwh || "N/A"} kWh
+                      <strong>Energy Rate:</strong> $
+                      {billResult.belcoPerKwh.toFixed(2)}/kWh
                     </p>
                   </div>
                   <div>
                     <p>
-                      <strong>Total Cost:</strong> $
-                      {billResult.totalBelcoCost.toFixed(2)}
+                      <strong>Total:</strong> $
+                      {billResult.finalRevenue.toFixed(2)}
                     </p>
                     <p>
-                      <strong>Energy Rate:</strong> $
-                      {billResult.effectiveRate.toFixed(2)}/kWh
-                    </p>
-                    <p>
-                      <strong>Total Revenue:</strong> $
-                      {billResult.revenue.toFixed(2)}
-                    </p>
-                    <p>
-                      <strong>Savings:</strong> ${billResult.savings.toFixed(2)}
+                      <strong>Description:</strong> sample description
                     </p>
                   </div>
                 </div>
