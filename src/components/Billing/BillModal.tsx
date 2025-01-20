@@ -41,14 +41,12 @@ const BillModal: React.FC<BillModalProps> = ({
         result = await supabase
           .from("monthly_bills")
           .update({
-            production_kwh: billData.production_kwh,
-            self_consumption_kwh: billData.self_consumption_kwh,
-            export_kwh: billData.export_kwh,
-            total_cost: billData.total_cost,
-            energy_rate: billData.energy_rate,
-            total_revenue: billData.total_revenue,
-            savings: billData.savings,
             status: billData.status,
+
+            total_cost: billData.belcoTotal.toFixed(2),
+            energy_rate: billData.belcoPerKwh.toFixed(2),
+            total_revenue: billData.finalRevenue.toFixed(2),
+            total_PTS: billData.totalpts || 666999,
           })
           .eq("id", existingBills[0].id);
       } else {
@@ -105,9 +103,6 @@ const BillModal: React.FC<BillModalProps> = ({
           address: customer?.address || "N/A",
           billing_period_start: startDate,
           billing_period_end: endDate,
-          production_kwh: customer?.production_kwh || 0,
-          self_consumption_kwh: customer?.self_cons_kwh || 0,
-          export_kwh: customer?.export_kwh || 0,
           total_cost: billResult.belcoTotal.toFixed(2),
           energy_rate: billResult.belcoPerKwh.toFixed(2),
           total_revenue: billResult.finalRevenue.toFixed(2),
@@ -167,13 +162,6 @@ const BillModal: React.FC<BillModalProps> = ({
               feedInPrice: 0.5,
             });
 
-            // const balanceStatus =
-            //   billResult.savings > 0
-            //     ? "Credit"
-            //     : billResult.savings < 0
-            //       ? "Balance Due"
-            //       : "No Balance";
-            // const balanceAmount = Math.abs(billResult.savings).toFixed(2);
 
             const billData = {
               site_name: customer?.site_name || "N/A",
@@ -181,13 +169,10 @@ const BillModal: React.FC<BillModalProps> = ({
               address: customer?.address || "N/A",
               billing_period_start: startDate,
               billing_period_end: endDate,
-              production_kwh: customer?.production_kwh || 0,
-              self_consumption_kwh: customer?.self_cons_kwh || 0,
-              export_kwh: customer?.export_kwh || 0,
               total_cost: billResult.belcoTotal.toFixed(2),
               energy_rate: billResult.belcoPerKwh.toFixed(2),
               total_revenue: billResult.finalRevenue.toFixed(2),
-              total_PTS: billResult.totalpts || 666999,
+              total_PTS: billResult.totalpts || 69,
               status: "Pending",
             };
 

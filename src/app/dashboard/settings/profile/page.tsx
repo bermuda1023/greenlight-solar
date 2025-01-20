@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 const Settings = () => {
   return (
-    <div className="mx-auto w-full max-w-[1080px]">
+    <div className="mx-auto w-full">
       {/* <Breadcrumb pageName="Settings" /> */}
 
       <SettingBoxes />

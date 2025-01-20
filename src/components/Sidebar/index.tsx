@@ -119,7 +119,15 @@ const menuGroups = [
           </svg>
         ),
         label: "Settings",
-        route: "/dashboard/settings",
+        route: "#",
+
+        children: [
+          { label: "Bill Parameters", route: "/dashboard/settings/bill-params" },
+          {
+            label: "Profile",
+            route: "/dashboard/settings/profile",
+          },
+        ],
       },
     ],
   },

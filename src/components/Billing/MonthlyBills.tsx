@@ -17,7 +17,6 @@ interface Bill {
   total_cost: number;
   energy_rate: number;
   total_revenue: number;
-  savings: number;
   status: string;
   created_at: string;
   arrears: number;
@@ -246,9 +245,7 @@ const BillingScreen = () => {
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Total Revenue ($)
                         </th>
-                        <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Savings ($)
-                        </th>
+
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Status
                         </th>
@@ -295,9 +292,6 @@ const BillingScreen = () => {
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             ${bill.total_revenue.toFixed(2)}
-                          </td>
-                          <td className="px-6.5 py-4 text-sm dark:text-white">
-                            ${bill.savings.toFixed(2)}
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             <span
