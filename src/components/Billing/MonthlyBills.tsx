@@ -4,6 +4,9 @@ import { supabase } from "@/utils/supabase/browserClient";
 import ViewBillModal from "./ViewBillModal";
 import { FaRegFilePdf, FaRegTrashAlt } from "react-icons/fa";
 import { useRouter, useSearchParams } from "next/navigation";
+import { LiaFileInvoiceDollarSolid } from "react-icons/lia";
+import TransactionsModal from "./TransactionsModal";
+
 interface Bill {
   id: string;
   site_name: string;
@@ -25,6 +28,18 @@ interface Bill {
   reconciliation_ids: string[] | null;
 }
 
+interface Transaction {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  paid_amount: number;
+  pending_amount: number;
+  status: string;
+  created_at: string;
+  bill_id: string;
+}
+
 const BillingScreen = () => {
   const [bills, setBills] = useState<Bill[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -34,6 +49,9 @@ const BillingScreen = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [openbillModal, setOpenBillModal] = useState(false);
+
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isTransactionsModalOpen, setIsTransactionsModalOpen] = useState(false);
 
   const searchParams = useSearchParams();
   const highlightId = searchParams.get("highlightId");
@@ -115,13 +133,24 @@ const BillingScreen = () => {
     return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
   };
 
-  const handleViewTransactions = (billId: string) => {
+  const handleViewTransactions = async (billId: string) => {
     const bill = bills.find((b) => b.id === billId);
     if (bill?.reconciliation_ids && bill.reconciliation_ids.length > 0) {
-      // Redirect to reconciliation page with highlighting for the first transaction
-      router.push(
-        `/dashboard/billing/reconciliation?highlightId=${bill.reconciliation_ids[0]}`,
-      );
+      try {
+        const { data, error } = await supabase
+          .from("reconciliation")
+          .select("*")
+          .in("id", bill.reconciliation_ids)
+          .order("date", { ascending: false });
+
+        if (error) throw error;
+
+        setTransactions(data || []);
+        setIsTransactionsModalOpen(true);
+      } catch (err) {
+        console.error("Error fetching transactions:", err);
+        alert("Failed to fetch transactions. Please try again.");
+      }
     }
   };
 
@@ -229,15 +258,6 @@ const BillingScreen = () => {
                           Billing Period
                         </th>
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Energy Produced (kWh)
-                        </th>
-                        <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Self Consumption (kWh)
-                        </th>
-                        <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Energy Exported (kWh)
-                        </th>
-                        <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Total Cost ($)
                         </th>
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
@@ -245,9 +265,6 @@ const BillingScreen = () => {
                         </th>
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Total Revenue ($)
-                        </th>
-                        <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Savings ($)
                         </th>
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Status
@@ -261,7 +278,7 @@ const BillingScreen = () => {
                       {bills.map((bill) => (
                         <tr
                           key={bill.id}
-                          className={`${bill.id === highlightId ? "bg-yellow-100 transition-colors duration-1000" : "border-b border-stroke dark:border-dark-3"}`}
+                          className={`${bill.id === highlightId ? "bg-primary/[.1] transition-colors duration-1000" : "border-b border-stroke dark:border-dark-3"}`}
                         >
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             {bill.site_name}
@@ -279,15 +296,6 @@ const BillingScreen = () => {
                             )}
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
-                            {bill.production_kwh}
-                          </td>
-                          <td className="px-6.5 py-4 text-sm dark:text-white">
-                            {bill.self_consumption_kwh}
-                          </td>
-                          <td className="px-6.5 py-4 text-sm dark:text-white">
-                            {bill.export_kwh}
-                          </td>
-                          <td className="px-6.5 py-4 text-sm dark:text-white">
                             ${bill.total_cost.toFixed(2)}
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
@@ -295,9 +303,6 @@ const BillingScreen = () => {
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             ${bill.total_revenue.toFixed(2)}
-                          </td>
-                          <td className="px-6.5 py-4 text-sm dark:text-white">
-                            ${bill.savings.toFixed(2)}
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             <span
@@ -317,15 +322,19 @@ const BillingScreen = () => {
                                   onClick={() =>
                                     handleViewTransactions(bill.id)
                                   }
-                                  className="whitespace-nowrap rounded bg-primary px-4 py-2 text-white"
+                                  className="hover:text-dark- rounded-lg bg-gray-50 p-2 text-dark-3 transition hover:bg-gray-200"
+                                  title="View Transactions"
                                 >
-                                  View Transactions
+                                  <span className="text-xl">
+                                    <LiaFileInvoiceDollarSolid />
+                                  </span>
                                 </button>
                               )}
                             <button
                               key={bill.id}
                               onClick={() => handleOpenBillModal(bill)}
                               className="rounded-lg bg-green-50 p-2 text-primary transition hover:bg-primary hover:text-green-50"
+                              title="Open Bill"
                             >
                               <span className="text-xl">
                                 <FaRegFilePdf />
@@ -334,12 +343,14 @@ const BillingScreen = () => {
                             <button
                               onClick={() => handleDeleteBill(bill.id)}
                               className="rounded-lg bg-red-50 p-2 text-red-600 transition hover:bg-red-600 hover:text-red-50"
+                              title="Delete Bill"
                             >
                               <span className="text-xl">
                                 <FaRegTrashAlt />
                               </span>
                             </button>
                           </td>
+
                           {openbillModal && selectedBill && (
                             <ViewBillModal
                               closeModal={() => setOpenBillModal(false)}
@@ -356,6 +367,13 @@ const BillingScreen = () => {
           </div>
         </div>
       </div>
+      {isTransactionsModalOpen && (
+        <TransactionsModal
+          isOpen={isTransactionsModalOpen}
+          onClose={() => setIsTransactionsModalOpen(false)}
+          transactions={transactions}
+        />
+      )}
     </>
   );
 };

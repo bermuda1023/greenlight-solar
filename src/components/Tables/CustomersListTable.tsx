@@ -17,12 +17,7 @@ interface Customer {
   solar_api_key: string;
   installation_date: string;
   installed_capacity: number;
-  electricity_tariff: number;
   created_at: string;
-  consump_kwh: number; // Total consumption
-  self_cons_kwh: number; // Self-consumption
-  export_kwh: number; // Energy exported
-  production_kwh: number; // Energy produced
 }
 
 
@@ -348,9 +343,6 @@ const CustomersListTable = () => {
                         Installed Capacity
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Electricity Tariff
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Action
                       </th>
                     </tr>
@@ -390,10 +382,6 @@ const CustomersListTable = () => {
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.installed_capacity}
                         </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.electricity_tariff}
-                        </td>
-
                         {/* Action button */}
                         <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">
                           <button

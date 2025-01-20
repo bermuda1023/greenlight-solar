@@ -13,6 +13,16 @@ interface BillModalProps {
   onClose: () => void;
 }
 
+interface Bill {
+  id: string;
+  total_revenue: number;
+  arrears: number;
+  total_bill: number;
+  pending_bill: number;
+  reconciliation_ids: string[];
+  status: string;
+}
+
 const BillModal: React.FC<BillModalProps> = ({
   selectedCustomers,
   customers,
@@ -41,9 +51,6 @@ const BillModal: React.FC<BillModalProps> = ({
         result = await supabase
           .from("monthly_bills")
           .update({
-            production_kwh: billData.production_kwh,
-            self_consumption_kwh: billData.self_consumption_kwh,
-            export_kwh: billData.export_kwh,
             total_cost: billData.total_cost,
             energy_rate: billData.energy_rate,
             total_revenue: billData.total_revenue,
