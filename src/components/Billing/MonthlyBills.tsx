@@ -20,7 +20,7 @@ interface Bill {
   total_cost: number;
   energy_rate: number;
   total_revenue: number;
-  savings: number;
+  total_bill: number;
   status: string;
   created_at: string;
   arrears: number;
@@ -135,24 +135,35 @@ const BillingScreen = () => {
 
   const handleViewTransactions = async (billId: string) => {
     const bill = bills.find((b) => b.id === billId);
-    if (bill?.reconciliation_ids && bill.reconciliation_ids.length > 0) {
-      try {
-        const { data, error } = await supabase
-          .from("reconciliation")
-          .select("*")
-          .in("id", bill.reconciliation_ids)
-          .order("date", { ascending: false });
-
-        if (error) throw error;
-
-        setTransactions(data || []);
-        setIsTransactionsModalOpen(true);
-      } catch (err) {
-        console.error("Error fetching transactions:", err);
-        alert("Failed to fetch transactions. Please try again.");
-      }
+  
+    if (!bill) {
+      alert("Bill not found.");
+      return;
+    }
+  
+    try {
+      const { data: transactions, error: transactionsError } = await supabase
+        .from("reconciliation")
+        .select("*")
+        .eq("bill_id", billId)
+        .order("date", { ascending: false });
+  
+      if (transactionsError) throw transactionsError;
+  
+      // Add the total_bill to each transaction
+      const enrichedTransactions = transactions.map((transaction) => ({
+        ...transaction,
+        total_bill: bill.total_bill,
+      }));
+  
+      setTransactions(enrichedTransactions);
+      setIsTransactionsModalOpen(true);
+    } catch (err) {
+      console.error("Error fetching transactions:", err);
+      alert("Failed to fetch transactions. Please try again.");
     }
   };
+  
 
   const handleDeleteBill = async (billId: string) => {
     try {
@@ -267,6 +278,12 @@ const BillingScreen = () => {
                           Total Revenue ($)
                         </th>
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                          Total Bill ($)
+                        </th>
+                        <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                          Outstanding ($)
+                        </th>
+                        <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Status
                         </th>
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
@@ -305,6 +322,12 @@ const BillingScreen = () => {
                             ${bill.total_revenue.toFixed(2)}
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
+                            ${bill.total_bill.toFixed(2)}
+                          </td>
+                          <td className="px-6.5 py-4 text-sm dark:text-white">
+                            ${bill.arrears.toFixed(2)}
+                          </td>
+                          <td className="px-6.5 py-4 text-sm dark:text-white">
                             <span
                               className={`inline-flex rounded-full px-3 py-1 text-sm font-medium ${
                                 bill.status === "Paid"
@@ -315,7 +338,7 @@ const BillingScreen = () => {
                               {bill.status}
                             </span>
                           </td>
-                          <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">
+                          <td className="flex justify-end space-x-3 px-6.5 py-4 text-sm dark:text-white">
                             {bill.reconciliation_ids &&
                               bill.reconciliation_ids.length > 0 && (
                                 <button

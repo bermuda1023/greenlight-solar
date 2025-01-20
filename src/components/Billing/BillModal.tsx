@@ -1,8 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { Dialog } from "@/components/ui/Dialog";
-import { calculateSolarBill } from "@/utils/bill-calculate/calculateSolarBill";
+import { calculateBilling } from "@/utils/bill-calculate/billingutils";
 import { supabase } from "@/utils/supabase/browserClient";
 
 interface BillModalProps {
@@ -20,12 +20,15 @@ const BillModal: React.FC<BillModalProps> = ({
   endDate,
   onClose,
 }) => {
+  const [selectedBills, setSelectedBills] =
+    useState<string[]>(selectedCustomers);
+
   const handlePostBill = async (billData: any) => {
     try {
       const invoiceNumber = await generateInvoiceNumber();
       const { data: existingBills, error: fetchError } = await supabase
         .from("monthly_bills")
-        .select("id")
+        .select("id, arrears")
         .eq("site_name", billData.site_name)
         .eq("email", billData.email)
         .eq("billing_period_start", billData.billing_period_start)
@@ -35,20 +38,24 @@ const BillModal: React.FC<BillModalProps> = ({
         throw fetchError;
       }
 
+      const previousArrears = existingBills?.[0]?.arrears || 0;
+      const total_bill = Number(billData.total_revenue) + previousArrears;
+
       let result;
       // If we found an existing bill, update it
       if (existingBills && existingBills.length > 0) {
         result = await supabase
           .from("monthly_bills")
           .update({
-            production_kwh: billData.production_kwh,
-            self_consumption_kwh: billData.self_consumption_kwh,
-            export_kwh: billData.export_kwh,
-            total_cost: billData.total_cost,
-            energy_rate: billData.energy_rate,
-            total_revenue: billData.total_revenue,
-            savings: billData.savings,
             status: billData.status,
+            total_cost: billData.belcoTotal.toFixed(2),
+            energy_rate: billData.belcoPerKwh.toFixed(2),
+            total_revenue: billData.finalRevenue.toFixed(2),
+            total_PTS: billData.totalpts || 666999,
+            total_bill: total_bill,
+            pending_bill: total_bill,
+            arrears: previousArrears,
+            reconciliation_ids: [],
           })
           .eq("id", existingBills[0].id);
       } else {
@@ -57,6 +64,11 @@ const BillModal: React.FC<BillModalProps> = ({
           {
             ...billData,
             invoice_number: invoiceNumber,
+            total_bill: total_bill,
+            pending_bill: total_bill,
+            arrears: previousArrears,
+            reconciliation_ids: [],
+            status: "Pending",
           },
         ]);
       }
@@ -67,6 +79,37 @@ const BillModal: React.FC<BillModalProps> = ({
       console.error("Error handling bill:", error);
       return false;
     }
+  };
+
+  // Calculate the summary for all selected bills
+  const calculateSummary = () => {
+    return selectedBills.reduce(
+      (summary, customerId) => {
+        const customer = customers.find((c) => c.id === customerId);
+        if (!customer) return summary;
+
+        const billResult = calculateBilling({
+          energyConsumed: 500,
+          startDate: new Date(startDate || ""),
+          endDate: new Date(endDate || ""),
+          fuelRate: 0.14304,
+          energyExported: 150,
+          basePrice: 0.15,
+          feedInPrice: 0.5,
+        });
+
+        summary.totalCost += parseFloat(billResult.belcoTotal.toFixed(2));
+        summary.totalRevenue += parseFloat(billResult.finalRevenue.toFixed(2));
+        summary.totalPts += parseFloat((billResult.totalpts || 0).toFixed(2));
+        return summary;
+      },
+      { totalCost: 0, totalRevenue: 0, totalPts: 0 },
+    );
+  };
+  const summary = calculateSummary();
+
+  const handleRemoveBill = (customerId: string) => {
+    setSelectedBills((prev) => prev.filter((id) => id !== customerId));
   };
 
   const generateInvoiceNumber = async (): Promise<string> => {
@@ -88,18 +131,14 @@ const BillModal: React.FC<BillModalProps> = ({
         const customer = customers.find((c) => c.id === customerId);
         if (!customer) return null;
 
-        const billResult = calculateSolarBill({
-          consumption: customer?.consump_kwh || 0,
-          selfConsumption: customer?.self_cons_kwh || 0,
-          export: customer?.export_kwh || 0,
-          production: customer?.production_kwh || 0,
-          price: parseFloat(customer?.price_cap) || 0.31,
-          feedInPrice: customer?.feed_in_price || 0.1915,
-          scaling: customer?.scaling || 1,
-          fixedFeeSaving: customer?.fixed_fee_saving || 54.37,
+        const billResult = calculateBilling({
+          energyConsumed: 500,
           startDate: new Date(startDate || ""),
           endDate: new Date(endDate || ""),
           fuelRate: 0.14304,
+          energyExported: 150,
+          basePrice: 0.15,
+          feedInPrice: 0.5,
         });
 
         return {
@@ -109,13 +148,10 @@ const BillModal: React.FC<BillModalProps> = ({
           address: customer?.address || "N/A",
           billing_period_start: startDate,
           billing_period_end: endDate,
-          production_kwh: customer?.production_kwh || 0,
-          self_consumption_kwh: customer?.self_cons_kwh || 0,
-          export_kwh: customer?.export_kwh || 0,
-          total_cost: billResult.totalBelcoCost.toFixed(2),
-          energy_rate: billResult.effectiveRate.toFixed(2),
-          total_revenue: billResult.revenue.toFixed(2),
-          savings: billResult.savings.toFixed(2),
+          total_cost: billResult.belcoTotal.toFixed(2),
+          energy_rate: billResult.belcoPerKwh.toFixed(2),
+          total_revenue: billResult.finalRevenue.toFixed(2),
+          total_PTS: billResult.totalpts || 666999,
           status: "Pending",
         };
       })
@@ -156,32 +192,51 @@ const BillModal: React.FC<BillModalProps> = ({
             Billing Summary
           </h2>
 
-          {selectedCustomers.map((customerId) => {
+          {/* Summary Section */}
+          <div className="mb-6 rounded-lg border border-dashed border-gray-300 bg-green-50 p-6">
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between border-b border-gray-300 pb-2">
+                <span className="font-medium text-gray-700">Total Cost:</span>
+                <span className="font-semibold text-gray-900">
+                  ${summary.totalCost.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between border-b border-gray-300 pb-2">
+                <span className="font-medium text-gray-700">
+                  Total Revenue:
+                </span>
+                <span className="font-semibold text-gray-900">
+                  ${summary.totalRevenue.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between border-b border-gray-300 pb-2">
+                <span className="font-medium text-gray-700">Total PTS:</span>
+                <span className="font-semibold text-gray-900">
+                  {summary.totalPts.toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {/* Footer (optional for additional details) */}
+            <div className="mt-4 text-center text-xs text-gray-600">
+              All amounts are calculated based on the selected billing period.
+            </div>
+          </div>
+
+          {selectedBills.map((customerId) => {
             const customer = customers.find((c) => c.id === customerId);
 
             if (!customer) return null;
 
-            const billResult = calculateSolarBill({
-              consumption: customer?.consump_kwh || 0,
-              selfConsumption: customer?.self_cons_kwh || 0,
-              export: customer?.export_kwh || 0,
-              production: customer?.production_kwh || 0,
-              price: parseFloat(customer?.price_cap) || 0,
-              feedInPrice: customer?.feed_in_price || 0.1,
-              scaling: customer?.scaling || 1,
-              fixedFeeSaving: customer?.fixed_fee_saving || 0,
+            const billResult = calculateBilling({
+              energyConsumed: 500,
               startDate: new Date(startDate || ""),
               endDate: new Date(endDate || ""),
               fuelRate: 0.14304,
+              energyExported: 50,
+              basePrice: 0.15,
+              feedInPrice: 0.5,
             });
-
-            const balanceStatus =
-              billResult.savings > 0
-                ? "Credit"
-                : billResult.savings < 0
-                  ? "Balance Due"
-                  : "No Balance";
-            const balanceAmount = Math.abs(billResult.savings).toFixed(2);
 
             const billData = {
               site_name: customer?.site_name || "N/A",
@@ -189,13 +244,10 @@ const BillModal: React.FC<BillModalProps> = ({
               address: customer?.address || "N/A",
               billing_period_start: startDate,
               billing_period_end: endDate,
-              production_kwh: customer?.production_kwh || 0,
-              self_consumption_kwh: customer?.self_cons_kwh || 0,
-              export_kwh: customer?.export_kwh || 0,
-              total_cost: billResult.totalBelcoCost.toFixed(2),
-              energy_rate: billResult.effectiveRate.toFixed(2),
-              total_revenue: billResult.revenue.toFixed(2),
-              savings: billResult.savings.toFixed(2),
+              total_cost: billResult.belcoTotal.toFixed(2),
+              energy_rate: billResult.belcoPerKwh.toFixed(2),
+              total_revenue: billResult.finalRevenue.toFixed(2),
+              total_PTS: billResult.totalpts || 69,
               status: "Pending",
             };
 
@@ -229,33 +281,21 @@ const BillModal: React.FC<BillModalProps> = ({
                 <div className="mb-4 grid grid-cols-2 gap-4 text-sm text-gray-600">
                   <div>
                     <p>
-                      <strong>Energy Produced:</strong>{" "}
-                      {customer?.production_kwh || "N/A"} kWh
+                      <strong>Total PTS:</strong>
+                      {billResult.totalpts.toFixed(2)}
                     </p>
                     <p>
-                      <strong>Self Consumption:</strong>{" "}
-                      {customer?.self_cons_kwh || "N/A"} kWh
-                    </p>
-                    <p>
-                      <strong>Energy Exported:</strong>{" "}
-                      {customer?.export_kwh || "N/A"} kWh
+                      <strong>Energy Rate:</strong> $
+                      {billResult.belcoPerKwh.toFixed(2)}/kWh
                     </p>
                   </div>
                   <div>
                     <p>
-                      <strong>Total Cost:</strong> $
-                      {billResult.totalBelcoCost.toFixed(2)}
+                      <strong>Total:</strong> $
+                      {billResult.finalRevenue.toFixed(2)}
                     </p>
                     <p>
-                      <strong>Energy Rate:</strong> $
-                      {billResult.effectiveRate.toFixed(2)}/kWh
-                    </p>
-                    <p>
-                      <strong>Total Revenue:</strong> $
-                      {billResult.revenue.toFixed(2)}
-                    </p>
-                    <p>
-                      <strong>Savings:</strong> ${billResult.savings.toFixed(2)}
+                      <strong>Description:</strong> sample description
                     </p>
                   </div>
                 </div>
@@ -266,6 +306,9 @@ const BillModal: React.FC<BillModalProps> = ({
                     <p>Generated on: {new Date().toLocaleDateString()}</p>
                   </div>
                   <div className="flex gap-2">
+                    <button className="rounded bg-red-200 px-4 py-2 text-red-800 hover:bg-red-300" onClick={() => handleRemoveBill(customerId)}>
+                      Remove
+                    </button>
                     <button className="rounded bg-green-200 px-4 py-2 text-gray-800 hover:bg-green-300">
                       Post and Email
                     </button>

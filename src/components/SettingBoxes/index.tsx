@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import { FaUser, FaPhone, FaEnvelope, FaLock } from "react-icons/fa";
 import { supabase } from "@/utils/supabase/browserClient";
-import { PassThrough } from "stream";
 
 const SettingBoxes = () => {
   const [showUpdateForm, setShowUpdateForm] = useState(false);
@@ -24,6 +23,7 @@ const SettingBoxes = () => {
   const togglePassForm = () => {
     setShowPassForm(!showPassForm);
   };
+
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -208,7 +208,7 @@ const SettingBoxes = () => {
                           <FaPhone className="text-gray-500" />
                         </span>
                         <p className="w-full rounded-lg bg-primary/[.07] py-3 pl-12 pr-4 text-dark">
-                          {profile.phone || "Enter your Phone"}
+                          {profile.phone || "+123-456-789"}
                         </p>
                       </div>
                     </div>
@@ -354,24 +354,6 @@ const SettingBoxes = () => {
                         />
                       </div>
                     </div>
-
-                    {/* <div className="w-full sm:w-1/2">
-                      <label className="mb-3 block font-medium text-dark dark:text-white">
-                        Username
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2">
-                          <FaUser className="text-gray-500" />
-                        </span>
-                        <input
-                          name="username"
-                          className="w-full rounded-lg border border-stroke bg-white py-3 pl-12 pr-4 text-dark focus:border-primary focus-visible:outline-none"
-                          type="text"
-                          placeholder="Enter your Username"
-                          defaultValue={profile.username}
-                        />
-                      </div>
-                    </div> */}
                   </div>
                   <div className="mb-5.5 flex flex-col gap-5.5 sm:flex-row">
                     <div className="w-full sm:w-1/2">

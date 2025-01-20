@@ -118,7 +118,8 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
   monthlyBills,
 }) => {
   const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
-  const [selectedMonthlyBill, setSelectedMonthlyBill] = useState<MonthlyBill | null>(null);
+  const [selectedMonthlyBill, setSelectedMonthlyBill] =
+    useState<MonthlyBill | null>(null);
   const [existingPayments, setExistingPayments] = useState<number>(0);
 
   useEffect(() => {
@@ -131,7 +132,10 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
         .not("status", "eq", "Unmatched");
 
       if (!error && data) {
-        const totalPaid = data.reduce((sum, record) => sum + (record.paid_amount || 0), 0);
+        const totalPaid = data.reduce(
+          (sum, record) => sum + (record.paid_amount || 0),
+          0,
+        );
         setExistingPayments(totalPaid);
       }
     };
@@ -146,15 +150,21 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
     setSelectedMonthlyBill(monthlyBill);
   };
 
-  const calculatePendingAmount = (bill: MonthlyBill, existingPayments: number) => {
+  const calculatePendingAmount = (
+    bill: MonthlyBill,
+    existingPayments: number,
+  ) => {
     return bill.total_revenue + bill.arrears - existingPayments;
   };
 
   const handleReconcile = async () => {
     if (selectedBillId && selectedMonthlyBill) {
-      const currentPendingAmount = calculatePendingAmount(selectedMonthlyBill, existingPayments);
+      const currentPendingAmount = calculatePendingAmount(
+        selectedMonthlyBill,
+        existingPayments,
+      );
       const newPendingAmount = Math.max(0, currentPendingAmount - bill.amount);
-      
+
       await onReconcile(bill.id, bill.amount, selectedBillId, newPendingAmount);
     }
   };
@@ -175,15 +185,46 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
         <h2 className="mb-4 text-lg font-semibold">Reconcile Transaction</h2>
 
         <div className="mb-4">
-          <p><strong>Transaction Amount:</strong> ${bill.amount.toFixed(2)}</p>
+          <p>
+            <strong>Transaction Amount:</strong> ${bill.amount.toFixed(2)}
+          </p>
           {selectedMonthlyBill && (
             <>
-              <p><strong>Bill Total:</strong> ${selectedMonthlyBill.total_revenue.toFixed(2)}</p>
-              <p><strong>Previous Arrears:</strong> ${selectedMonthlyBill.arrears?.toFixed(2) || '0.00'}</p>
-              <p><strong>Total Amount Due:</strong> ${(selectedMonthlyBill.total_revenue + selectedMonthlyBill.arrears).toFixed(2)}</p>
-              <p><strong>Already Paid:</strong> ${existingPayments.toFixed(2)}</p>
-              <p><strong>Current Pending:</strong> ${calculatePendingAmount(selectedMonthlyBill, existingPayments).toFixed(2)}</p>
-              <p><strong>New Pending After This Payment:</strong> ${Math.max(0, calculatePendingAmount(selectedMonthlyBill, existingPayments + bill.amount)).toFixed(2)}</p>
+              <p>
+                <strong>Bill Total:</strong> $
+                {selectedMonthlyBill.total_revenue.toFixed(2)}
+              </p>
+              <p>
+                <strong>Previous Arrears:</strong> $
+                {selectedMonthlyBill.arrears?.toFixed(2) || "0.00"}
+              </p>
+              <p>
+                <strong>Total Amount Due:</strong> $
+                {(
+                  selectedMonthlyBill.total_revenue +
+                  selectedMonthlyBill.arrears
+                ).toFixed(2)}
+              </p>
+              <p>
+                <strong>Already Paid:</strong> ${existingPayments.toFixed(2)}
+              </p>
+              <p>
+                <strong>Current Pending:</strong> $
+                {calculatePendingAmount(
+                  selectedMonthlyBill,
+                  existingPayments,
+                ).toFixed(2)}
+              </p>
+              <p>
+                <strong>New Pending After This Payment:</strong> $
+                {Math.max(
+                  0,
+                  calculatePendingAmount(
+                    selectedMonthlyBill,
+                    existingPayments + bill.amount,
+                  ),
+                ).toFixed(2)}
+              </p>
             </>
           )}
         </div>
@@ -203,9 +244,15 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
               </thead>
               <tbody>
                 {monthlyBills
-                  .filter((monthlyBill) => monthlyBill.status === "Pending")
+                  .filter((monthlyBill) => monthlyBill.status !== "Matched") // Exclude only fully matched bills
                   .map((monthlyBill) => {
-                    const totalDue = monthlyBill.total_revenue + monthlyBill.arrears;
+                    const totalDue =
+                      monthlyBill.total_revenue + monthlyBill.arrears;
+                    const pendingAmount = calculatePendingAmount(
+                      monthlyBill,
+                      existingPayments,
+                    );
+
                     return (
                       <tr key={monthlyBill.id} className="hover:bg-gray-50">
                         <td className="px-4 py-2">
@@ -218,12 +265,17 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
                         </td>
                         <td className="px-4 py-2">{monthlyBill.site_name}</td>
                         <td className="px-4 py-2">
-                          {new Date(monthlyBill.billing_period_start).toLocaleDateString()} - 
-                          {new Date(monthlyBill.billing_period_end).toLocaleDateString()}
+                          {new Date(
+                            monthlyBill.billing_period_start,
+                          ).toLocaleDateString()}{" "}
+                          -
+                          {new Date(
+                            monthlyBill.billing_period_end,
+                          ).toLocaleDateString()}
                         </td>
                         <td className="px-4 py-2">${totalDue.toFixed(2)}</td>
                         <td className="px-4 py-2">
-                          ${calculatePendingAmount(monthlyBill, existingPayments).toFixed(2)}
+                          ${pendingAmount.toFixed(2)}
                         </td>
                       </tr>
                     );
@@ -489,18 +541,22 @@ const Reconciliation = () => {
     transactionId: string,
     paidAmount: number,
     billId: string,
-    newPendingAmount: number,
+    arrearsAmount: number,
   ) => {
     try {
-      // Start a Supabase transaction
+      // Get current bill data
       const { data: billData, error: billFetchError } = await supabase
         .from("monthly_bills")
-        .select("reconciliation_ids, total_revenue, arrears")
+        .select("reconciliation_ids, total_bill, pending_bill")
         .eq("id", billId)
         .single();
-  
+
       if (billFetchError) throw billFetchError;
-  
+
+      // Calculate new pending amount
+      const currentPendingBill = billData.pending_bill;
+      const newPendingAmount = Math.max(0, currentPendingBill - paidAmount);
+
       // Update reconciliation record
       const { error: reconcileError } = await supabase
         .from("reconciliation")
@@ -511,31 +567,35 @@ const Reconciliation = () => {
           bill_id: billId,
         })
         .eq("id", transactionId);
-  
+
       if (reconcileError) throw reconcileError;
-  
-      // Prepare the new reconciliation_ids array
-      const existingIds = billData?.reconciliation_ids || [];
+
+      // Update reconciliation IDs array
+      const existingIds = billData.reconciliation_ids || [];
       const updatedIds = Array.isArray(existingIds)
         ? [...existingIds, transactionId]
         : [transactionId];
-  
-      // Update monthly bill with new arrears
+
+      // Update monthly bill
       const { error: billError } = await supabase
         .from("monthly_bills")
         .update({
-          arrears: newPendingAmount,
+          pending_bill: newPendingAmount,
+          arrears: newPendingAmount, // Update arrears with remaining pending amount
           reconciliation_ids: updatedIds,
           status: newPendingAmount > 0 ? "Partially Paid" : "Paid",
         })
         .eq("id", billId);
-  
+
       if (billError) throw billError;
-  
+
+      // Success handling
       await fetchData();
       setShowReconcileModal(false);
       setSelectedBill(null);
-      router.push(`/dashboard/billing/reconciliation?highlightId=${transactionId}`);
+      router.push(
+        `/dashboard/billing/reconciliation?highlightId=${transactionId}`,
+      );
     } catch (error) {
       console.error("Error during reconciliation:", error);
       alert("Error updating reconciliation. Please try again.");

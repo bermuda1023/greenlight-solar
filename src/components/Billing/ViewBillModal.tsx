@@ -15,7 +15,6 @@ interface Bill {
   total_cost: number;
   energy_rate: number;
   total_revenue: number;
-  savings: number;
   status: string;
   created_at: string;
   arrears: number;
@@ -49,7 +48,8 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
   };
 
   // Calculate totals
-  const totalPeriodBalance = bill.total_cost - bill.total_revenue;
+  // const totalPeriodBalance = bill.total_cost - bill.total_revenue;
+  const totalPeriodBalance = bill.total_revenue;
   const overdueBalance = bill.arrears || 0;
   const balanceDue = totalPeriodBalance + overdueBalance;
 
@@ -147,7 +147,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                   ${bill.energy_rate.toFixed(4)}
                 </td>
                 <td className="p-3 text-xs text-gray-600">
-                  ${bill.total_cost.toFixed(2)}
+                  ${bill.total_revenue.toFixed(2)}
                 </td>
               </tr>
             </tbody>

@@ -1,6 +1,7 @@
 import React from 'react';
 
 interface Transaction {
+  [x: string]: any;
   id: string;
   date: string;
   description: string;
@@ -78,7 +79,7 @@ const TransactionsModal = ({ isOpen, onClose, transactions }: TransactionsModalP
                           {transaction.description}
                         </td>
                         <td className="px-6.5 py-4 text-sm dark:text-white">
-                          ${transaction.amount.toFixed(2)}
+                        ${transaction.total_bill.toFixed(2)}
                         </td>
                         <td className="px-6.5 py-4 text-sm dark:text-white">
                           ${transaction.paid_amount.toFixed(2)}
