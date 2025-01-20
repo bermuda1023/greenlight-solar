@@ -1,7 +1,14 @@
 "use client";
 import { supabase } from "@/utils/supabase/browserClient";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FaDollarSign } from "react-icons/fa";
+
+interface Parameters {
+  id: string;
+  fuelRate: number;
+  feedInPrice: number;
+  basePrice: number;
+}
 
 const BillParams = () => {
   const [showBillForm, setShowBillForm] = useState(false);
@@ -10,11 +17,43 @@ const BillParams = () => {
     feedInPrice: "",
     basePrice: "",
   });
+
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [parameters, setParameters] = useState<Parameters[]>([]);
 
   const toggleBillForm = () => setShowBillForm(!showBillForm);
+
+  const fetchParameters = useCallback(async () => {
+    try {
+      setLoading(true);
+
+      const query = supabase.from("parameters").select("*", { count: "exact" });
+
+      const { data, error: fetchError } = await query;
+      console.log(data);
+
+      if (fetchError) throw fetchError;
+
+      setParameters(data || []);
+      setError(null);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "An error occurred while fetching customers"
+      );
+      setParameters([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []); 
+
+  useEffect(() => {
+    fetchParameters();
+  }, [fetchParameters]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -32,26 +71,61 @@ const BillParams = () => {
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase.from("parameters").insert([
-        {
-          fuelRate: formData.fuelRate,
-          feedInPrice: formData.feedInPrice,
-          basePrice: formData.basePrice,
-        },
-      ]);
+      // Check if a record already exists
+      const { data: existingRecord, error: fetchError } = await supabase
+        .from("parameters")
+        .select("*")
+        .single();
 
-      if (error) throw error;
+      if (fetchError && fetchError.code !== "PGRST116") {
+        // Handle fetch error, excluding "No rows found" error (PGRST116)
+        throw new Error("Failed to check existing record. Please try again.");
+      }
 
-      setSuccess("Parameters added successfully!");
+      if (existingRecord) {
+        // Update the existing record
+        const { error: updateError } = await supabase
+          .from("parameters")
+          .update({
+            fuelRate: formData.fuelRate,
+            feedInPrice: formData.feedInPrice,
+            basePrice: formData.basePrice,
+          })
+          .eq("id", existingRecord.id); 
+
+        if (updateError) throw updateError;
+
+        setSuccess("Parameters updated successfully!");
+      } else {
+        // Insert a new record
+        const { error: insertError } = await supabase.from("parameters").insert([
+          {
+            fuelRate: formData.fuelRate,
+            feedInPrice: formData.feedInPrice,
+            basePrice: formData.basePrice,
+          },
+        ]);
+
+        if (insertError) throw insertError;
+
+        setSuccess("Parameters added successfully!");
+      }
+
+      // Reset the form
       setFormData({
         fuelRate: "",
         feedInPrice: "",
         basePrice: "",
       });
       setShowBillForm(false); // Close the form upon success
-    } catch (err) {
-      console.error("Supabase Error:", err);
-      setError("Failed to add parameters. Please try again.");
+
+      // Refresh the parameters list
+      fetchParameters();
+    } catch (error) {
+      console.error("Error:", error);
+      setError(
+        (error as Error).message || "An unexpected error occurred. Please try again."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -84,52 +158,54 @@ const BillParams = () => {
               <div className="border-b border-stroke px-7 py-4">
                 <h3 className="font-medium text-dark">Bill Information</h3>
               </div>
-              <div className="p-7">
-                <div className="mb-5.5 flex flex-col gap-5.5 sm:flex-row">
-                  <div className="w-full sm:w-1/2">
-                    <label className="mb-3 block font-medium text-dark">
-                      Fuel Rate
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2">
-                        <FaDollarSign className="text-gray-500" />
-                      </span>
-                      <p className="w-full rounded-lg bg-primary/[.07] py-3 pl-12 pr-4 text-dark">
-                        0.14304
-                      </p>
+              {parameters.map((parameter) => (
+                <div className="p-7" key={parameter.id}>
+                  <div className="mb-5.5 flex flex-col gap-5.5 sm:flex-row">
+                    <div className="w-full sm:w-1/2">
+                      <label className="mb-3 block font-medium text-dark">
+                        Fuel Rate
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2">
+                          <FaDollarSign className="text-gray-500" />
+                        </span>
+                        <p className="w-full rounded-lg bg-primary/[.07] py-3 pl-12 pr-4 text-dark">
+                          {parameter.fuelRate || "Enter fuel Price"}
+                        </p>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="w-full sm:w-1/2">
-                    <label className="mb-3 block font-medium text-dark">
-                      Feed In Price
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2">
-                        <FaDollarSign className="text-gray-500" />
-                      </span>
-                      <p className="w-full rounded-lg bg-primary/[.07] py-3 pl-12 pr-4 text-dark">
-                        0.5
-                      </p>
+                    <div className="w-full sm:w-1/2">
+                      <label className="mb-3 block font-medium text-dark">
+                        Feed In Price
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2">
+                          <FaDollarSign className="text-gray-500" />
+                        </span>
+                        <p className="w-full rounded-lg bg-primary/[.07] py-3 pl-12 pr-4 text-dark">
+                          {parameter.feedInPrice || "Set feed in Price"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mb-5.5 flex flex-col gap-5.5 sm:flex-row">
+                    <div className="w-full sm:w-1/2">
+                      <label className="mb-3 block font-medium text-dark">
+                        Base Price
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2">
+                          <FaDollarSign className="text-gray-500" />
+                        </span>
+                        <p className="w-full rounded-lg bg-primary/[.07] py-3 pl-12 pr-4 text-dark">
+                          {parameter.basePrice || "Set Base Price"}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div className="mb-5.5 flex flex-col gap-5.5 sm:flex-row">
-                  <div className="w-full sm:w-1/2">
-                    <label className="mb-3 block font-medium text-dark">
-                      Base Price
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2">
-                        <FaDollarSign className="text-gray-500" />
-                      </span>
-                      <p className="w-full rounded-lg bg-primary/[.07] py-3 pl-12 pr-4 text-dark">
-                        0.15
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         )}
@@ -210,7 +286,7 @@ const BillParams = () => {
                     </button>
                     <button
                       type="submit"
-                    //   disabled={isSubmitting}
+                      // disabled={isSubmitting}
                       className="rounded-lg bg-primary px-6 py-2 text-white hover:bg-opacity-90"
                     >
                       {isSubmitting ? "Saving..." : "Save"}
