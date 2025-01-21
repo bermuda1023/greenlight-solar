@@ -335,9 +335,9 @@ const Reconciliation = () => {
       const element = document.getElementById(`transaction-${highlightId}`);
       if (element) {
         element.scrollIntoView({ behavior: "smooth", block: "center" });
-        element.classList.add("bg-yellow-100"); // Add a highlight class
+        element.classList.add("bg-primary/0.1"); // Add a highlight class
         setTimeout(() => {
-          element.classList.remove("bg-yellow-100");
+          element.classList.remove("bg-primary/0.1");
         }, 3000); // Remove highlight after 3 seconds
       }
     }
@@ -1068,18 +1068,19 @@ const Reconciliation = () => {
                         row.status === "Matched"
                           ? "bg-green-100 text-green-800"
                           : row.status === "Partially Matched"
-                            ? "bg-yellow-100 text-yellow-800"
+                            ? "bg-primary/0.1 text-yellow-800"
                             : "bg-red-100 text-red-800"
                       }`}
                     >
                       {row.status}
                     </span>
                   </td>
-                  <td className="space-x-2 whitespace-nowrap px-6 py-4">
+                  <td className="whitespace-nowrap px-4 py-2 text-right">
                     {row.status === "Unmatched" ? (
-                      <>
+                      <div className="flex justify-end space-x-2">
+                        {/* Match Button */}
                         <button
-                          className="text-blue-600 hover:text-blue-900"
+                          className="inline-flex items-center justify-center rounded-lg bg-primary hover:bg-green-400 px-4 py-2 text-base font-medium text-white"
                           onClick={() => {
                             setSelectedBill(row);
                             setShowReconcileModal(true);
@@ -1087,17 +1088,20 @@ const Reconciliation = () => {
                         >
                           Match
                         </button>
+
+                        {/* Delete Button */}
                         <button
-                          className="text-red-600 hover:text-red-900"
+                          className="inline-flex items-center justify-center rounded-lg bg-red-500 hover:bg-red-400 px-4 py-2 text-base font-medium text-white"
                           onClick={() => handleDelete(row.id)}
                         >
                           Delete
                         </button>
-                      </>
+                      </div>
                     ) : (
-                      <>
+                      <div className="flex justify-end space-x-3">
+                        {/* View Bill Button */}
                         <button
-                          className="text-blue-600 hover:text-blue-900"
+                          className="inline-flex items-center justify-center rounded-lg bg-dark-2 hover:bg-dark-3 px-4 py-2 text-base font-medium text-white"
                           onClick={() =>
                             router.push(
                               `/dashboard/billing/monthly?highlightId=${row.bill_id}`,
@@ -1106,13 +1110,15 @@ const Reconciliation = () => {
                         >
                           View Bill
                         </button>
+
+                        {/* Undo Button */}
                         <button
-                          className="text-yellow-600 hover:text-yellow-900"
+                          className="inline-flex items-center justify-center rounded-lg bg-yellow-400 hover:bg-yellow-300 px-4 py-2 text-base font-medium text-white"
                           onClick={() => handleUndo(row)}
                         >
                           Undo
                         </button>
-                      </>
+                      </div>
                     )}
                   </td>
                 </tr>
