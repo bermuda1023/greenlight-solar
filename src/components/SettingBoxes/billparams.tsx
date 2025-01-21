@@ -55,6 +55,8 @@ const BillParams = () => {
     fetchParameters();
   }, [fetchParameters]);
 
+
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
