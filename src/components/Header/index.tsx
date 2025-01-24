@@ -75,7 +75,6 @@ const Header = (props: {
 
           {/* Right Section: Notification and User */}
           <ul className="flex items-center gap-4">
-            <DropdownNotification />
             <DropdownUser />
           </ul>
         </div>

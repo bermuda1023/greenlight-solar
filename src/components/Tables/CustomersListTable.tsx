@@ -1,11 +1,10 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import React, { useState, useEffect, useCallback } from "react";
-import { FaPlus, FaArrowLeft, FaArrowRight } from "react-icons/fa";
+import { FaArrowLeft, FaArrowRight, FaRegTrashAlt } from "react-icons/fa";
+import { HiOutlineTrash, HiOutlineUser } from "react-icons/hi2";
 import { AiOutlineSearch } from "react-icons/ai";
 import { TbReceipt } from "react-icons/tb";
-import { Dialog, DialogContent } from "@/components/ui/Dialog";
 import flatpickr from "flatpickr";
 import { supabase } from "@/utils/supabase/browserClient";
 import BillModal from "../Billing/BillModal";
@@ -14,29 +13,20 @@ interface Customer {
   id: string;
   site_name: string;
   email: string;
-  site_id: string;
-  price_cap: string;
-  production_kwh: number;
-  self_cons_kwh: number;
-  consump_kwh: number;
-  export_kwh: number;
-  belco_price: string;
-  effective_price: string;
-  bill_period: string;
-  ex_days: number;
-  savings: string;
-  status: string;
+  address: string;
+  solar_api_key: string;
+  installation_date: string;
+  installed_capacity: number;
+  site_ID: number;
   created_at: string;
+  consump_kwh: number; // Total consumption
+  self_cons_kwh: number; // Self-consumption
+  export_kwh: number; // Energy exported
+  production_kwh: number; // Energy produced
 }
 
-const CustomersListTable = () => {
-  const today = new Date();
-  const formattedToday = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(today);
 
+const CustomersListTable = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [startDate, setStartDate] = useState<string | null>(null);
@@ -149,6 +139,7 @@ const CustomersListTable = () => {
       if (fetchError) throw fetchError;
 
       setCustomers(data || []);
+      console.log(data);
       setError(null);
     } catch (err) {
       setError(
@@ -184,7 +175,9 @@ const CustomersListTable = () => {
 
   const validateDates = () => {
     if (!startDate || !endDate) {
-      setDateError("Please select both Start Date and End Date before generating the bill.");
+      setDateError(
+        "Please select both Start Date and End Date before generating the bill.",
+      );
       return false;
     }
 
@@ -227,7 +220,6 @@ const CustomersListTable = () => {
     // If all validations pass, open the modal
     setShowBillModal(true);
   };
-  
 
   return (
     <>
@@ -238,34 +230,34 @@ const CustomersListTable = () => {
           <p className="text-sm text-gray-500">View and manage customers.</p>
         </div>
         <div className="flex items-center gap-4">
-            <div className="flex flex-col">
-              <input
-                id="startDate"
-                className={`form-datepicker w-full rounded-[7px] border-[1.5px] ${
-                  !startDate && dateError ? 'border-red-500' : 'border-stroke'
-                } bg-transparent bg-white px-5 py-3 font-normal outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:focus:border-primary`}
-                placeholder="Start Date *"
-                required
-                value={startDate || 'Start Date'}
-              />
-            </div>
-            <div className="flex flex-col">
-              <input
-                id="endDate"
-                className={`form-datepicker w-full rounded-[7px] border-[1.5px] ${
-                  !endDate && dateError ? 'border-red-500' : 'border-stroke'
-                } bg-transparent bg-white px-5 py-3 font-normal outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:focus:border-primary`}
-                placeholder="End Date *"
-                required
-                value={endDate || 'End Date'}
-              />
-            </div>
-            <button
-              onClick={handleGenerateBill}
-              className="hover:bg-dark-1 flex items-center gap-2 whitespace-nowrap rounded-md bg-dark-2 px-4 py-3 text-white"
-            >
-              <TbReceipt /> Generate Bill
-            </button>
+          <div className="flex flex-col">
+            <input
+              id="startDate"
+              className={`form-datepicker w-full rounded-[7px] border-[1.5px] ${
+                !startDate && dateError ? "border-red-500" : "border-stroke"
+              } bg-transparent bg-white px-5 py-3 font-normal outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:focus:border-primary`}
+              placeholder="Start Date *"
+              required
+              value={startDate || "Start Date"}
+            />
+          </div>
+          <div className="flex flex-col">
+            <input
+              id="endDate"
+              className={`form-datepicker w-full rounded-[7px] border-[1.5px] ${
+                !endDate && dateError ? "border-red-500" : "border-stroke"
+              } bg-transparent bg-white px-5 py-3 font-normal outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:focus:border-primary`}
+              placeholder="End Date *"
+              required
+              value={endDate || "End Date"}
+            />
+          </div>
+          <button
+            onClick={handleGenerateBill}
+            className="hover:bg-dark-1 flex items-center gap-2 whitespace-nowrap rounded-md bg-dark-2 px-4 py-3 text-white"
+          >
+            <TbReceipt /> Generate Bill
+          </button>
         </div>
       </div>
 
@@ -294,16 +286,7 @@ const CustomersListTable = () => {
                   <option value="Paid">Paid</option>
                   <option value="Pending">Pending</option>
                 </select>
-                {/* <select
-                  value={dateRange}
-                  onChange={(e) => setDateRange(e.target.value)}
-                  className="rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:text-white"
-                >
-                  <option value="">Date Range</option>
-                  <option value="this-month">This Month</option>
-                  <option value="last-month">Last Month</option>
-                  <option value="custom">Custom Range</option>
-                </select> */}
+
                 <select
                   value={siteCapacity}
                   onChange={(e) => setSiteCapacity(e.target.value)}
@@ -350,51 +333,27 @@ const CustomersListTable = () => {
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Site Name
                       </th>
-                      {/* Existing columns */}
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Start Date
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        End Date
-                      </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Email
+                      </th>
+                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                        Address
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Site ID
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Price Cap
+                        Solar API Key
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Production KWH
+                        Installation Date
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Self Cons. KWH
+                        Installed Capacity
                       </th>
+
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Consump. KWH
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Export KWH
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Belco Price
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Effective Price
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Bill Period
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Ex. Days
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Savings
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Status
+                        Action
                       </th>
                     </tr>
                   </thead>
@@ -416,57 +375,47 @@ const CustomersListTable = () => {
                           {customer.site_name}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                        {startDate || 'Select Date'}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {endDate || 'Select Date'}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.email}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.site_id}
+                          {customer.address}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.price_cap}
+                          {customer.site_ID}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.production_kwh}
+                          {customer.solar_api_key}
+                        </td>
+                        {/* <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
+                        {new Date(customer.created_at).toLocaleDateString()}
+                        </td> */}
+                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
+                          {customer.installation_date}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.self_cons_kwh}
+                          {customer.installed_capacity}
                         </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.consump_kwh}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.export_kwh}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.belco_price}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.effective_price}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.bill_period}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.ex_days}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.savings}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span
-                            className={`inline-flex rounded-full px-3 py-1 text-sm font-medium ${
-                              customer.status === "Paid"
-                                ? "bg-success/10 text-success"
-                                : "bg-warning/10 text-warning"
-                            }`}
+     
+
+                        {/* Action button */}
+                        <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">
+                          <button
+                            // key={customer.id}
+                            onClick={() => {}}
+                            className="rounded-lg bg-green-50 p-2 text-primary transition hover:bg-primary hover:text-green-50"
                           >
-                            {customer.status}
-                          </span>
+                            <span className="text-xl">
+                              <HiOutlineUser />
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => {}}
+                            className="rounded-lg bg-red-50 p-2 text-red-600 transition hover:bg-red-600 hover:text-red-50"
+                          >
+                            <span className="text-xl">
+                              <HiOutlineTrash />
+                            </span>
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -510,12 +459,12 @@ const CustomersListTable = () => {
       {/* Bill Generation Modal */}
       {showBillModal && (
         <BillModal
-        selectedCustomers={selectedCustomers}
-        customers={customers}
-        startDate={startDate}
-        endDate={endDate}
-        onClose={() => setShowBillModal(false)}
-      />
+          selectedCustomers={selectedCustomers}
+          customers={customers}
+          startDate={startDate}
+          endDate={endDate}
+          onClose={() => setShowBillModal(false)}
+        />
       )}
     </>
   );
