@@ -25,7 +25,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const { data: { session } } = await supabase.auth.getSession();
         setIsAuthenticated(!!session);
 
-        if (pathname.startsWith('/dashboard') && !session) {
+        if (pathname?.startsWith('/dashboard') && !session) {
           router.replace('/');
         }
       } catch (error) {
@@ -39,7 +39,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setIsAuthenticated(!!session);
-      if (!session && pathname.startsWith('/dashboard')) {
+      if (!session && pathname?.startsWith('/dashboard')) {
         router.replace('/');
       }
     });
