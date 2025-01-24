@@ -17,7 +17,7 @@ interface Customer {
   solar_api_key: string;
   installation_date: string;
   installed_capacity: number;
-  electricity_tariff: number;
+  site_ID: number;
   created_at: string;
   consump_kwh: number; // Total consumption
   self_cons_kwh: number; // Self-consumption
@@ -139,6 +139,7 @@ const CustomersListTable = () => {
       if (fetchError) throw fetchError;
 
       setCustomers(data || []);
+      console.log(data);
       setError(null);
     } catch (err) {
       setError(
@@ -339,6 +340,9 @@ const CustomersListTable = () => {
                         Address
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                        Site ID
+                      </th>
+                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Solar API Key
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
@@ -347,9 +351,7 @@ const CustomersListTable = () => {
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Installed Capacity
                       </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Electricity Tariff
-                      </th>
+
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Action
                       </th>
@@ -379,6 +381,9 @@ const CustomersListTable = () => {
                           {customer.address}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
+                          {customer.site_ID}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.solar_api_key}
                         </td>
                         {/* <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
@@ -390,9 +395,7 @@ const CustomersListTable = () => {
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.installed_capacity}
                         </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.electricity_tariff}
-                        </td>
+     
 
                         {/* Action button */}
                         <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">

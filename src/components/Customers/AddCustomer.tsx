@@ -12,8 +12,7 @@ const AddCustomer = () => {
     solar_api_key: "",
     installation_date: "",
     installed_capacity: "",
-    electricity_tariff: "",
-    status: "Pending",
+    site_ID: "",
   });
 
   const [error, setError] = useState<string | null>(null);
@@ -44,8 +43,7 @@ const AddCustomer = () => {
           solar_api_key: formData.solar_api_key,
           installation_date: formData.installation_date,
           installed_capacity: formData.installed_capacity,
-          electricity_tariff: formData.electricity_tariff,
-          status: formData.status,
+          site_ID: formData.site_ID,
         },
       ]);
 
@@ -61,8 +59,7 @@ const AddCustomer = () => {
         solar_api_key: "",
         installation_date: "",
         installed_capacity: "",
-        electricity_tariff: "",
-        status: "Pending",
+        site_ID: "",
       });
     } catch (error) {
       setError("Failed to add customer. Please try again.");
@@ -191,21 +188,21 @@ const AddCustomer = () => {
                 name="installed_capacity"
                 value={formData.installed_capacity}
                 onChange={handleChange}
-                placeholder="5 KWH"
+                placeholder="5"
                 className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
                 disabled={isSubmitting}
               />
             </div>
             <div className="w-full xl:w-1/2">
               <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
-                Electricity Tariff
+                Site ID
               </label>
               <input
                 type="text"
-                name="electricity_tariff"
-                value={formData.electricity_tariff}
+                name="site_ID"
+                value={formData.site_ID}
                 onChange={handleChange}
-                placeholder="$0.0163"
+                placeholder="Enter Site ID"
                 className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
                 disabled={isSubmitting}
               />

@@ -17,6 +17,7 @@ interface Bill {
   total_cost: number;
   energy_rate: number;
   total_revenue: number;
+  total_PTS: number;
   status: string;
   created_at: string;
   arrears: number;
@@ -35,7 +36,7 @@ const BillingScreen = () => {
   const [openbillModal, setOpenBillModal] = useState(false);
 
   const searchParams = useSearchParams();
-  const highlightId = searchParams.get("highlightId");
+  const highlightId = searchParams?.get("highlightId");
 
   const router = useRouter();
 
@@ -228,14 +229,9 @@ const BillingScreen = () => {
                           Billing Period
                         </th>
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Energy Produced (kWh)
+                          Total Energy Consumption
                         </th>
-                        <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Self Consumption (kWh)
-                        </th>
-                        <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Energy Exported (kWh)
-                        </th>
+
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Total Cost ($)
                         </th>
@@ -276,22 +272,17 @@ const BillingScreen = () => {
                             )}
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
-                            {bill.production_kwh}
+                            {bill.total_PTS}
                           </td>
-                          <td className="px-6.5 py-4 text-sm dark:text-white">
-                            {bill.self_consumption_kwh}
-                          </td>
-                          <td className="px-6.5 py-4 text-sm dark:text-white">
-                            {bill.export_kwh}
-                          </td>
+
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             ${bill.total_cost.toFixed(2)}
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
-                            ${bill.energy_rate.toFixed(2)}
+                            ${bill.energy_rate}
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
-                            ${bill.total_revenue.toFixed(2)}
+                            ${bill.total_revenue}
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             <span

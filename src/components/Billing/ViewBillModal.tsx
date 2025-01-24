@@ -13,6 +13,7 @@ interface Bill {
   self_consumption_kwh: number;
   export_kwh: number;
   total_cost: number;
+  total_PTS:number;
   energy_rate: number;
   total_revenue: number;
   status: string;
@@ -140,7 +141,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                 </td>
                 <td className="p-3 text-xs text-gray-600">Energy Produced</td>
                 <td className="p-3 text-xs text-gray-600">
-                  {bill.production_kwh}
+                  {bill.total_PTS}
                 </td>
                 <td className="p-3 text-xs text-gray-600">
                   ${bill.energy_rate.toFixed(4)}

@@ -1,13 +1,13 @@
 import { NextApiRequest, NextApiResponse } from "next";
 
 export default async function handler(req, res) {
-  const { startTime, endTime } = req.query;
+  const { startTime, endTime,siteid,api_key } = req.query;
 
-  const url = `https://monitoringapi.solaredge.com/site/1443762/energyDetails?meters=PRODUCTION,FeedIn,SelfConsumption,Consumption&timeUnit=DAY&startTime=${encodeURIComponent(
+  const url = `https://monitoringapi.solaredge.com/site/${siteid}/energyDetails?meters=PRODUCTION,FeedIn,SelfConsumption,Consumption&timeUnit=DAY&startTime=${encodeURIComponent(
     startTime
   )}&endTime=${encodeURIComponent(
     endTime
-  )}&api_key=58XJQCW9CJ28N9CZQ99XSAN1YC4ND6F3`;
+  )}&api_key=${api_key}`;
 
   try {
     const response = await fetch(url, {
