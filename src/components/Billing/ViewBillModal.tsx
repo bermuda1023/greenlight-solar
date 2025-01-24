@@ -51,7 +51,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
   // Calculate totals
   const totalPeriodBalance = bill.total_cost - bill.total_revenue;
   const overdueBalance = bill.arrears || 0;
-  const balanceDue = totalPeriodBalance + overdueBalance;
+  const balanceDue = bill.total_revenue + overdueBalance;
 
   return (
     <div
@@ -157,7 +157,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
             <p className="text-sm font-semibold text-gray-800">
               TOTAL PERIOD BALANCE{" "}
               <span className="ml-20 text-black">
-                ${totalPeriodBalance.toFixed(2)}
+                ${bill.total_revenue.toFixed(2)}
               </span>
             </p>
             <p className="text-sm font-bold text-black">

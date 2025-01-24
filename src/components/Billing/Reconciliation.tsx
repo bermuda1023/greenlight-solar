@@ -99,6 +99,18 @@ const DATE_FORMAT_OPTIONS: DateFormatOption[] = [
   { label: "YYYY-MM-DD", value: "yyyy-MM-dd", example: "2023-12-31" },
 ];
 
+interface ReconcileModalProps {
+  bill: BillData;
+  onClose: () => void;
+  onReconcile: (
+    transactionId: string,
+    paidAmount: number,
+    billId: string,
+    newPendingAmount: number,
+  ) => Promise<void>;
+  monthlyBills: MonthlyBill[];
+}
+
 const ReconcileModal: React.FC<ReconcileModalProps> = ({
   bill,
   onClose,
@@ -108,32 +120,63 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
   const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
   const [selectedMonthlyBill, setSelectedMonthlyBill] =
     useState<MonthlyBill | null>(null);
+  const [existingPayments, setExistingPayments] = useState<number>(0);
+
+  useEffect(() => {
+    // Fetch existing payments for the selected bill
+    const fetchExistingPayments = async (billId: string) => {
+      const { data, error } = await supabase
+        .from("reconciliation")
+        .select("paid_amount")
+        .eq("bill_id", billId)
+        .not("status", "eq", "Unmatched");
+
+      if (!error && data) {
+        const totalPaid = data.reduce(
+          (sum, record) => sum + (record.paid_amount || 0),
+          0,
+        );
+        setExistingPayments(totalPaid);
+      }
+    };
+
+    if (selectedBillId) {
+      fetchExistingPayments(selectedBillId);
+    }
+  }, [selectedBillId]);
 
   const handleBillSelection = (monthlyBill: MonthlyBill) => {
     setSelectedBillId(monthlyBill.id);
     setSelectedMonthlyBill(monthlyBill);
   };
 
+  const calculatePendingAmount = (
+    bill: MonthlyBill,
+    existingPayments: number,
+  ) => {
+    return bill.total_revenue + bill.arrears - existingPayments;
+  };
+
   const handleReconcile = async () => {
     if (selectedBillId && selectedMonthlyBill) {
-      const arrearsAmount = Math.abs(
-        bill.amount - selectedMonthlyBill.total_revenue,
+      const currentPendingAmount = calculatePendingAmount(
+        selectedMonthlyBill,
+        existingPayments,
       );
-      await onReconcile(
-        bill.id,
-        selectedMonthlyBill.total_revenue,
-        selectedBillId,
-        arrearsAmount,
-      );
+      const newPendingAmount = Math.max(0, currentPendingAmount - bill.amount);
+
+      await onReconcile(bill.id, bill.amount, selectedBillId, newPendingAmount);
     }
   };
 
-  const getMatchStatus = (difference: number) => {
-    if (difference === 0)
-      return { status: "Matched", className: "text-green-600" };
-    if (difference <= 1)
+  const getMatchStatus = (billAmount: number, pendingAmount: number) => {
+    if (billAmount <= pendingAmount) {
+      if (billAmount === pendingAmount) {
+        return { status: "Matched", className: "text-green-600" };
+      }
       return { status: "Partially Matched", className: "text-yellow-600" };
-    return { status: "Unmatched", className: "text-red-600" };
+    }
+    return { status: "Overpaid", className: "text-red-600" };
   };
 
   return (
@@ -148,28 +191,39 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
           {selectedMonthlyBill && (
             <>
               <p>
-                <strong>Selected Bill Amount:</strong> $
+                <strong>Bill Total:</strong> $
                 {selectedMonthlyBill.total_revenue.toFixed(2)}
               </p>
               <p>
-                <strong>Difference:</strong> $
-                {Math.abs(
-                  bill.amount - selectedMonthlyBill.total_revenue,
+                <strong>Previous Arrears:</strong> $
+                {selectedMonthlyBill.arrears?.toFixed(2) || "0.00"}
+              </p>
+              <p>
+                <strong>Total Amount Due:</strong> $
+                {(
+                  selectedMonthlyBill.total_revenue +
+                  selectedMonthlyBill.arrears
                 ).toFixed(2)}
               </p>
-              <p
-                className={
-                  getMatchStatus(
-                    Math.abs(bill.amount - selectedMonthlyBill.total_revenue),
-                  ).className
-                }
-              >
-                <strong>Match Status:</strong>{" "}
-                {
-                  getMatchStatus(
-                    Math.abs(bill.amount - selectedMonthlyBill.total_revenue),
-                  ).status
-                }
+              <p>
+                <strong>Already Paid:</strong> ${existingPayments.toFixed(2)}
+              </p>
+              <p>
+                <strong>Current Pending:</strong> $
+                {calculatePendingAmount(
+                  selectedMonthlyBill,
+                  existingPayments,
+                ).toFixed(2)}
+              </p>
+              <p>
+                <strong>New Pending After This Payment:</strong> $
+                {Math.max(
+                  0,
+                  calculatePendingAmount(
+                    selectedMonthlyBill,
+                    existingPayments + bill.amount,
+                  ),
+                ).toFixed(2)}
               </p>
             </>
           )}
@@ -184,23 +238,23 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
                   <th className="px-4 py-2 text-left">Select</th>
                   <th className="px-4 py-2 text-left">Site Name</th>
                   <th className="px-4 py-2 text-left">Period</th>
-                  <th className="px-4 py-2 text-left">Amount</th>
-                  <th className="px-4 py-2 text-left">Match Status</th>
+                  <th className="px-4 py-2 text-left">Total Due</th>
+                  <th className="px-4 py-2 text-left">Pending</th>
                 </tr>
               </thead>
               <tbody>
                 {monthlyBills
-                  .filter((monthlyBill) => monthlyBill.status === "Pending")
+                  .filter((monthlyBill) => monthlyBill.status !== "Matched") // Exclude only fully matched bills
                   .map((monthlyBill) => {
-                    const difference = Math.abs(
-                      monthlyBill.total_revenue - bill.amount,
+                    const totalDue =
+                      monthlyBill.total_revenue + monthlyBill.arrears;
+                    const pendingAmount = calculatePendingAmount(
+                      monthlyBill,
+                      existingPayments,
                     );
-                    const matchStatus = getMatchStatus(difference);
+
                     return (
-                      <tr
-                        key={monthlyBill.id}
-                        className={`hover:bg-gray-50 ${difference === 0 ? "bg-green-50" : ""}`}
-                      >
+                      <tr key={monthlyBill.id} className="hover:bg-gray-50">
                         <td className="px-4 py-2">
                           <input
                             type="radio"
@@ -219,13 +273,9 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
                             monthlyBill.billing_period_end,
                           ).toLocaleDateString()}
                         </td>
+                        <td className="px-4 py-2">${totalDue.toFixed(2)}</td>
                         <td className="px-4 py-2">
-                          ${monthlyBill.total_revenue.toFixed(2)}
-                        </td>
-                        <td className="px-4 py-2">
-                          <span className={matchStatus.className}>
-                            {matchStatus.status}
-                          </span>
+                          ${pendingAmount.toFixed(2)}
                         </td>
                       </tr>
                     );
@@ -244,10 +294,10 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
           </button>
           <button
             onClick={handleReconcile}
-            className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+            className="rounded bg-primary px-4 py-2 text-white hover:bg-green-400"
             disabled={!selectedBillId}
           >
-            Reconcile
+            Match
           </button>
         </div>
       </div>
@@ -278,16 +328,16 @@ const Reconciliation = () => {
   const router = useRouter();
 
   const searchParams = useSearchParams();
-  const highlightId = searchParams.get("highlightId");
+  const highlightId = searchParams?.get("highlightId");
 
   useEffect(() => {
     if (highlightId) {
       const element = document.getElementById(`transaction-${highlightId}`);
       if (element) {
         element.scrollIntoView({ behavior: "smooth", block: "center" });
-        element.classList.add("bg-yellow-100"); // Add a highlight class
+        element.classList.add("bg-primary/0.1"); // Add a highlight class
         setTimeout(() => {
-          element.classList.remove("bg-yellow-100");
+          element.classList.remove("bg-primary/0.1");
         }, 3000); // Remove highlight after 3 seconds
       }
     }
@@ -494,49 +544,58 @@ const Reconciliation = () => {
     arrearsAmount: number,
   ) => {
     try {
-      // Get existing reconciliation IDs for the bill
+      // Get current bill data
       const { data: billData, error: billFetchError } = await supabase
         .from("monthly_bills")
-        .select("reconciliation_ids")
+        .select("reconciliation_ids, total_bill, pending_bill")
         .eq("id", billId)
         .single();
-  
+
       if (billFetchError) throw billFetchError;
-  
+
+      // Calculate new pending amount
+      const currentPendingBill = billData.pending_bill;
+      const newPendingAmount = Math.max(0, currentPendingBill - paidAmount);
+
       // Update reconciliation record
       const { error: reconcileError } = await supabase
         .from("reconciliation")
         .update({
-          status: arrearsAmount > 0 ? "Partially Matched" : "Matched",
+          status: newPendingAmount > 0 ? "Partially Matched" : "Matched",
           paid_amount: paidAmount,
-          pending_amount: arrearsAmount,
+          pending_amount: newPendingAmount,
           bill_id: billId,
         })
         .eq("id", transactionId);
-  
+
       if (reconcileError) throw reconcileError;
-  
-      // Prepare the new reconciliation_ids array
-      const existingIds = billData?.reconciliation_ids || [];
-      const updatedIds = Array.isArray(existingIds) 
+
+      // Update reconciliation IDs array
+      const existingIds = billData.reconciliation_ids || [];
+      const updatedIds = Array.isArray(existingIds)
         ? [...existingIds, transactionId]
         : [transactionId];
-  
+
       // Update monthly bill
       const { error: billError } = await supabase
         .from("monthly_bills")
         .update({
-          status: "Matched",
-          arrears: arrearsAmount,
+          pending_bill: newPendingAmount,
+          arrears: newPendingAmount, // Update arrears with remaining pending amount
           reconciliation_ids: updatedIds,
+          status: newPendingAmount > 0 ? "Partially Paid" : "Paid",
         })
         .eq("id", billId);
-  
+
       if (billError) throw billError;
-  
+
+      // Success handling
       await fetchData();
       setShowReconcileModal(false);
       setSelectedBill(null);
+      router.push(
+        `/dashboard/billing/reconciliation?highlightId=${transactionId}`,
+      );
     } catch (error) {
       console.error("Error during reconciliation:", error);
       alert("Error updating reconciliation. Please try again.");
@@ -558,17 +617,58 @@ const Reconciliation = () => {
 
       if (reconcileError) throw reconcileError;
 
-      // Reset bill record
+      // Update bill record if transaction.bill_id exists
       if (transaction.bill_id) {
-        const { error: billError } = await supabase
+        // First get the current bill data
+        const { data: billData, error: billFetchError } = await supabase
+          .from("monthly_bills")
+          .select("*")
+          .eq("id", transaction.bill_id)
+          .single();
+
+        if (billFetchError) throw billFetchError;
+
+        // Remove the current transaction from reconciliation_ids
+        const updatedReconciliationIds = (
+          billData.reconciliation_ids || []
+        ).filter((id: string) => id !== transaction.id);
+
+        // Calculate new status and arrears
+        let newStatus = "Pending";
+        let newArrears = billData.total_revenue;
+
+        if (updatedReconciliationIds.length > 0) {
+          // If there are still other reconciled transactions, keep as Partially Matched
+          newStatus = "Partially Matched";
+
+          // Get all remaining reconciled transactions
+          const { data: remainingTransactions, error: transactionsError } =
+            await supabase
+              .from("reconciliation")
+              .select("paid_amount")
+              .in("id", updatedReconciliationIds);
+
+          if (transactionsError) throw transactionsError;
+
+          // Calculate new arrears based on remaining reconciled amounts
+          const totalPaidAmount = remainingTransactions.reduce(
+            (sum: number, t: { paid_amount: number }) => sum + t.paid_amount,
+            0,
+          );
+          newArrears = billData.total_revenue - totalPaidAmount;
+        }
+
+        // Update the bill
+        const { error: billUpdateError } = await supabase
           .from("monthly_bills")
           .update({
-            status: "Pending",
-            arrears: 0,
+            status: newStatus,
+            arrears: newArrears,
+            reconciliation_ids: updatedReconciliationIds,
           })
           .eq("id", transaction.bill_id);
 
-        if (billError) throw billError;
+        if (billUpdateError) throw billUpdateError;
       }
 
       await fetchData();
@@ -947,7 +1047,7 @@ const Reconciliation = () => {
                   id={`transaction-${row.id}`} // Add this ID for scrolling
                   className={`${
                     row.id === highlightId
-                      ? "bg-yellow-100 transition-colors duration-1000"
+                      ? "bg-primary/[.1] transition-colors duration-1000"
                       : ""
                   }`}
                 >
@@ -968,18 +1068,19 @@ const Reconciliation = () => {
                         row.status === "Matched"
                           ? "bg-green-100 text-green-800"
                           : row.status === "Partially Matched"
-                            ? "bg-yellow-100 text-yellow-800"
+                            ? "bg-primary/0.1 text-yellow-800"
                             : "bg-red-100 text-red-800"
                       }`}
                     >
                       {row.status}
                     </span>
                   </td>
-                  <td className="space-x-2 whitespace-nowrap px-6 py-4">
+                  <td className="whitespace-nowrap px-4 py-2 text-right">
                     {row.status === "Unmatched" ? (
-                      <>
+                      <div className="flex justify-end space-x-2">
+                        {/* Match Button */}
                         <button
-                          className="text-blue-600 hover:text-blue-900"
+                          className="inline-flex items-center justify-center rounded-lg bg-primary hover:bg-green-400 px-4 py-2 text-base font-medium text-white"
                           onClick={() => {
                             setSelectedBill(row);
                             setShowReconcileModal(true);
@@ -987,17 +1088,20 @@ const Reconciliation = () => {
                         >
                           Match
                         </button>
+
+                        {/* Delete Button */}
                         <button
-                          className="text-red-600 hover:text-red-900"
+                          className="inline-flex items-center justify-center rounded-lg bg-red-500 hover:bg-red-400 px-4 py-2 text-base font-medium text-white"
                           onClick={() => handleDelete(row.id)}
                         >
                           Delete
                         </button>
-                      </>
+                      </div>
                     ) : (
-                      <>
+                      <div className="flex justify-end space-x-3">
+                        {/* View Bill Button */}
                         <button
-                          className="text-blue-600 hover:text-blue-900"
+                          className="inline-flex items-center justify-center rounded-lg bg-dark-2 hover:bg-dark-3 px-4 py-2 text-base font-medium text-white"
                           onClick={() =>
                             router.push(
                               `/dashboard/billing/monthly?highlightId=${row.bill_id}`,
@@ -1006,13 +1110,15 @@ const Reconciliation = () => {
                         >
                           View Bill
                         </button>
+
+                        {/* Undo Button */}
                         <button
-                          className="text-yellow-600 hover:text-yellow-900"
+                          className="inline-flex items-center justify-center rounded-lg bg-yellow-400 hover:bg-yellow-300 px-4 py-2 text-base font-medium text-white"
                           onClick={() => handleUndo(row)}
                         >
                           Undo
                         </button>
-                      </>
+                      </div>
                     )}
                   </td>
                 </tr>

@@ -3,6 +3,8 @@ import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/utils/supabase/browserClient";
 import ViewBillModal from "./ViewBillModal";
 import { FaRegFilePdf, FaRegTrashAlt } from "react-icons/fa";
+import { LiaFileInvoiceDollarSolid } from "react-icons/lia";
+import TransactionsModal from "./TransactionsModal";
 import { useRouter, useSearchParams } from "next/navigation";
 interface Bill {
   id: string;
@@ -17,6 +19,7 @@ interface Bill {
   total_cost: number;
   energy_rate: number;
   total_revenue: number;
+  total_bill: number;
   total_PTS: number;
   status: string;
   created_at: string;
@@ -25,6 +28,18 @@ interface Bill {
   reconciliation_ids: string[] | null;
 }
 
+interface Transaction {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  total_bill: number;
+  paid_amount: number;
+  pending_amount: number;
+  status: string;
+  created_at: string;
+  bill_id: string;
+}
 const BillingScreen = () => {
   const [bills, setBills] = useState<Bill[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -34,6 +49,10 @@ const BillingScreen = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [openbillModal, setOpenBillModal] = useState(false);
+
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isTransactionsModalOpen, setIsTransactionsModalOpen] = useState(false);
+
 
   const searchParams = useSearchParams();
   const highlightId = searchParams?.get("highlightId");
@@ -115,15 +134,42 @@ const BillingScreen = () => {
     return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
   };
 
-  const handleViewTransactions = (billId: string) => {
+  const handleViewTransactions = async (billId: string) => {
     const bill = bills.find((b) => b.id === billId);
-    if (bill?.reconciliation_ids && bill.reconciliation_ids.length > 0) {
-      // Redirect to reconciliation page with highlighting for the first transaction
-      router.push(
-        `/dashboard/billing/reconciliation?highlightId=${bill.reconciliation_ids[0]}`,
-      );
+  
+    if (!bill) {
+      alert("Bill not found.");
+      return;
+    }
+  
+    try {
+      const { data: transactions, error: transactionsError } = await supabase
+        .from("reconciliation")
+        .select("*")
+        .eq("bill_id", billId)
+        .order("date", { ascending: false });
+  
+      if (transactionsError) throw transactionsError;
+  
+      // Add the total_bill to each transaction
+      const enrichedTransactions = transactions.map((transaction) => ({
+        ...transaction,
+        total_bill: bill.total_revenue,
+      }));
+  
+      setTransactions(enrichedTransactions);
+      setIsTransactionsModalOpen(true);
+    } catch (err) {
+      console.error("Error fetching transactions:", err);
+      alert("Failed to fetch transactions. Please try again.");
     }
   };
+
+
+
+
+
+
 
   const handleDeleteBill = async (billId: string) => {
     try {
@@ -228,18 +274,25 @@ const BillingScreen = () => {
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Billing Period
                         </th>
+                        {/* <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                          Total Cost ($)
+                        </th> */}
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Total Energy Consumption
                         </th>
 
-                        <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Total Cost ($)
-                        </th>
+
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Energy Rate ($/kWh)
                         </th>
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Total Revenue ($)
+                        </th>
+                        <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                          Total Bill ($)
+                        </th>
+                        <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                          Outstanding ($)
                         </th>
 
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
@@ -271,18 +324,25 @@ const BillingScreen = () => {
                               bill.billing_period_end,
                             )}
                           </td>
+                          {/* <td className="px-6.5 py-4 text-sm dark:text-white">
+                            ${bill.total_cost.toFixed(2)}
+                          </td> */}
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             {bill.total_PTS}
                           </td>
 
-                          <td className="px-6.5 py-4 text-sm dark:text-white">
-                            ${bill.total_cost.toFixed(2)}
-                          </td>
+
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             ${bill.energy_rate}
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             ${bill.total_revenue}
+                          </td>
+                          <td className="px-6.5 py-4 text-sm dark:text-white">
+                            ${bill.total_revenue}
+                          </td>
+                          <td className="px-6.5 py-4 text-sm dark:text-white">
+                            ${bill.arrears.toFixed(2)}
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             <span
@@ -295,16 +355,19 @@ const BillingScreen = () => {
                               {bill.status}
                             </span>
                           </td>
-                          <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">
+                          <td className="flex justify-end space-x-3 px-6.5 py-4 text-sm dark:text-white">
                             {bill.reconciliation_ids &&
                               bill.reconciliation_ids.length > 0 && (
                                 <button
                                   onClick={() =>
                                     handleViewTransactions(bill.id)
                                   }
-                                  className="whitespace-nowrap rounded bg-primary px-4 py-2 text-white"
+                                  className="hover:text-dark- rounded-lg bg-gray-50 p-2 text-dark-3 transition hover:bg-gray-200"
+                                  title="View Transactions"
                                 >
-                                  View Transactions
+                                  <span className="text-xl">
+                                    <LiaFileInvoiceDollarSolid />
+                                  </span>
                                 </button>
                               )}
                             <button
@@ -341,6 +404,13 @@ const BillingScreen = () => {
           </div>
         </div>
       </div>
+      {isTransactionsModalOpen && (
+        <TransactionsModal
+          isOpen={isTransactionsModalOpen}
+          onClose={() => setIsTransactionsModalOpen(false)}
+          transactions={transactions}
+        />
+      )}  
     </>
   );
 };
