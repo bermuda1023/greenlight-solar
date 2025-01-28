@@ -1,5 +1,3 @@
-import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
-
 import { Metadata } from "next";
 import SettingBoxes from "@/components/SettingBoxes";
 import { ToastContainer } from "react-toastify";

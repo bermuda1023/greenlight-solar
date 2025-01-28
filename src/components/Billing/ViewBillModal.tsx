@@ -79,7 +79,6 @@ const fetchParameters = useCallback(async () => {
 
   
   // Calculate totals
-  const totalPeriodBalance = bill.total_cost - bill.total_revenue;
   const overdueBalance = bill.arrears || 0;
   const balanceDue = bill.total_revenue + overdueBalance;
 

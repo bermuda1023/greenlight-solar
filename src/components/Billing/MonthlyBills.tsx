@@ -5,7 +5,7 @@ import ViewBillModal from "./ViewBillModal";
 import { FaRegFilePdf, FaRegTrashAlt } from "react-icons/fa";
 import { LiaFileInvoiceDollarSolid } from "react-icons/lia";
 import TransactionsModal from "./TransactionsModal";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { toast } from "react-toastify";
 interface Bill {
   id: string;
@@ -54,15 +54,8 @@ const BillingScreen = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isTransactionsModalOpen, setIsTransactionsModalOpen] = useState(false);
 
-
   const searchParams = useSearchParams();
   const highlightId = searchParams?.get("highlightId");
-
-  const router = useRouter();
-
-  const closeModal = () => {
-    setOpenBillModal(false);
-  };
 
   const fetchBills = useCallback(async () => {
     try {
@@ -137,27 +130,27 @@ const BillingScreen = () => {
 
   const handleViewTransactions = async (billId: string) => {
     const bill = bills.find((b) => b.id === billId);
-  
+
     if (!bill) {
       alert("Bill not found.");
       return;
     }
-  
+
     try {
       const { data: transactions, error: transactionsError } = await supabase
         .from("reconciliation")
         .select("*")
         .eq("bill_id", billId)
         .order("date", { ascending: false });
-  
+
       if (transactionsError) throw transactionsError;
-  
+
       // Add the total_bill to each transaction
       const enrichedTransactions = transactions.map((transaction) => ({
         ...transaction,
         total_bill: bill.total_revenue,
       }));
-  
+
       setTransactions(enrichedTransactions);
       setIsTransactionsModalOpen(true);
     } catch (err) {
@@ -165,12 +158,6 @@ const BillingScreen = () => {
       alert("Failed to fetch transactions. Please try again.");
     }
   };
-
-
-
-
-
-
 
   const handleDeleteBill = async (billId: string) => {
     try {
@@ -275,13 +262,10 @@ const BillingScreen = () => {
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Billing Period
                         </th>
-                        {/* <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Total Cost ($)
-                        </th> */}
+
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Total Energy Consumption
                         </th>
-
 
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Energy Rate ($/kWh)
@@ -325,13 +309,10 @@ const BillingScreen = () => {
                               bill.billing_period_end,
                             )}
                           </td>
-                          {/* <td className="px-6.5 py-4 text-sm dark:text-white">
-                            ${bill.total_cost.toFixed(2)}
-                          </td> */}
+
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             {bill.total_PTS}
                           </td>
-
 
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             ${bill.energy_rate}
@@ -411,7 +392,7 @@ const BillingScreen = () => {
           onClose={() => setIsTransactionsModalOpen(false)}
           transactions={transactions}
         />
-      )}  
+      )}
     </>
   );
 };
