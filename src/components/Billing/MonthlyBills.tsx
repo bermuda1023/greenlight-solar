@@ -6,6 +6,7 @@ import { FaRegFilePdf, FaRegTrashAlt } from "react-icons/fa";
 import { LiaFileInvoiceDollarSolid } from "react-icons/lia";
 import TransactionsModal from "./TransactionsModal";
 import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "react-toastify";
 interface Bill {
   id: string;
   site_name: string;
@@ -183,10 +184,10 @@ const BillingScreen = () => {
       // Update the state to remove the deleted bill from the UI
       setBills((prevBills) => prevBills.filter((bill) => bill.id !== billId));
 
-      alert("Bill deleted successfully.");
+      toast.success("Bill deleted successfully.");
     } catch (err) {
       console.error("Error deleting bill:", err);
-      alert("Failed to delete the bill. Please try again.");
+      toast.error("Failed to delete the bill. Please try again.");
     }
   };
 

@@ -8,6 +8,8 @@ import { TbReceipt } from "react-icons/tb";
 import flatpickr from "flatpickr";
 import { supabase } from "@/utils/supabase/browserClient";
 import BillModal from "../Billing/BillModal";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 interface Customer {
   id: string;
@@ -24,7 +26,6 @@ interface Customer {
   export_kwh: number; // Energy exported
   production_kwh: number; // Energy produced
 }
-
 
 const CustomersListTable = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -178,6 +179,7 @@ const CustomersListTable = () => {
       setDateError(
         "Please select both Start Date and End Date before generating the bill.",
       );
+      toast.error("Please select both Start Date and End Date.");
       return false;
     }
 
@@ -186,7 +188,7 @@ const CustomersListTable = () => {
 
     if (end < start) {
       setDateError("End Date cannot be earlier than Start Date");
-      alert("End Date cannot be earlier than Start Date");
+      toast.error("End Date cannot be earlier than Start Date.");
       return false;
     }
 
@@ -195,7 +197,7 @@ const CustomersListTable = () => {
 
   const validateCustomerSelection = () => {
     if (selectedCustomers.length === 0) {
-      alert("Please select at least one customer.");
+      toast.error("Please select at least one customer.");
       return false;
     }
     return true;
@@ -216,8 +218,6 @@ const CustomersListTable = () => {
     if (!customersValid) {
       return;
     }
-
-    // If all validations pass, open the modal
     setShowBillModal(true);
   };
 
@@ -260,7 +260,6 @@ const CustomersListTable = () => {
           </button>
         </div>
       </div>
-
       <div className="flex flex-col gap-10">
         <div className="rounded-[10px] border border-stroke bg-white shadow-1 dark:border-dark-3 dark:bg-gray-dark dark:shadow-card">
           <div className="p-4">
@@ -395,7 +394,6 @@ const CustomersListTable = () => {
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.installed_capacity}
                         </td>
-     
 
                         {/* Action button */}
                         <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">
@@ -455,15 +453,16 @@ const CustomersListTable = () => {
           </div>
         </div>
       </div>
-
       {/* Bill Generation Modal */}
-      {showBillModal && (
+      <ToastContainer />{" "}
+      {/* Toast container for displaying notifications globally */}
+      {showBillModal && ( // Conditional rendering based on showBillModal state
         <BillModal
           selectedCustomers={selectedCustomers}
           customers={customers}
           startDate={startDate}
           endDate={endDate}
-          onClose={() => setShowBillModal(false)}
+          onClose={() => setShowBillModal(false)} // Close the modal by setting showBillModal to false
         />
       )}
     </>
