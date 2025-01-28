@@ -5,7 +5,8 @@ import { Dialog } from "@/components/ui/Dialog";
 import { calculateBilling } from "@/utils/bill-calculate/billingutils";
 import { supabase } from "@/utils/supabase/browserClient";
 import { format } from "date-fns";
-
+import { toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 interface BillModalProps {
   selectedCustomers: string[];
   customers: any[];
@@ -38,7 +39,8 @@ const BillModal: React.FC<BillModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [parameters, setParameters] = useState<Parameters[]>([]);
   const [customerData, setCustomerData] = useState<CustomerData[]>([]);
-  const [selectedBills, setSelectedBills] = useState<string[]>(selectedCustomers);
+  const [selectedBills, setSelectedBills] =
+    useState<string[]>(selectedCustomers);
 
   const [energySums, setEnergySums] = useState<{
     [customerId: string]: {
@@ -160,7 +162,6 @@ const BillModal: React.FC<BillModalProps> = ({
         if (!customer) return summary;
         const parameter = parameters[0];
 
-      
         const customerEnergySums = energySums?.[customerId] || {};
         const consumptionValue =
           typeof customerEnergySums?.Consumption === "number"
@@ -170,9 +171,7 @@ const BillModal: React.FC<BillModalProps> = ({
           typeof customerEnergySums?.FeedIn === "number"
             ? customerEnergySums.FeedIn
             : 50;
-      
-  
- 
+
         const billResult = calculateBilling({
           energyConsumed: consumptionValue,
           startDate: new Date(startDate || ""),
@@ -183,8 +182,8 @@ const BillModal: React.FC<BillModalProps> = ({
           feedInPrice: parameter?.feedInPrice || 0.5,
         });
 
-        summary.totalRevenue += (billResult.finalRevenue);
-        summary.totalPts += (consumptionValue || 0);
+        summary.totalRevenue += billResult.finalRevenue;
+        summary.totalPts += consumptionValue || 0;
         return summary;
       },
       { totalCost: 0, totalRevenue: 0, totalPts: 0 },
@@ -193,7 +192,24 @@ const BillModal: React.FC<BillModalProps> = ({
   const summary = calculateSummary();
 
   const handleRemoveBill = (customerId: string) => {
-    setSelectedBills((prev) => prev.filter((id) => id !== customerId));
+    try {
+      // Check if the customerId exists in the selectedBills array
+      if (!selectedBills.includes(customerId)) {
+        toast.error("Customer ID not found in the selected bills."); // Error toast if not found
+        return;
+      }
+
+      // Remove the customerId from selectedBills
+      setSelectedBills((prev) => prev.filter((id) => id !== customerId));
+
+      // Show success toast after removal
+      toast.success("Customer bill removed successfully!");
+    } catch (error) {
+      toast.error(
+        "An error occurred while removing the bill. Please try again.",
+      ); // Error toast for unexpected issues
+      console.error("Error removing bill:", error);
+    }
   };
 
   const generateInvoiceNumber = async (): Promise<string> => {
@@ -211,67 +227,72 @@ const BillModal: React.FC<BillModalProps> = ({
 
   const handlePostBill = async (billData: any) => {
     try {
+      toast.dismiss(); // Dismiss previous toasts before showing new ones
+
+      // Basic validation for empty fields
+      if (
+        !billData.site_name ||
+        !billData.email ||
+        !billData.billing_period_start ||
+        !billData.billing_period_end ||
+        !billData.total_revenue ||
+        !billData.total_cost ||
+        !billData.energy_rate
+      ) {
+        toast.error("All fields are required. Please fill out all fields.");
+        return false; // Exit early if validation fails
+      }
+
       const invoiceNumber = await generateInvoiceNumber();
+
+      // Check if a bill already exists with the same site_name, email, and billing period
       const { data: existingBills, error: fetchError } = await supabase
         .from("monthly_bills")
-        .select("id,arrears")
+        .select("id, arrears")
         .eq("site_name", billData.site_name)
         .eq("email", billData.email)
         .eq("billing_period_start", billData.billing_period_start)
         .eq("billing_period_end", billData.billing_period_end);
-  
+
       if (fetchError) {
         throw fetchError;
       }
-  
+
+      // If an existing bill is found for the same date, show an error
+      if (existingBills && existingBills.length > 0) {
+        toast.error("A bill for this date already exists.");
+        return false; // Exit early if the bill already exists
+      }
+
       const previousArrears = existingBills?.[0]?.arrears || 0;
       const total_bill = Number(billData.total_revenue) + previousArrears;
-  
+
       let result;
-      // If we found an existing bill, update it
-      if (existingBills && existingBills.length > 0) {
-        result = await supabase
-          .from("monthly_bills")
-          .update({
-            status: billData.status,
-            total_cost: billData.total_cost,
-            energy_rate: billData.energy_rate,
-            total_revenue: billData.total_revenue,
-            total_PTS: billData.total_PTS || 666999,
-            total_bill: total_bill,
-            pending_bill: total_bill,
-            arrears: previousArrears,
-            reconciliation_ids: [],
-          })
-          .eq("id", existingBills[0].id);
-      } else {
-        // Insert new bill if none exists
-        result = await supabase.from("monthly_bills").insert([
-          {
-            ...billData,
-            invoice_number: invoiceNumber,
-            total_bill: total_bill,
-            pending_bill: total_bill,
-            arrears: previousArrears,
-            reconciliation_ids: [],
-            status: "Pending",
-          },
-        ]);
-      }
-  
+      // Insert new bill if no existing bill is found
+      result = await supabase.from("monthly_bills").insert([
+        {
+          ...billData,
+          invoice_number: invoiceNumber,
+          total_bill: total_bill,
+          pending_bill: total_bill,
+          arrears: previousArrears,
+          reconciliation_ids: [],
+          status: "Pending",
+        },
+      ]);
+
       if (result.error) throw result.error;
-  
+
       // If everything is successful
-      alert("Bill posted successfully!");
+      toast.success("Bill posted successfully!");
       return true;
     } catch (error) {
       // Handle errors
       console.error("Error handling bill:", error);
-      alert("Failed to post the bill. Check the console for details.");
+      toast.error("Failed to post the bill. Check the console for details.");
       return false;
     }
   };
-  
 
   const handlePostAllBills = async () => {
     const parameter = parameters[0];
@@ -301,6 +322,22 @@ const BillModal: React.FC<BillModalProps> = ({
           feedInPrice: parameter?.feedInPrice || 0.5,
         });
 
+        // Validation for empty fields
+        if (
+          !customer?.site_name ||
+          !customer?.email ||
+          !startDate ||
+          !endDate ||
+          !billResult.finalRevenue ||
+          !billResult.belcoTotal ||
+          !billResult.belcoPerKwh
+        ) {
+          toast.error(
+            `Missing required data for customer ${customer?.site_name}`,
+          );
+          return null; // Skip this bill if any required data is missing
+        }
+
         return {
           customer_id: customer.id,
           site_name: customer?.site_name || "N/A",
@@ -324,8 +361,31 @@ const BillModal: React.FC<BillModalProps> = ({
 
     for (const billData of billsToProcess) {
       console.log("Processing bill:", billData);
+
+      // Check if a bill already exists for the same customer and date range (start and end date)
+      const { data: existingBills, error: fetchError } = await supabase
+        .from("monthly_bills")
+        .select("id")
+        .eq("site_name", billData?.site_name) // Check by customer name (site_name)
+        .eq("billing_period_start", billData?.billing_period_start) // Check by start date
+        .eq("billing_period_end", billData?.billing_period_end); // Check by end date
+
+      if (fetchError) {
+        toast.error("Error fetching existing bills. Please try again.");
+        console.error(fetchError);
+        failureCount++;
+        continue; // Skip this bill
+      }
+
+      if (existingBills && existingBills.length > 0) {
+        // If a bill already exists for the same customer and date range
+        // toast.info(`Bill already exists for ${billData?.site_name} from ${billData?.billing_period_start} to ${billData?.billing_period_end}`);
+        failureCount++;
+        continue; // Skip posting this bill
+      }
+
+      // Proceed with posting the bill if no existing bill is found
       const success = await handlePostBill(billData);
-      console.log("Post result:", success);
       if (success) {
         successCount++;
       } else {
@@ -337,9 +397,9 @@ const BillModal: React.FC<BillModalProps> = ({
     console.log("Final failure count:", failureCount);
 
     if (failureCount === 0) {
-      alert(`Successfully posted all ${successCount} bills!`);
+      toast.success(`Successfully posted all ${successCount} bills!`);
     } else {
-      alert(
+      toast.error(
         `Posted ${successCount} bills successfully. Failed to post ${failureCount} bills. Check console for details.`,
       );
     }
@@ -348,7 +408,7 @@ const BillModal: React.FC<BillModalProps> = ({
   return (
     <Dialog open={true} onOpenChange={onClose}>
       <div
-        className="fixed inset-0 z-9999 flex items-center justify-center bg-gray-3/50 backdrop-blur-sm"
+        className="fixed inset-0 z-999 flex items-center justify-center bg-gray-3/50 backdrop-blur-sm"
         onClick={onClose}
       >
         <div
@@ -365,31 +425,33 @@ const BillModal: React.FC<BillModalProps> = ({
             <p>Loading...</p>
           ) : (
             <>
+              {/* Summary Section */}
+              <div className="mb-6 rounded-lg border border-dashed border-gray-300 bg-green-50 p-6">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between border-b border-gray-300 pb-2">
+                    <span className="font-medium text-gray-700">
+                      Total Revenue:
+                    </span>
+                    <span className="font-semibold text-gray-900">
+                      ${summary.totalRevenue.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-b border-gray-300 pb-2">
+                    <span className="font-medium text-gray-700">
+                      Total PTS:
+                    </span>
+                    <span className="font-semibold text-gray-900">
+                      {summary.totalPts.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
 
-          {/* Summary Section */}
-          <div className="mb-6 rounded-lg border border-dashed border-gray-300 bg-green-50 p-6">
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between border-b border-gray-300 pb-2">
-                <span className="font-medium text-gray-700">
-                  Total Revenue:
-                </span>
-                <span className="font-semibold text-gray-900">
-                  ${summary.totalRevenue.toFixed(2)}
-                </span>
+                {/* Footer (optional for additional details) */}
+                <div className="mt-4 text-center text-xs text-gray-600">
+                  All amounts are calculated based on the selected billing
+                  period.
+                </div>
               </div>
-              <div className="flex justify-between border-b border-gray-300 pb-2">
-                <span className="font-medium text-gray-700">Total PTS:</span>
-                <span className="font-semibold text-gray-900">
-                  {summary.totalPts.toFixed(2)}
-                </span>
-              </div>
-            </div>
-
-            {/* Footer (optional for additional details) */}
-            <div className="mt-4 text-center text-xs text-gray-600">
-              All amounts are calculated based on the selected billing period.
-            </div>
-          </div>
 
               <div className="mb-4">
                 <h3 className="text-lg font-bold">Energy Data Summary</h3>

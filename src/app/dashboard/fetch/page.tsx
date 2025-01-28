@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 const EnergyDataFetcher = () => {
   const [energyData, setEnergyData] = useState(null);
-  const [error, setError] = useState(null);
+  const [error] = useState(null);
 
   useEffect(() => {
     const fetchEnergyData = async () => {

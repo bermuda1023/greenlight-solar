@@ -4,6 +4,9 @@ import { supabase } from "@/utils/supabase/browserClient";
 import flatpickr from "flatpickr";
 import "flatpickr/dist/flatpickr.css"; // Import Flatpickr CSS
 
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+
 const AddCustomer = () => {
   const [formData, setFormData] = useState({
     email: "",
@@ -30,10 +33,28 @@ const AddCustomer = () => {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    toast.dismiss();  // Dismiss previous toasts before showing new ones
     setError(null);
     setSuccess(null);
     setIsSubmitting(true);
-
+  
+    // Check if any required fields are empty
+    const requiredFields = [
+      formData.email,
+      formData.address,
+      formData.site_name,
+      formData.solar_api_key,
+      formData.installation_date,
+      formData.installed_capacity,
+      formData.site_ID,
+    ];
+  
+    if (requiredFields.some(field => !field)) {
+      toast.error("Please fill out all the fields."); // Toast error if any field is empty
+      setIsSubmitting(false); // Stop submission process
+      return;
+    }
+  
     try {
       const { error } = await supabase.from("customers").insert([
         {
@@ -46,12 +67,13 @@ const AddCustomer = () => {
           site_ID: formData.site_ID,
         },
       ]);
-
+  
       if (error) {
         throw error;
       }
-
-      setSuccess("Customer added successfully!");
+  
+      toast.success("Customer added successfully!"); // Toast success message
+  
       setFormData({
         email: "",
         address: "",
@@ -62,11 +84,13 @@ const AddCustomer = () => {
         site_ID: "",
       });
     } catch (error) {
+      toast.error("Failed to add customer. Please try again."); // Toast error if something goes wrong
       setError("Failed to add customer. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
+  
 
   useEffect(() => {
     const installDatePicker = flatpickr("#installDate", {

@@ -4,6 +4,7 @@ import { supabase } from "@/utils/supabase/browserClient";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useState, ChangeEvent, useEffect, useCallback } from "react";
 import { IoMdCloudUpload } from "react-icons/io";
+import { toast } from "react-toastify";
 
 const Alert: React.FC<{ children: React.ReactNode; className?: string }> = ({
   children,
@@ -157,17 +158,28 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
     return bill.total_revenue + bill.arrears - existingPayments;
   };
 
-  const handleReconcile = async () => {
-    if (selectedBillId && selectedMonthlyBill) {
-      const currentPendingAmount = calculatePendingAmount(
-        selectedMonthlyBill,
-        existingPayments,
-      );
-      const newPendingAmount = Math.max(0, currentPendingAmount - bill.amount);
 
-      await onReconcile(bill.id, bill.amount, selectedBillId, newPendingAmount);
+  const handleReconcile = async () => {
+    try {
+      if (selectedBillId && selectedMonthlyBill) {
+        const currentPendingAmount = calculatePendingAmount(
+          selectedMonthlyBill,
+          existingPayments
+        );
+        const newPendingAmount = Math.max(0, currentPendingAmount - bill.amount);
+  
+        await onReconcile(bill.id, bill.amount, selectedBillId, newPendingAmount);
+  
+        toast.success("Transaction Matched successfully.");
+      } else {
+        toast.warn("Please select a valid bill and monthly bill for reconciliation.");
+      }
+    } catch (error) {
+      console.error("Error during reconciliation:", error);
+      toast.error("Failed to complete Transaction. Please try again.");
     }
   };
+  
 
   const getMatchStatus = (billAmount: number, pendingAmount: number) => {
     if (billAmount <= pendingAmount) {
@@ -180,7 +192,7 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+    <div className="fixed inset-0 z-999 flex items-center justify-center bg-black bg-opacity-50">
       <div className="w-[800px] rounded-lg bg-white p-6">
         <h2 className="mb-4 text-lg font-semibold">Reconcile Transaction</h2>
 
@@ -614,9 +626,9 @@ const Reconciliation = () => {
           bill_id: null,
         })
         .eq("id", transaction.id);
-
+  
       if (reconcileError) throw reconcileError;
-
+  
       // Update bill record if transaction.bill_id exists
       if (transaction.bill_id) {
         // First get the current bill data
@@ -625,31 +637,31 @@ const Reconciliation = () => {
           .select("*")
           .eq("id", transaction.bill_id)
           .single();
-
+  
         if (billFetchError) throw billFetchError;
-
+  
         // Remove the current transaction from reconciliation_ids
         const updatedReconciliationIds = (
           billData.reconciliation_ids || []
         ).filter((id: string) => id !== transaction.id);
-
+  
         // Calculate new status and arrears
         let newStatus = "Pending";
         let newArrears = billData.total_revenue;
-
+  
         if (updatedReconciliationIds.length > 0) {
           // If there are still other reconciled transactions, keep as Partially Matched
           newStatus = "Partially Matched";
-
+  
           // Get all remaining reconciled transactions
           const { data: remainingTransactions, error: transactionsError } =
             await supabase
               .from("reconciliation")
               .select("paid_amount")
               .in("id", updatedReconciliationIds);
-
+  
           if (transactionsError) throw transactionsError;
-
+  
           // Calculate new arrears based on remaining reconciled amounts
           const totalPaidAmount = remainingTransactions.reduce(
             (sum: number, t: { paid_amount: number }) => sum + t.paid_amount,
@@ -657,7 +669,7 @@ const Reconciliation = () => {
           );
           newArrears = billData.total_revenue - totalPaidAmount;
         }
-
+  
         // Update the bill
         const { error: billUpdateError } = await supabase
           .from("monthly_bills")
@@ -667,16 +679,18 @@ const Reconciliation = () => {
             reconciliation_ids: updatedReconciliationIds,
           })
           .eq("id", transaction.bill_id);
-
+  
         if (billUpdateError) throw billUpdateError;
       }
-
+  
       await fetchData();
+      toast.success("The transaction has been reset successfully!");
     } catch (error) {
       console.error("Error resetting reconciliation:", error);
-      alert("Failed to reset reconciliation. Please try again.");
+      toast.error("Failed to reset transaction. Please try again.");
     }
   };
+  
 
   const handleDelete = async (transactionId: string) => {
     try {
@@ -684,12 +698,14 @@ const Reconciliation = () => {
         .from("reconciliation")
         .delete()
         .eq("id", transactionId);
-
+  
       if (error) throw error;
+  
       await fetchData();
+      toast.success("Transaction deleted successfully.");
     } catch (error) {
       console.error("Error deleting transaction:", error);
-      alert("Error deleting transaction. Please try again.");
+      toast.error("Error deleting transaction. Please try again.");
     }
   };
 
@@ -881,7 +897,7 @@ const Reconciliation = () => {
         );
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
+    <div className="min-h-screen bg-gray-100 p-6 ">
       {suggestions.length > 0 && (
         <div className="mb-6 rounded-lg bg-blue-50 p-4">
           <h3 className="mb-2 font-semibold text-blue-900">
