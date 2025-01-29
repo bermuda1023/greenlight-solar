@@ -20,12 +20,23 @@ interface Parameters {
   fuelRate: number;
   feedInPrice: number;
   basePrice: number;
-}
+  belcodisc: number;
+  ra_fee: number;
+  export_rate: number;
+  tier1: number;
+  tier2: number;
+  tier3: number;}
 
 interface CustomerData {
   id: string;
   site_ID: number;
   solar_api_key: string;
+  site_name?: string; // Ensure this is defined
+  email?: string;     // Ensure this is defined
+  address?: string;   // Ensure this is defined
+  scaling_factor?: number;
+  price?: number;
+
 }
 
 const BillModal: React.FC<BillModalProps> = ({
@@ -68,11 +79,13 @@ const BillModal: React.FC<BillModalProps> = ({
     try {
       const { data, error: fetchError } = await supabase
         .from("customers")
-        .select("id, site_ID, solar_api_key")
+        .select("*")
         .in("id", selectedCustomers);
 
       if (fetchError) throw fetchError;
       setCustomerData(data || []);
+
+      console.log("Customer Data:", data);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Error fetching customer data",
@@ -119,6 +132,8 @@ const BillModal: React.FC<BillModalProps> = ({
         return {
           customerId: customer.id,
           energySums: customerEnergySums,
+          // scaling:customer.scaling_factor,
+          // price:customer.price,
         };
       });
 
@@ -158,10 +173,10 @@ const BillModal: React.FC<BillModalProps> = ({
   const calculateSummary = () => {
     return selectedBills.reduce(
       (summary, customerId) => {
-        const customer = customers.find((c) => c.id === customerId);
+        const customer = customerData.find((c) => c.id === customerId);
         if (!customer) return summary;
         const parameter = parameters[0];
-
+  
         const customerEnergySums = energySums?.[customerId] || {};
         const consumptionValue =
           typeof customerEnergySums?.Consumption === "number"
@@ -171,7 +186,7 @@ const BillModal: React.FC<BillModalProps> = ({
           typeof customerEnergySums?.FeedIn === "number"
             ? customerEnergySums.FeedIn
             : 50;
-
+  
         const billResult = calculateBilling({
           energyConsumed: consumptionValue,
           startDate: new Date(startDate || ""),
@@ -180,16 +195,19 @@ const BillModal: React.FC<BillModalProps> = ({
           energyExported: exportValue,
           basePrice: parameter?.basePrice || 0.15,
           feedInPrice: parameter?.feedInPrice || 0.5,
+          scaling: customer?.scaling_factor || 1,
+          price: customer?.price || 0.31,
         });
-
+  
         summary.totalRevenue += billResult.finalRevenue;
         summary.totalPts += consumptionValue || 0;
         return summary;
       },
-      { totalCost: 0, totalRevenue: 0, totalPts: 0 },
+      { totalCost: 0, totalRevenue: 0, totalPts: 0 }
     );
   };
   const summary = calculateSummary();
+  
 
   const handleRemoveBill = (customerId: string) => {
     try {
@@ -296,12 +314,12 @@ const BillModal: React.FC<BillModalProps> = ({
 
   const handlePostAllBills = async () => {
     const parameter = parameters[0];
-
+  
     const billsToProcess = selectedCustomers
       .map((customerId) => {
-        const customer = customers.find((c) => c.id === customerId);
+        const customer = customerData.find((c) => c.id === customerId); // Fetching from customerData
         if (!customer) return null;
-
+  
         const customerEnergySums = energySums?.[customerId] || {};
         const consumptionValue =
           typeof customerEnergySums?.Consumption === "number"
@@ -311,7 +329,7 @@ const BillModal: React.FC<BillModalProps> = ({
           typeof customerEnergySums?.FeedIn === "number"
             ? customerEnergySums.FeedIn
             : 50;
-
+  
         const billResult = calculateBilling({
           energyConsumed: consumptionValue,
           startDate: new Date(startDate || ""),
@@ -320,8 +338,10 @@ const BillModal: React.FC<BillModalProps> = ({
           energyExported: exportValue,
           basePrice: parameter?.basePrice || 0.15,
           feedInPrice: parameter?.feedInPrice || 0.5,
+          scaling: customer?.scaling_factor || 1, // Correctly fetched
+          price: customer?.price || 0.31, // Correctly fetched
         });
-
+  
         // Validation for empty fields
         if (
           !customer?.site_name ||
@@ -337,12 +357,12 @@ const BillModal: React.FC<BillModalProps> = ({
           );
           return null; // Skip this bill if any required data is missing
         }
-
+  
         return {
           customer_id: customer.id,
-          site_name: customer?.site_name || "N/A",
-          email: customer?.email || "N/A",
-          address: customer?.address || "N/A",
+          site_name: customer.site_name || "N/A", // Kept original reference
+          email: customer.email || "N/A", // Kept original reference
+          address: customer.address || "N/A", // Kept original reference
           billing_period_start: startDate,
           billing_period_end: endDate,
           total_cost: billResult.belcoTotal.toFixed(2),
@@ -353,15 +373,15 @@ const BillModal: React.FC<BillModalProps> = ({
         };
       })
       .filter(Boolean);
-
+  
     console.log("Bills to process:", billsToProcess);
-
+  
     let successCount = 0;
     let failureCount = 0;
-
+  
     for (const billData of billsToProcess) {
       console.log("Processing bill:", billData);
-
+  
       // Check if a bill already exists for the same customer and date range (start and end date)
       const { data: existingBills, error: fetchError } = await supabase
         .from("monthly_bills")
@@ -369,21 +389,20 @@ const BillModal: React.FC<BillModalProps> = ({
         .eq("site_name", billData?.site_name) // Check by customer name (site_name)
         .eq("billing_period_start", billData?.billing_period_start) // Check by start date
         .eq("billing_period_end", billData?.billing_period_end); // Check by end date
-
+  
       if (fetchError) {
         toast.error("Error fetching existing bills. Please try again.");
         console.error(fetchError);
         failureCount++;
         continue; // Skip this bill
       }
-
+  
       if (existingBills && existingBills.length > 0) {
         // If a bill already exists for the same customer and date range
-        // toast.info(`Bill already exists for ${billData?.site_name} from ${billData?.billing_period_start} to ${billData?.billing_period_end}`);
         failureCount++;
         continue; // Skip posting this bill
       }
-
+  
       // Proceed with posting the bill if no existing bill is found
       const success = await handlePostBill(billData);
       if (success) {
@@ -392,10 +411,10 @@ const BillModal: React.FC<BillModalProps> = ({
         failureCount++;
       }
     }
-
+  
     console.log("Final success count:", successCount);
     console.log("Final failure count:", failureCount);
-
+  
     if (failureCount === 0) {
       toast.success(`Successfully posted all ${successCount} bills!`);
     } else {
@@ -404,6 +423,8 @@ const BillModal: React.FC<BillModalProps> = ({
       );
     }
   };
+  
+  
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
@@ -469,7 +490,7 @@ const BillModal: React.FC<BillModalProps> = ({
               </div>
 
               {selectedBills.map((customerId) => {
-                const customer = customers.find((c) => c.id === customerId);
+                const customer = customerData.find((c) => c.id === customerId);
                 if (!customer) return null;
 
                 const parameter = parameters[0];
@@ -488,6 +509,8 @@ const BillModal: React.FC<BillModalProps> = ({
                   energyExported: exportValue,
                   basePrice: parameter?.basePrice || 0.15,
                   feedInPrice: parameter?.feedInPrice || 0.5,
+                  scaling: customer?.scaling_factor || 1.0,
+                  price: customer?.price || 0.31,
                 });
 
                 const billData = {

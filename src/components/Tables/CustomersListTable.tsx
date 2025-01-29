@@ -19,6 +19,8 @@ interface Customer {
   installed_capacity: number;
   site_ID: number;
   created_at: string;
+  scaling_factor: number;
+  price: number;
   consump_kwh: number; // Total consumption
   self_cons_kwh: number; // Self-consumption
   export_kwh: number; // Energy exported
