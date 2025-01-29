@@ -170,6 +170,13 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
   
         await onReconcile(bill.id, bill.amount, selectedBillId, newPendingAmount);
   
+        // Save selectedBillId to local storage
+        localStorage.setItem("selectedBillId", selectedBillId);
+  
+        // Keep the modal open and update the selected bill data
+        setSelectedBillId(selectedBillId);
+        // fetchMonthlyBills(selectedBillId);
+  
         toast.success("Transaction Matched successfully.");
       } else {
         toast.warn("Please select a valid bill and monthly bill for reconciliation.");
@@ -549,7 +556,7 @@ const Reconciliation = () => {
     }
   };
 
-  const handleReconcile = async (
+ const handleReconcile = async (
     transactionId: string,
     paidAmount: number,
     billId: string,
@@ -612,7 +619,9 @@ const Reconciliation = () => {
       console.error("Error during reconciliation:", error);
       alert("Error updating reconciliation. Please try again.");
     }
-  };
+  }; 
+
+
 
   const handleUndo = async (transaction: BillData) => {
     try {
@@ -667,8 +676,18 @@ const Reconciliation = () => {
             (sum: number, t: { paid_amount: number }) => sum + t.paid_amount,
             0,
           );
-          newArrears = billData.total_revenue - totalPaidAmount;
-        }
+          if (totalPaidAmount === 0) {
+            newStatus = "Unmatched";
+            newArrears = 0;
+          } else {
+            newStatus = "Partially Matched";
+            newArrears = billData.total_revenue - totalPaidAmount;
+          }
+        } else {
+          // If there are no remaining reconciliations, ensure arrears is 0
+          newStatus = "Pending";
+          newArrears = 0;
+        }        
   
         // Update the bill
         const { error: billUpdateError } = await supabase
@@ -690,6 +709,7 @@ const Reconciliation = () => {
       toast.error("Failed to reset transaction. Please try again.");
     }
   };
+  
   
 
   const handleDelete = async (transactionId: string) => {
@@ -751,7 +771,7 @@ const Reconciliation = () => {
     setDateFormat,
     validationErrors,
   }) => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+    <div className="fixed inset-0 z-999 flex items-center justify-center bg-black bg-opacity-50">
       <div className="w-[600px] rounded-lg bg-white p-6">
         <h2 className="mb-4 text-lg font-semibold">Map CSV Columns</h2>
 
