@@ -8,10 +8,11 @@
 ```
 npm install
 ```
+
 If you're using **Yarn** as your package manager, the command will be:
 
 ```
-yarn install
+yarn install.
 ```
 
 2. Okay, you're almost there. Now all you need to do is start the development server. If you're using **npm**, the command is:
@@ -19,6 +20,7 @@ yarn install
 ```
 npm run dev
 ```
+
 And if you're using **Yarn**, it's:
 
 ```
@@ -28,6 +30,7 @@ yarn dev
 And voila! You're now ready to start developing. **Happy coding**!
 
 ## Highlighted Features
+
 **200+ Next.js Dashboard Ul Components and Templates** - includes a variety of prebuilt **Ul elements, components, pages, and examples** crafted with a high-quality design.
 Additionally, features seamless **essential integrations and extensive functionalities**.
 
