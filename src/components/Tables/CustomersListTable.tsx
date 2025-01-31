@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect, useCallback } from "react";
 import { FaArrowLeft, FaArrowRight, FaRegTrashAlt } from "react-icons/fa";
 import { AiOutlineSearch } from "react-icons/ai";
@@ -20,6 +19,8 @@ interface Customer {
   installed_capacity: number;
   site_ID: number;
   created_at: string;
+  scaling_factor: number;
+  price: number;
   consump_kwh: number; // Total consumption
   self_cons_kwh: number; // Self-consumption
   export_kwh: number; // Energy exported
