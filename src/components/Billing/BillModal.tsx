@@ -25,18 +25,18 @@ interface Parameters {
   export_rate: number;
   tier1: number;
   tier2: number;
-  tier3: number;}
+  tier3: number;
+}
 
 interface CustomerData {
   id: string;
   site_ID: number;
   solar_api_key: string;
   site_name?: string; // Ensure this is defined
-  email?: string;     // Ensure this is defined
-  address?: string;   // Ensure this is defined
+  email?: string; // Ensure this is defined
+  address?: string; // Ensure this is defined
   scaling_factor?: number;
   price?: number;
-
 }
 
 const BillModal: React.FC<BillModalProps> = ({
@@ -176,7 +176,7 @@ const BillModal: React.FC<BillModalProps> = ({
         const customer = customerData.find((c) => c.id === customerId);
         if (!customer) return summary;
         const parameter = parameters[0];
-  
+
         const customerEnergySums = energySums?.[customerId] || {};
         const consumptionValue =
           typeof customerEnergySums?.Consumption === "number"
@@ -186,7 +186,7 @@ const BillModal: React.FC<BillModalProps> = ({
           typeof customerEnergySums?.FeedIn === "number"
             ? customerEnergySums.FeedIn
             : 50;
-  
+
         const billResult = calculateBilling({
           energyConsumed: consumptionValue,
           startDate: new Date(startDate || ""),
@@ -195,19 +195,24 @@ const BillModal: React.FC<BillModalProps> = ({
           energyExported: exportValue,
           basePrice: parameter?.basePrice || 0.15,
           feedInPrice: parameter?.feedInPrice || 0.5,
+          belcodisc: parameter?.belcodisc || 0.8,
+          ra_fee: parameter?.ra_fee || 0.00635,
+          export_rate: parameter?.export_rate || 0.2265,
+          tier1: parameter?.tier1 || 0.13333,
+          tier2: parameter?.tier2 || 0.2259,
+          tier3: parameter?.tier3 || 0.3337,
           scaling: customer?.scaling_factor || 1,
           price: customer?.price || 0.31,
         });
-  
+
         summary.totalRevenue += billResult.finalRevenue;
         summary.totalPts += consumptionValue || 0;
         return summary;
       },
-      { totalCost: 0, totalRevenue: 0, totalPts: 0 }
+      { totalCost: 0, totalRevenue: 0, totalPts: 0 },
     );
   };
   const summary = calculateSummary();
-  
 
   const handleRemoveBill = (customerId: string) => {
     try {
@@ -314,12 +319,12 @@ const BillModal: React.FC<BillModalProps> = ({
 
   const handlePostAllBills = async () => {
     const parameter = parameters[0];
-  
+
     const billsToProcess = selectedCustomers
       .map((customerId) => {
         const customer = customerData.find((c) => c.id === customerId); // Fetching from customerData
         if (!customer) return null;
-  
+
         const customerEnergySums = energySums?.[customerId] || {};
         const consumptionValue =
           typeof customerEnergySums?.Consumption === "number"
@@ -329,7 +334,7 @@ const BillModal: React.FC<BillModalProps> = ({
           typeof customerEnergySums?.FeedIn === "number"
             ? customerEnergySums.FeedIn
             : 50;
-  
+
         const billResult = calculateBilling({
           energyConsumed: consumptionValue,
           startDate: new Date(startDate || ""),
@@ -338,10 +343,16 @@ const BillModal: React.FC<BillModalProps> = ({
           energyExported: exportValue,
           basePrice: parameter?.basePrice || 0.15,
           feedInPrice: parameter?.feedInPrice || 0.5,
+          belcodisc: parameter?.belcodisc || 0.8,
+          ra_fee: parameter?.ra_fee || 0.00635,
+          export_rate: parameter?.export_rate || 0.2265,
+          tier1: parameter?.tier1 || 0.13333,
+          tier2: parameter?.tier2 || 0.2259,
+          tier3: parameter?.tier3 || 0.3337,
           scaling: customer?.scaling_factor || 1, // Correctly fetched
           price: customer?.price || 0.31, // Correctly fetched
         });
-  
+
         // Validation for empty fields
         if (
           !customer?.site_name ||
@@ -357,7 +368,7 @@ const BillModal: React.FC<BillModalProps> = ({
           );
           return null; // Skip this bill if any required data is missing
         }
-  
+
         return {
           customer_id: customer.id,
           site_name: customer.site_name || "N/A", // Kept original reference
@@ -373,15 +384,15 @@ const BillModal: React.FC<BillModalProps> = ({
         };
       })
       .filter(Boolean);
-  
+
     console.log("Bills to process:", billsToProcess);
-  
+
     let successCount = 0;
     let failureCount = 0;
-  
+
     for (const billData of billsToProcess) {
       console.log("Processing bill:", billData);
-  
+
       // Check if a bill already exists for the same customer and date range (start and end date)
       const { data: existingBills, error: fetchError } = await supabase
         .from("monthly_bills")
@@ -389,20 +400,20 @@ const BillModal: React.FC<BillModalProps> = ({
         .eq("site_name", billData?.site_name) // Check by customer name (site_name)
         .eq("billing_period_start", billData?.billing_period_start) // Check by start date
         .eq("billing_period_end", billData?.billing_period_end); // Check by end date
-  
+
       if (fetchError) {
         toast.error("Error fetching existing bills. Please try again.");
         console.error(fetchError);
         failureCount++;
         continue; // Skip this bill
       }
-  
+
       if (existingBills && existingBills.length > 0) {
         // If a bill already exists for the same customer and date range
         failureCount++;
         continue; // Skip posting this bill
       }
-  
+
       // Proceed with posting the bill if no existing bill is found
       const success = await handlePostBill(billData);
       if (success) {
@@ -411,10 +422,10 @@ const BillModal: React.FC<BillModalProps> = ({
         failureCount++;
       }
     }
-  
+
     console.log("Final success count:", successCount);
     console.log("Final failure count:", failureCount);
-  
+
     if (failureCount === 0) {
       toast.success(`Successfully posted all ${successCount} bills!`);
     } else {
@@ -423,8 +434,6 @@ const BillModal: React.FC<BillModalProps> = ({
       );
     }
   };
-  
-  
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
@@ -509,6 +518,12 @@ const BillModal: React.FC<BillModalProps> = ({
                   energyExported: exportValue,
                   basePrice: parameter?.basePrice || 0.15,
                   feedInPrice: parameter?.feedInPrice || 0.5,
+                  belcodisc: parameter?.belcodisc || 0.8,
+                  ra_fee: parameter?.ra_fee || 0.00635,
+                  export_rate: parameter?.export_rate || 0.2265,
+                  tier1: parameter?.tier1 || 0.13333,
+                  tier2: parameter?.tier2 || 0.2259,
+                  tier3: parameter?.tier3 || 0.3337,
                   scaling: customer?.scaling_factor || 1.0,
                   price: customer?.price || 0.31,
                 });
