@@ -1,4 +1,5 @@
 "use client";
+import html2pdf from "html2pdf.js";
 
 import React, { useCallback, useEffect, useState } from "react";
 import { Dialog } from "@/components/ui/Dialog";
@@ -7,6 +8,7 @@ import { supabase } from "@/utils/supabase/browserClient";
 import { format } from "date-fns";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+
 interface BillModalProps {
   selectedCustomers: string[];
   customers: any[];
@@ -50,6 +52,8 @@ const BillModal: React.FC<BillModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [parameters, setParameters] = useState<Parameters[]>([]);
   const [customerData, setCustomerData] = useState<CustomerData[]>([]);
+  const [status, setStatus] = useState("");
+
   const [selectedBills, setSelectedBills] =
     useState<string[]>(selectedCustomers);
 
@@ -434,6 +438,198 @@ const BillModal: React.FC<BillModalProps> = ({
       );
     }
   };
+  // const handleEmailBill = async (userEmail?: string) => {
+  //   setStatus('Sending...');
+
+  //   try {
+  //     const response = await fetch('/api/sendmail', {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //       },
+  //       body: JSON.stringify({ userEmail }),
+  //     });
+
+  //     const result = await response.json();
+  //     if (response.ok) {
+  //       setStatus(`Email sent successfully to ${userEmail}! ✅`);
+  //     } else {
+  //       setStatus(`Error: ${result.error}`);
+  //     }
+  //   } catch (error) {
+  //     console.error('[ERROR] Failed to send email:', error);
+  //     setStatus('Failed to send email. Please try again.');
+  //   }
+  // };
+
+  // const handleEmailBill = async (userEmail?: string) => {
+  //   console.log("[LOG] handleEmailBill called with:", userEmail); // Log the email received
+
+  //   if (!userEmail) {
+  //     console.error("[ERROR] No email provided!");
+  //     setStatus('Error: No email provided.');
+  //     return;
+  //   }
+
+  //   setStatus(`Sending email to ${userEmail}...`);
+
+  //   try {
+  //     console.log("[INFO] Sending request to /api/sendmail...");
+
+  //     const emailData = {
+  //       userEmail: userEmail, // The email to send
+  //       subject: "Your Invoice", // Example subject (can be dynamic)
+  //       message: "Here is your invoice for this month.", // Example message (can be dynamic)
+  //     };
+
+  //     console.log("[INFO] Sending the following data:", emailData);
+
+  //     const response = await fetch('/api/sendmail', {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //       },
+  //       body: JSON.stringify(emailData), // ✅ Send email as JSON in body
+  //     });
+
+  //     const result = await response.json();
+  //     console.log("[INFO] Response received:", result); // Log response from API
+
+  //     if (response.ok) {
+  //       setStatus(`Email sent successfully to ${userEmail}! ✅`);
+  //     } else {
+  //       console.error("[ERROR] Failed to send email:", result.error);
+  //       setStatus(`Error: ${result.error}`);
+  //     }
+  //   } catch (error) {
+  //     console.error("[ERROR] Failed to send email:", error);
+  //     setStatus('Failed to send email. Please try again.');
+  //   }
+  // };
+
+  const handleEmailBill = async (billData: any, invoiceRef: any) => {
+    try {
+      toast.dismiss(); // Dismiss previous toasts before showing new ones
+
+      console.log("[LOG] handleEmailBill called with:", billData.email);
+
+      // ✅ Basic validation for empty fields
+      if (
+        !billData.site_name ||
+        !billData.email ||
+        !billData.billing_period_start ||
+        !billData.billing_period_end ||
+        !billData.total_revenue ||
+        !billData.total_cost ||
+        !billData.energy_rate
+      ) {
+        toast.error("All fields are required. Please fill out all fields.");
+        return false; // Exit early if validation fails
+      }
+
+      setStatus(`Posting bill for ${billData.email}...`);
+
+      const invoiceNumber = await generateInvoiceNumber(); // Ensure this function exists
+
+      // ✅ Check if a bill already exists for the same site, email, and billing period
+      const { data: existingBills, error: fetchError } = await supabase
+        .from("monthly_bills")
+        .select("id, arrears")
+        .eq("site_name", billData.site_name)
+        .eq("email", billData.email)
+        .eq("billing_period_start", billData.billing_period_start)
+        .eq("billing_period_end", billData.billing_period_end);
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      // ✅ If an existing bill is found for the same date, show an error
+      if (existingBills && existingBills.length > 0) {
+        toast.error("A bill for this date already exists.");
+        return false; // Exit early if the bill already exists
+      }
+
+      const previousArrears = existingBills?.[0]?.arrears || 0;
+      const total_bill = Number(billData.total_revenue) + previousArrears;
+
+      // ✅ Insert new bill if no existing bill is found
+      const result = await supabase.from("monthly_bills").insert([
+        {
+          ...billData,
+          invoice_number: invoiceNumber,
+          total_bill: total_bill,
+          pending_bill: total_bill,
+          arrears: previousArrears,
+          reconciliation_ids: [],
+          status: "Pending",
+        },
+      ]);
+
+      if (result.error) throw result.error;
+
+      // ✅ Bill successfully posted
+      toast.success("Bill posted successfully!");
+
+      // ✅ Now send email with invoice attachment
+      setStatus(`Sending invoice email to ${billData.email}...`);
+
+      // Convert invoice HTML to PDF (Same logic as before)
+      if (!invoiceRef.current) {
+        console.error("[ERROR] Invoice reference not found!");
+        toast.error("Error: Invoice not found.");
+        return false;
+      }
+
+      console.log("[INFO] Generating PDF...");
+
+      const pdfBlob = await html2pdf().from(invoiceRef.current).toBlob();
+
+      // Convert PDF Blob to Base64
+      const reader = new FileReader();
+      reader.readAsDataURL(pdfBlob);
+      reader.onloadend = async () => {
+        const base64PDF = reader.result?.toString().split(",")[1];
+
+        console.log("[INFO] Sending request to /api/sendmail...");
+
+        const emailData = {
+          userEmail: billData.email, // Send email from bill data
+          subject: "Your Invoice",
+          message: "Please find attached your invoice for this month.",
+          pdfAttachment: base64PDF, // Attach PDF as base64
+          filename: `Invoice-${invoiceNumber}.pdf`,
+        };
+
+        console.log("[INFO] Sending the following data:", emailData);
+
+        const response = await fetch("/api/sendmail", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(emailData),
+        });
+
+        const result = await response.json();
+        console.log("[INFO] Response received:", result);
+
+        if (response.ok) {
+          toast.success(`Email sent successfully to ${billData.email}! ✅`);
+          setStatus(`Email sent successfully to ${billData.email}! ✅`);
+        } else {
+          console.error("[ERROR] Failed to send email:", result.error);
+          toast.error(`Error: ${result.error}`);
+        }
+      };
+    } catch (error) {
+      console.error("[ERROR] Failed to post/send email:", error);
+      toast.error(
+        "Failed to process the request. Check the console for details.",
+      );
+      return false;
+    }
+  };
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
@@ -607,7 +803,12 @@ const BillModal: React.FC<BillModalProps> = ({
                         >
                           Remove
                         </button>
-                        <button className="rounded bg-green-200 px-4 py-2 text-gray-800 hover:bg-green-300">
+                        <button
+                          onClick={() =>
+                            handleEmailBill(customer.email, customer.id)
+                          }
+                          className="rounded bg-green-200 px-4 py-2 text-gray-800 hover:bg-green-300"
+                        >
                           Post and Email
                         </button>
                         <button

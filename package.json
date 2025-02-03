@@ -26,6 +26,7 @@
     "jspdf": "^2.5.2",
     "jsvectormap": "^1.5.3",
     "next": "^14.1.4",
+    "nodemailer": "^6.10.0",
     "react": "^18",
     "react-apexcharts": "^1.4.1",
     "react-dom": "^18",
