@@ -56,7 +56,7 @@ const fetchParameters = useCallback(async () => {
     useEffect(() => {
       fetchParameters();
         }, [fetchParameters]);
-  const generatePDF = () => {
+  const generatePDF = async () => {
     if (invoiceRef.current) {
       const options = {
         margin: [-1, -1, -1, -1], // Top, Left, Bottom, Right margins in mm
@@ -72,8 +72,10 @@ const fetchParameters = useCallback(async () => {
         },
       };
 
-      html2pdf().from(invoiceRef.current).set(options).save();
-    }
+      const abcd = await html2pdf().from(invoiceRef.current).set(options).save() 
+    
+    console.log(abcd);
+  }
   };
 
 

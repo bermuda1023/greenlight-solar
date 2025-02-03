@@ -25,6 +25,7 @@ interface Parameters {
   belcodisc: number;
   ra_fee: number;
   export_rate: number;
+  message: string;
   tier1: number;
   tier2: number;
   tier3: number;
@@ -78,6 +79,7 @@ const BillModal: React.FC<BillModalProps> = ({
       );
     }
   }, []);
+
 
   const fetchCustomerData = useCallback(async () => {
     try {
@@ -254,9 +256,9 @@ const BillModal: React.FC<BillModalProps> = ({
 
   const handlePostBill = async (billData: any) => {
     try {
-      toast.dismiss(); // Dismiss previous toasts before showing new ones
+      toast.dismiss(); // Show initial toast before posting
 
-      // Basic validation for empty fields
+      // ✅ Basic validation for empty fields
       if (
         !billData.site_name ||
         !billData.email ||
@@ -272,10 +274,10 @@ const BillModal: React.FC<BillModalProps> = ({
 
       const invoiceNumber = await generateInvoiceNumber();
 
-      // Check if a bill already exists with the same site_name, email, and billing period
+      // ✅ Check if a bill already exists with the same site_name, email, and billing period
       const { data: existingBills, error: fetchError } = await supabase
         .from("monthly_bills")
-        .select("id, arrears")
+        .select("id, arrears") // ✅ Do NOT fetch 'message'
         .eq("site_name", billData.site_name)
         .eq("email", billData.email)
         .eq("billing_period_start", billData.billing_period_start)
@@ -285,7 +287,6 @@ const BillModal: React.FC<BillModalProps> = ({
         throw fetchError;
       }
 
-      // If an existing bill is found for the same date, show an error
       if (existingBills && existingBills.length > 0) {
         toast.error("A bill for this date already exists.");
         return false; // Exit early if the bill already exists
@@ -294,29 +295,34 @@ const BillModal: React.FC<BillModalProps> = ({
       const previousArrears = existingBills?.[0]?.arrears || 0;
       const total_bill = Number(billData.total_revenue) + previousArrears;
 
-      let result;
-      // Insert new bill if no existing bill is found
-      result = await supabase.from("monthly_bills").insert([
-        {
-          ...billData,
-          invoice_number: invoiceNumber,
-          total_bill: total_bill,
-          pending_bill: total_bill,
-          arrears: previousArrears,
-          reconciliation_ids: [],
-          status: "Pending",
-        },
-      ]);
+      // ✅ Remove 'message' from billData before inserting into Supabase
+      const { message, ...filteredBillData } = billData; // ✅ Exclude message
 
-      if (result.error) throw result.error;
+      // ✅ Insert new bill into `monthly_bills`
+      const { error: insertError } = await supabase
+        .from("monthly_bills")
+        .insert([
+          {
+            ...filteredBillData, // ✅ Insert without 'message'
+            invoice_number: invoiceNumber,
+            total_bill: total_bill,
+            pending_bill: total_bill,
+            arrears: previousArrears,
+            reconciliation_ids: [],
+            status: "Pending",
+          },
+        ]);
 
-      // If everything is successful
+      if (insertError) {
+        throw insertError;
+      }
+
+      // ✅ Success
       toast.success("Bill posted successfully!");
       return true;
     } catch (error) {
-      // Handle errors
       console.error("Error handling bill:", error);
-      toast.error("Failed to post the bill. Check the console for details.");
+      toast.error("Failed to post the bill. Please try again.");
       return false;
     }
   };
@@ -438,196 +444,265 @@ const BillModal: React.FC<BillModalProps> = ({
       );
     }
   };
-  // const handleEmailBill = async (userEmail?: string) => {
-  //   setStatus('Sending...');
 
-  //   try {
-  //     const response = await fetch('/api/sendmail', {
-  //       method: 'POST',
-  //       headers: {
-  //         'Content-Type': 'application/json',
-  //       },
-  //       body: JSON.stringify({ userEmail }),
-  //     });
+  const handleEmailBill = async (billData: any) => {
+    setStatus("Processing...");
 
-  //     const result = await response.json();
-  //     if (response.ok) {
-  //       setStatus(`Email sent successfully to ${userEmail}! ✅`);
-  //     } else {
-  //       setStatus(`Error: ${result.error}`);
-  //     }
-  //   } catch (error) {
-  //     console.error('[ERROR] Failed to send email:', error);
-  //     setStatus('Failed to send email. Please try again.');
-  //   }
-  // };
-
-  // const handleEmailBill = async (userEmail?: string) => {
-  //   console.log("[LOG] handleEmailBill called with:", userEmail); // Log the email received
-
-  //   if (!userEmail) {
-  //     console.error("[ERROR] No email provided!");
-  //     setStatus('Error: No email provided.');
-  //     return;
-  //   }
-
-  //   setStatus(`Sending email to ${userEmail}...`);
-
-  //   try {
-  //     console.log("[INFO] Sending request to /api/sendmail...");
-
-  //     const emailData = {
-  //       userEmail: userEmail, // The email to send
-  //       subject: "Your Invoice", // Example subject (can be dynamic)
-  //       message: "Here is your invoice for this month.", // Example message (can be dynamic)
-  //     };
-
-  //     console.log("[INFO] Sending the following data:", emailData);
-
-  //     const response = await fetch('/api/sendmail', {
-  //       method: 'POST',
-  //       headers: {
-  //         'Content-Type': 'application/json',
-  //       },
-  //       body: JSON.stringify(emailData), // ✅ Send email as JSON in body
-  //     });
-
-  //     const result = await response.json();
-  //     console.log("[INFO] Response received:", result); // Log response from API
-
-  //     if (response.ok) {
-  //       setStatus(`Email sent successfully to ${userEmail}! ✅`);
-  //     } else {
-  //       console.error("[ERROR] Failed to send email:", result.error);
-  //       setStatus(`Error: ${result.error}`);
-  //     }
-  //   } catch (error) {
-  //     console.error("[ERROR] Failed to send email:", error);
-  //     setStatus('Failed to send email. Please try again.');
-  //   }
-  // };
-
-  const handleEmailBill = async (billData: any, invoiceRef: any) => {
     try {
-      toast.dismiss(); // Dismiss previous toasts before showing new ones
+      toast.info("Posting bill...");
 
-      console.log("[LOG] handleEmailBill called with:", billData.email);
+      // ✅ First, post the bill and retrieve the updated data
+      const updatedBillData = await handlePostBill(billData);
 
-      // ✅ Basic validation for empty fields
-      if (
-        !billData.site_name ||
-        !billData.email ||
-        !billData.billing_period_start ||
-        !billData.billing_period_end ||
-        !billData.total_revenue ||
-        !billData.total_cost ||
-        !billData.energy_rate
-      ) {
-        toast.error("All fields are required. Please fill out all fields.");
-        return false; // Exit early if validation fails
+      if (!updatedBillData) {
+        toast.error("Failed to post bill. Email not sent.");
+        return;
       }
 
-      setStatus(`Posting bill for ${billData.email}...`);
+      toast.info("Generating invoice PDF...");
 
-      const invoiceNumber = await generateInvoiceNumber(); // Ensure this function exists
+      // ✅ Fetch the message separately from `parameters`
+      const message =
+        parameters.length > 0 && parameters[0]?.message
+          ? parameters[0].message
+          : "Thank you for doing business with us!";
 
-      // ✅ Check if a bill already exists for the same site, email, and billing period
-      const { data: existingBills, error: fetchError } = await supabase
-        .from("monthly_bills")
-        .select("id, arrears")
-        .eq("site_name", billData.site_name)
-        .eq("email", billData.email)
-        .eq("billing_period_start", billData.billing_period_start)
-        .eq("billing_period_end", billData.billing_period_end);
+      // ✅ Generate Invoice HTML Template
+      const invoiceHTML = `
+    <div style="max-width: 800px; margin: auto; font-family: Arial, sans-serif; border: 1px solid #ddd; padding: 20px; background-color: #fff;">
+      <header style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px;">
+        <img src="/images/logo/logo.svg" alt="Logo" style="max-width: 180px; height: auto;">
+      </header>
+  
+      <section style="border-bottom: 2px solid #ddd; padding-bottom: 16px;">
+        <h2 style="color: black; font-size: 16px;">RECIPIENT</h2>
+        <p style="color: black; font-size: 20px; font-weight: bold;">INVOICE</p>
+        <p><strong>Name:</strong> ${billData.site_name}</p>
+        <p><strong>Email:</strong> ${billData.email}</p>
+        <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+        <p><strong>Invoice Number:</strong> ${billData.invoice_number}</p>
+      </section>
+  
+      <table style="width: 100%; margin-top: 16px; border-collapse: collapse;">
+        <thead>
+          <tr style="border-bottom: 2px solid #4CAF50;">
+            <th style="padding: 8px; text-align: left;">Period Start</th>
+            <th style="padding: 8px; text-align: left;">Period End</th>
+            <th style="padding: 8px; text-align: left;">Description</th>
+            <th style="padding: 8px; text-align: left;">Energy PTS</th>
+            <th style="padding: 8px; text-align: left;">Per Unit</th>
+            <th style="padding: 8px; text-align: left;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding: 8px;">${billData.billing_period_start}</td>
+            <td style="padding: 8px;">${billData.billing_period_end}</td>
+            <td style="padding: 8px;">Energy Produced</td>
+            <td style="padding: 8px;">${billData.total_PTS}</td>
+            <td style="padding: 8px;">$${billData.energy_rate}</td>
+            <td style="padding: 8px;">$${billData.total_revenue}</td>
+          </tr>
+        </tbody>
+      </table>
+  
+      <section style="margin-top: 20px; text-align: right;">
+        <p><strong>Total Period Balance:</strong> $${billData.total_revenue}</p>
+        <p style="font-weight: bold; color: black;">Overdue Balance: $${billData.overdueBalance}</p>
+        <p style="font-weight: bold; color: red;">Balance Due: $${billData.balanceDue}</p>
+      </section>
+  
+      <section style="margin-top: 20px; font-size: 14px;">
+        <h3 style="border-bottom: 2px solid #4CAF50; padding-bottom: 8px;">DIRECT DEPOSIT</h3>
+        <p><strong>Bank Name:</strong> Bank of Butterfield</p>
+        <p><strong>Account Number:</strong> 060400 6770 014</p>
+      </section>
+  
+      <footer style="margin-top: 20px; text-align: center; font-size: 12px;">
+        <div style="margin-bottom: 10px;">
+          <p style="text-align: center; font-size: 14px;">${message}</p>
+        </div>
+        <p>Greenlight Financing Ltd. #48 Par-la-ville Road, Suite 1543, Hamilton, HM11</p>
+        <p>
+          <a href="mailto:billing@greenlightenergy.bm" style="color: blue; text-decoration: underline;">
+            billing@greenlightenergy.bm | Phone: 1 (441) 705 3033
+          </a>
+        </p>
+      </footer>
+    </div>
+  `;
 
-      if (fetchError) {
-        throw fetchError;
-      }
+      const invoiceContainer = document.createElement("div");
+      invoiceContainer.innerHTML = invoiceHTML;
+      document.body.appendChild(invoiceContainer);
 
-      // ✅ If an existing bill is found for the same date, show an error
-      if (existingBills && existingBills.length > 0) {
-        toast.error("A bill for this date already exists.");
-        return false; // Exit early if the bill already exists
-      }
+      // ✅ Convert HTML to PDF
+      const pdfBlob = await html2pdf().from(invoiceContainer).outputPdf("blob");
+      document.body.removeChild(invoiceContainer);
 
-      const previousArrears = existingBills?.[0]?.arrears || 0;
-      const total_bill = Number(billData.total_revenue) + previousArrears;
-
-      // ✅ Insert new bill if no existing bill is found
-      const result = await supabase.from("monthly_bills").insert([
-        {
-          ...billData,
-          invoice_number: invoiceNumber,
-          total_bill: total_bill,
-          pending_bill: total_bill,
-          arrears: previousArrears,
-          reconciliation_ids: [],
-          status: "Pending",
-        },
-      ]);
-
-      if (result.error) throw result.error;
-
-      // ✅ Bill successfully posted
-      toast.success("Bill posted successfully!");
-
-      // ✅ Now send email with invoice attachment
-      setStatus(`Sending invoice email to ${billData.email}...`);
-
-      // Convert invoice HTML to PDF (Same logic as before)
-      if (!invoiceRef.current) {
-        console.error("[ERROR] Invoice reference not found!");
-        toast.error("Error: Invoice not found.");
-        return false;
-      }
-
-      console.log("[INFO] Generating PDF...");
-
-      const pdfBlob = await html2pdf().from(invoiceRef.current).toBlob();
-
-      // Convert PDF Blob to Base64
+      // ✅ Convert Blob to Base64
       const reader = new FileReader();
       reader.readAsDataURL(pdfBlob);
+
       reader.onloadend = async () => {
-        const base64PDF = reader.result?.toString().split(",")[1];
+        // ✅ Null check before using `reader.result`
+        if (!reader.result) {
+          toast.error("Failed to generate PDF. Please try again.");
+          return;
+        }
 
-        console.log("[INFO] Sending request to /api/sendmail...");
+        const pdfBase64 = reader.result.toString().split(",")[1]; // Extract base64 data
 
-        const emailData = {
-          userEmail: billData.email, // Send email from bill data
-          subject: "Your Invoice",
-          message: "Please find attached your invoice for this month.",
-          pdfAttachment: base64PDF, // Attach PDF as base64
-          filename: `Invoice-${invoiceNumber}.pdf`,
-        };
-
-        console.log("[INFO] Sending the following data:", emailData);
-
+        // ✅ Send email with PDF as an attachment
         const response = await fetch("/api/sendmail", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(emailData),
+          body: JSON.stringify({
+            userEmail: billData.email, // Ensure the email is passed correctly
+            subject: "Invoice from Greenlight Energy",
+            htmlContent: `Please find attached your invoice.`,
+            attachment: pdfBase64, // Sending Base64 encoded PDF
+          }),
         });
 
         const result = await response.json();
-        console.log("[INFO] Response received:", result);
-
         if (response.ok) {
-          toast.success(`Email sent successfully to ${billData.email}! ✅`);
-          setStatus(`Email sent successfully to ${billData.email}! ✅`);
+          toast.success(
+            `Invoice email sent successfully to ${billData.email}! ✅`,
+          );
         } else {
-          console.error("[ERROR] Failed to send email:", result.error);
-          toast.error(`Error: ${result.error}`);
+          toast.error(`Error sending email: ${result.error}`);
         }
       };
     } catch (error) {
-      console.error("[ERROR] Failed to post/send email:", error);
+      console.error("[ERROR] Failed to process bill or send email:", error);
+      toast.error("An error occurred. Please try again.");
+    }
+  };
+
+  const handlePostAndEmailAllBills = async () => {
+    const parameter = parameters[0]; // Using the first parameter from the parameters list
+
+    // Process bills for selected customers
+    const billsToProcess = selectedCustomers
+      .map((customerId) => {
+        const customer = customerData.find((c) => c.id === customerId); // Fetching customer data
+        if (!customer) return null; // If no customer found, skip it
+
+        const customerEnergySums = energySums?.[customerId] || {}; // Fetch energy sums for the customer
+        const consumptionValue =
+          typeof customerEnergySums?.Consumption === "number"
+            ? customerEnergySums.Consumption
+            : 500;
+        const exportValue =
+          typeof customerEnergySums?.FeedIn === "number"
+            ? customerEnergySums.FeedIn
+            : 50;
+
+        // Calculate the bill for this customer
+        const billResult = calculateBilling({
+          energyConsumed: consumptionValue,
+          startDate: new Date(startDate || ""),
+          endDate: new Date(endDate || ""),
+          fuelRate: parameter?.fuelRate || 0.14304,
+          energyExported: exportValue,
+          basePrice: parameter?.basePrice || 0.15,
+          feedInPrice: parameter?.feedInPrice || 0.5,
+          belcodisc: parameter?.belcodisc || 0.8,
+          ra_fee: parameter?.ra_fee || 0.00635,
+          export_rate: parameter?.export_rate || 0.2265,
+          tier1: parameter?.tier1 || 0.13333,
+          tier2: parameter?.tier2 || 0.2259,
+          tier3: parameter?.tier3 || 0.3337,
+          scaling: customer?.scaling_factor || 1,
+          price: customer?.price || 0.31,
+        });
+
+        // Validate that necessary fields are present before proceeding
+        if (
+          !customer?.site_name ||
+          !customer?.email ||
+          !startDate ||
+          !endDate ||
+          !billResult.finalRevenue ||
+          !billResult.belcoTotal ||
+          !billResult.belcoPerKwh
+        ) {
+          toast.error(
+            `Missing required data for customer ${customer?.site_name}`,
+          );
+          return null; // Skip this bill if any required data is missing
+        }
+
+        return {
+          customer_id: customer.id,
+          site_name: customer.site_name || "N/A",
+          email: customer.email || "N/A",
+          address: customer.address || "N/A",
+          billing_period_start: startDate,
+          billing_period_end: endDate,
+          total_cost: billResult.belcoTotal.toFixed(2),
+          energy_rate: billResult.belcoPerKwh.toFixed(2),
+          total_PTS: consumptionValue || 666999,
+          status: "Pending",
+        };
+      })
+      .filter(Boolean); // Filter out any null values (invalid bills)
+
+    console.log("Bills to process:", billsToProcess);
+
+    let successCount = 0;
+    let failureCount = 0;
+
+    // Loop over each bill and process it
+    for (const billData of billsToProcess) {
+      console.log("Processing bill:", billData);
+
+      // Check if the bill already exists for the same customer and date range
+      const { data: existingBills, error: fetchError } = await supabase
+        .from("monthly_bills")
+        .select("id")
+        .eq("site_name", billData?.site_name)
+        .eq("billing_period_start", billData?.billing_period_start)
+        .eq("billing_period_end", billData?.billing_period_end);
+
+      if (fetchError) {
+        toast.error("Error fetching existing bills. Please try again.");
+        console.error(fetchError);
+        failureCount++;
+        continue; // Skip this bill
+      }
+
+      if (existingBills && existingBills.length > 0) {
+        // Skip posting the bill if it already exists for the same customer and period
+        failureCount++;
+        continue;
+      }
+
+      // Now directly send the email (without calling handlePostBill)
+      try {
+        // Call handleEmailBill to send the email with PDF for this bill
+        await handleEmailBill(billData);
+        successCount++;
+      } catch (emailError) {
+        console.error("Failed to send email for bill:", emailError);
+        failureCount++;
+      }
+    }
+
+    // Log the final success and failure counts
+    console.log("Final success count:", successCount);
+    console.log("Final failure count:", failureCount);
+
+    // Display toast messages based on success/failure
+    if (failureCount === 0) {
+      toast.success(`Successfully emailed all ${successCount} bills!`);
+    } else {
       toast.error(
-        "Failed to process the request. Check the console for details.",
+        `Successfully emailed ${successCount} bills. Failed to email ${failureCount} bills. Check console for details.`,
       );
-      return false;
     }
   };
 
@@ -727,11 +802,13 @@ const BillModal: React.FC<BillModalProps> = ({
                 const billData = {
                   site_name: customer?.site_name || "N/A",
                   email: customer?.email || "N/A",
+
                   address: customer?.address || "N/A",
                   billing_period_start: startDate,
                   billing_period_end: endDate,
                   total_cost: billResult.belcoTotal.toFixed(2),
                   energy_rate: billResult.belcoPerKwh.toFixed(2),
+                  message: parameter.message,
                   total_revenue: billResult.finalRevenue.toFixed(2),
                   total_PTS: billResult.totalpts || "69",
                   status: "Pending",
@@ -804,9 +881,7 @@ const BillModal: React.FC<BillModalProps> = ({
                           Remove
                         </button>
                         <button
-                          onClick={() =>
-                            handleEmailBill(customer.email, customer.id)
-                          }
+                          onClick={() => handleEmailBill(billData)}
                           className="rounded bg-green-200 px-4 py-2 text-gray-800 hover:bg-green-300"
                         >
                           Post and Email
@@ -829,6 +904,12 @@ const BillModal: React.FC<BillModalProps> = ({
                   className="rounded bg-gray-3 px-4 py-2 text-dark-2 hover:bg-gray-4"
                 >
                   Close
+                </button>
+                <button
+                  onClick={() => handlePostAndEmailAllBills()}
+                  className="rounded bg-green-200 px-4 py-2 text-gray-800 hover:bg-green-300"
+                >
+                  Post and Email All
                 </button>
                 <button
                   onClick={handlePostAllBills}
