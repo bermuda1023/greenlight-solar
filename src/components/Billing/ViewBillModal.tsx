@@ -1,6 +1,7 @@
-import React, { useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import html2pdf from "html2pdf.js";
 import Image from "next/image";
+import { supabase } from "@/utils/supabase/browserClient";
 
 interface Bill {
   id: string;
@@ -13,6 +14,7 @@ interface Bill {
   self_consumption_kwh: number;
   export_kwh: number;
   total_cost: number;
+  total_PTS:number;
   energy_rate: number;
   total_revenue: number;
   status: string;
@@ -20,13 +22,40 @@ interface Bill {
   arrears: number;
   invoice_number: string;
 }
+interface Parameters {
+  id: string;
+  fuelRate: number;
+  feedInPrice: number;
+  basePrice: number;
+  message: string;
+}
 
 const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
   closeModal,
   bill,
 }) => {
   const invoiceRef = useRef<HTMLDivElement>(null);
+  const [parameters, setParameters] = useState<Parameters[]>([]);
+    const [error, setError] = useState<string | null>(null);
+  
+const fetchParameters = useCallback(async () => {
+  try {
+    const { data, error: fetchError } = await supabase
+      .from("parameters")
+      .select("*");
+    if (fetchError) throw fetchError;
+    console.log("Fetched parameters:", data); // Check what data is being fetched
+    setParameters(data || []);
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Error fetching parameters");
+  }
+}, []);
 
+
+
+    useEffect(() => {
+      fetchParameters();
+        }, [fetchParameters]);
   const generatePDF = () => {
     if (invoiceRef.current) {
       const options = {
@@ -47,13 +76,14 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
     }
   };
 
+
+  
   // Calculate totals
-  // const totalPeriodBalance = bill.total_cost - bill.total_revenue;
-  const totalPeriodBalance = bill.total_revenue;
   const overdueBalance = bill.arrears || 0;
-  const balanceDue = totalPeriodBalance + overdueBalance;
+  const balanceDue = bill.total_revenue + overdueBalance;
 
   return (
+    
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-gray-600 bg-opacity-50"
       onClick={closeModal}
@@ -141,7 +171,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                 </td>
                 <td className="p-3 text-xs text-gray-600">Energy Produced</td>
                 <td className="p-3 text-xs text-gray-600">
-                  {bill.production_kwh}
+                  {bill.total_PTS}
                 </td>
                 <td className="p-3 text-xs text-gray-600">
                   ${bill.energy_rate.toFixed(4)}
@@ -157,7 +187,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
             <p className="text-sm font-semibold text-gray-800">
               TOTAL PERIOD BALANCE{" "}
               <span className="ml-20 text-black">
-                ${totalPeriodBalance.toFixed(2)}
+                ${bill.total_revenue.toFixed(2)}
               </span>
             </p>
             <p className="text-sm font-bold text-black">
@@ -188,26 +218,30 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
           </section>
 
           <footer className="mt-12 grid grid-cols-3 gap-12 text-gray-800">
-            <div className="col-span-1">
-              <p className="text-center text-sm">
-                Thank you for doing business with us!
-              </p>
-            </div>
-            <div className="col-span-1 text-xs ">
-              <p>
-                Greenlight Financing Ltd. #48 Par-la-ville Road, Suite 1543,
-                Hamilton, HM11
-              </p>
-            </div>
-            <div className="col-span-1 text-xs">
-              <a
-                href="mailto:billing@greenlightenergy.bm"
-                className="text-blue-700 underline"
-              >
-                billing@greenlightenergy.bm Phone: 1 (441) 705 3033
-              </a>
-            </div>
-          </footer>
+  <div className="col-span-1">
+
+    <p className="text-center text-sm">
+      {parameters.length > 0
+        ? parameters[0].message // Use the message from the first parameter
+        : "Thank you for doing business with us!"} {/* Fallback if no parameters */}
+    </p>
+  </div>
+  <div className="col-span-1 text-xs ">
+    <p>
+      Greenlight Financing Ltd. #48 Par-la-ville Road, Suite 1543,
+      Hamilton, HM11
+    </p>
+  </div>
+  <div className="col-span-1 text-xs">
+    <a
+      href="mailto:billing@greenlightenergy.bm"
+      className="text-blue-700 underline"
+    >
+      billing@greenlightenergy.bm Phone: 1 (441) 705 3033
+    </a>
+  </div>
+</footer>
+
         </div>
 
         {/* Buttons */}

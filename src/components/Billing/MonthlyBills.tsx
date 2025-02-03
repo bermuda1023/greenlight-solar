@@ -3,12 +3,13 @@ import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/utils/supabase/browserClient";
 import ViewBillModal from "./ViewBillModal";
 import { FaRegFilePdf, FaRegTrashAlt } from "react-icons/fa";
-import { useRouter, useSearchParams } from "next/navigation";
 import { LiaFileInvoiceDollarSolid } from "react-icons/lia";
 import TransactionsModal from "./TransactionsModal";
-
+import { useSearchParams } from "next/navigation";
+import { toast } from "react-toastify";
 interface Bill {
   id: string;
+  customer_id: string;
   site_name: string;
   email: string;
   address: string;
@@ -21,6 +22,7 @@ interface Bill {
   energy_rate: number;
   total_revenue: number;
   total_bill: number;
+  total_PTS: number;
   status: string;
   created_at: string;
   arrears: number;
@@ -33,13 +35,13 @@ interface Transaction {
   date: string;
   description: string;
   amount: number;
+  total_bill: number;
   paid_amount: number;
   pending_amount: number;
   status: string;
   created_at: string;
   bill_id: string;
 }
-
 const BillingScreen = () => {
   const [bills, setBills] = useState<Bill[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -54,13 +56,21 @@ const BillingScreen = () => {
   const [isTransactionsModalOpen, setIsTransactionsModalOpen] = useState(false);
 
   const searchParams = useSearchParams();
-  const highlightId = searchParams.get("highlightId");
+  const highlightId = searchParams?.get("highlightId");
 
-  const router = useRouter();
+  useEffect(() => {
+    if (highlightId) {
+      const element = document.getElementById(`transaction-${highlightId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
+        element.classList.add("bg-primary/0.1"); // Add a highlight class
+        setTimeout(() => {
+          element.classList.remove("bg-primary/0.1");
+        }, 3000); // Remove highlight after 3 seconds
+      }
+    }
+  }, [highlightId]);
 
-  const closeModal = () => {
-    setOpenBillModal(false);
-  };
 
   const fetchBills = useCallback(async () => {
     try {
@@ -142,27 +152,23 @@ const BillingScreen = () => {
     }
   
     try {
+      // Fetch all transactions that have this billId in their reconciliation_ids array
       const { data: transactions, error: transactionsError } = await supabase
-        .from("reconciliation")
+        .from("transactions")
         .select("*")
-        .eq("bill_id", billId)
+        .in("id", bill.reconciliation_ids || [])
         .order("date", { ascending: false });
   
       if (transactionsError) throw transactionsError;
   
-      // Add the total_bill to each transaction
-      const enrichedTransactions = transactions.map((transaction) => ({
-        ...transaction,
-        total_bill: bill.total_bill,
-      }));
-  
-      setTransactions(enrichedTransactions);
+      setTransactions(transactions);
       setIsTransactionsModalOpen(true);
     } catch (err) {
       console.error("Error fetching transactions:", err);
       alert("Failed to fetch transactions. Please try again.");
     }
   };
+  
   
 
   const handleDeleteBill = async (billId: string) => {
@@ -177,10 +183,10 @@ const BillingScreen = () => {
       // Update the state to remove the deleted bill from the UI
       setBills((prevBills) => prevBills.filter((bill) => bill.id !== billId));
 
-      alert("Bill deleted successfully.");
+      toast.success("Bill deleted successfully.");
     } catch (err) {
       console.error("Error deleting bill:", err);
-      alert("Failed to delete the bill. Please try again.");
+      toast.error("Failed to delete the bill. Please try again.");
     }
   };
 
@@ -268,9 +274,11 @@ const BillingScreen = () => {
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Billing Period
                         </th>
+
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Total Cost ($)
+                          Total Energy Consumption
                         </th>
+
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Energy Rate ($/kWh)
                         </th>
@@ -294,6 +302,7 @@ const BillingScreen = () => {
                     <tbody>
                       {bills.map((bill) => (
                         <tr
+                          id={`transaction-${bill.id}`}
                           key={bill.id}
                           className={`${bill.id === highlightId ? "bg-primary/[.1] transition-colors duration-1000" : "border-b border-stroke dark:border-dark-3"}`}
                         >
@@ -312,17 +321,19 @@ const BillingScreen = () => {
                               bill.billing_period_end,
                             )}
                           </td>
+
                           <td className="px-6.5 py-4 text-sm dark:text-white">
-                            ${bill.total_cost.toFixed(2)}
+                            {bill.total_PTS}
+                          </td>
+
+                          <td className="px-6.5 py-4 text-sm dark:text-white">
+                            ${bill.energy_rate}
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
-                            ${bill.energy_rate.toFixed(2)}
+                            ${bill.total_revenue}
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
-                            ${bill.total_revenue.toFixed(2)}
-                          </td>
-                          <td className="px-6.5 py-4 text-sm dark:text-white">
-                            ${bill.total_bill.toFixed(2)}
+                            ${bill.total_revenue}
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             ${bill.arrears.toFixed(2)}
@@ -357,7 +368,6 @@ const BillingScreen = () => {
                               key={bill.id}
                               onClick={() => handleOpenBillModal(bill)}
                               className="rounded-lg bg-green-50 p-2 text-primary transition hover:bg-primary hover:text-green-50"
-                              title="Open Bill"
                             >
                               <span className="text-xl">
                                 <FaRegFilePdf />
@@ -366,14 +376,12 @@ const BillingScreen = () => {
                             <button
                               onClick={() => handleDeleteBill(bill.id)}
                               className="rounded-lg bg-red-50 p-2 text-red-600 transition hover:bg-red-600 hover:text-red-50"
-                              title="Delete Bill"
                             >
                               <span className="text-xl">
                                 <FaRegTrashAlt />
                               </span>
                             </button>
                           </td>
-
                           {openbillModal && selectedBill && (
                             <ViewBillModal
                               closeModal={() => setOpenBillModal(false)}

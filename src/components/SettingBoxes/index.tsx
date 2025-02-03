@@ -3,11 +3,12 @@
 import React, { useState, useEffect } from "react";
 import { FaUser, FaPhone, FaEnvelope, FaLock } from "react-icons/fa";
 import { supabase } from "@/utils/supabase/browserClient";
+import { toast } from "react-toastify";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
 
 const SettingBoxes = () => {
   const [showUpdateForm, setShowUpdateForm] = useState(false);
-
-  const [showPassForm, setShowPassForm] = useState(false);
 
   const [profile, setProfile] = useState({
     full_name: "",
@@ -17,11 +18,15 @@ const SettingBoxes = () => {
     password: "",
   });
 
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const toggleForm = () => {
     setShowUpdateForm(!showUpdateForm);
-  };
-  const togglePassForm = () => {
-    setShowPassForm(!showPassForm);
   };
 
   useEffect(() => {
@@ -111,6 +116,53 @@ const SettingBoxes = () => {
     }
   };
 
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (newPassword !== confirmPassword) {
+      toast.error("New password and confirm password do not match.");
+      return;
+    }
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        toast.error("User is not authenticated.");
+        return;
+      }
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email!,
+        password: currentPassword,
+      });
+
+      if (signInError) {
+        toast.error("Current password is incorrect.");
+        return;
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (updateError) {
+        toast.error("Failed to update password.");
+        return;
+      }
+
+      toast.success("Password updated successfully.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: any) {
+      toast.error("An error occurred while updating the password.");
+      console.error(err);
+    }
+  };
+
   return (
     <>
       <div className="flex items-center justify-between">
@@ -119,28 +171,7 @@ const SettingBoxes = () => {
           <p className="text-sm text-gray-500">View and manage your Profile</p>
         </div>
 
-        <div className="inline-flex gap-2">
-          <div>
-          {!showPassForm && (
-            <button
-              onClick={togglePassForm}
-              className="hover:bg-primary-dark rounded-md bg-red px-4 py-2 text-white"
-            >
-              Reset Password
-            </button>            )}
-
-          </div>
-          <div>
-            {!showUpdateForm && (
-              <button
-                onClick={toggleForm}
-                className="hover:bg-primary-dark rounded-md bg-primary px-4 py-2 text-white"
-              >
-                Edit Info
-              </button>
-            )}
-          </div>
-        </div>
+        <div className="inline-flex gap-2"></div>
       </div>
 
       <div className="grid grid-cols-2 gap-8">
@@ -148,10 +179,21 @@ const SettingBoxes = () => {
         {!showUpdateForm && (
           <div className="col-span-5 xl:col-span-3">
             <div className="rounded-lg border border-stroke bg-white shadow-md dark:border-dark-3 dark:bg-gray-dark">
-              <div className="border-b border-stroke px-7 py-4">
+              <div className="flex justify-between border-b border-stroke px-7 py-4">
                 <h3 className="font-medium text-dark dark:text-white">
                   Personal Information
                 </h3>
+
+                <div>
+                  {!showUpdateForm && (
+                    <button
+                      onClick={toggleForm}
+                      className="hover:bg-primary-dark rounded-md bg-primary px-4 py-2 text-white"
+                    >
+                      Edit Info
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="p-7">
                 <form>
@@ -315,6 +357,9 @@ const SettingBoxes = () => {
                     <button
                       type="submit"
                       className="rounded-lg bg-primary px-6 py-2 font-medium text-white hover:bg-opacity-90"
+                      onClick={() =>
+                        toast.success("Your changes have been saved!")
+                      }
                     >
                       Save
                     </button>
@@ -326,90 +371,109 @@ const SettingBoxes = () => {
         )}
 
         {/* Update Password Section */}
-        {showPassForm && (
-          <div className="col-span-5 xl:col-span-3">
-            <div className="rounded-lg border border-stroke bg-white shadow-md dark:border-dark-3 dark:bg-gray-dark">
-              <div className="border-b border-stroke px-7 py-4">
-                <h3 className="font-medium text-dark dark:text-white">
-                  Update Password
-                </h3>
-              </div>
-              <div className="p-7">
-                <form onSubmit={handleSubmit}>
-                  <div className="mb-5.5 flex flex-col gap-5.5 sm:flex-row">
-                    <div className="sm: w-full">
-                      <label className="mb-3 block font-medium text-dark dark:text-white">
-                        Current Password
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2">
-                          <FaLock className="text-gray-500" />
-                        </span>
-                        <input
-                          name="full_name"
-                          className="w-full rounded-lg border border-stroke bg-white py-3 pl-12 pr-4 text-dark focus:border-primary focus-visible:outline-none"
-                          type="text"
-                          placeholder="Enter your Current Password"
-                          defaultValue={profile.password}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mb-5.5 flex flex-col gap-5.5 sm:flex-row">
-                    <div className="w-full sm:w-1/2">
-                      <label className="mb-3 block font-medium text-dark dark:text-white">
-                        New Password
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2">
-                          <FaLock className="text-gray-500" />
-                        </span>
-                        <input
-                          className="w-full rounded-lg border border-stroke bg-white py-3 pl-12 pr-4 text-dark focus:border-primary focus-visible:outline-none"
-                          type="email"
-                          placeholder="Enter your New Password"
-                        />
-                      </div>
-                    </div>
-                    <div className="w-full sm:w-1/2">
-                      <label className="mb-3 block font-medium text-dark dark:text-white">
-                        Confirm New Password
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2">
-                          <FaLock className="text-gray-500" />
-                        </span>
-                        <input
-                          name="phone"
-                          className="w-full rounded-lg border border-stroke bg-white py-3 pl-12 pr-4 text-dark focus:border-primary focus-visible:outline-none"
-                          type="text"
-                          placeholder="Confirm your password"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-3">
+        <div className="col-span-5 xl:col-span-3">
+          <div className="rounded-lg border border-stroke bg-white shadow-md dark:border-dark-3 dark:bg-gray-dark">
+            <div className="border-b border-stroke px-7 py-4">
+              <h3 className="font-medium text-dark dark:text-white">
+                Reset Password
+              </h3>
+            </div>
+            <div className="p-7">
+              <form onSubmit={handlePasswordReset}>
+                <div className="mb-4">
+                  <label className="mb-2.5 block font-medium text-dark dark:text-white">
+                    Current Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showCurrentPassword ? "text" : "password"}
+                      placeholder="Enter your current password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      className="w-full rounded-lg border border-stroke bg-transparent py-[15px] pl-6 pr-11 font-medium text-dark outline-none focus:border-primary"
+                    />
                     <button
-                      onClick={togglePassForm}
                       type="button"
-                      className="rounded-lg border border-stroke px-6 py-2 font-medium text-dark hover:shadow-1 dark:text-white"
+                      onClick={() =>
+                        setShowCurrentPassword(!showCurrentPassword)
+                      }
+                      className="absolute right-4 top-1/2 -translate-y-1/2 transform text-gray-500"
                     >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={togglePassForm}
-                      type="submit"
-                      className="rounded-lg bg-primary px-6 py-2 font-medium text-white hover:bg-opacity-90"
-                    >
-                      Save
+                      {showCurrentPassword ? (
+                        <FontAwesomeIcon icon={faEyeSlash} />
+                      ) : (
+                        <FontAwesomeIcon icon={faEye} />
+                      )}
                     </button>
                   </div>
-                </form>
-              </div>
+                </div>
+
+                <div className="mb-4">
+                  <label className="mb-2.5 block font-medium text-dark dark:text-white">
+                    New Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? "text" : "password"}
+                      placeholder="Enter your new password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="w-full rounded-lg border border-stroke bg-transparent py-[15px] pl-6 pr-11 font-medium text-dark outline-none focus:border-primary"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 transform text-gray-500"
+                    >
+                      {showNewPassword ? (
+                        <FontAwesomeIcon icon={faEyeSlash} />
+                      ) : (
+                        <FontAwesomeIcon icon={faEye} />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <label className="mb-2.5 block font-medium text-dark dark:text-white">
+                    Confirm Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder="Confirm your new password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full rounded-lg border border-stroke bg-transparent py-[15px] pl-6 pr-11 font-medium text-dark outline-none focus:border-primary"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
+                      className="absolute right-4 top-1/2 -translate-y-1/2 transform text-gray-500"
+                    >
+                      {showConfirmPassword ? (
+                        <FontAwesomeIcon icon={faEyeSlash} />
+                      ) : (
+                        <FontAwesomeIcon icon={faEye} />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-primary px-6 py-2 font-medium text-white hover:bg-opacity-90"
+                  >
+                    Reset Password
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
-        )}
+        </div>
       </div>
     </>
   );

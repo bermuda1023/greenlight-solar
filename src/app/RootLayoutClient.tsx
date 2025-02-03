@@ -9,8 +9,7 @@ export default function RootLayoutClient({
   children: React.ReactNode;
 }) {
   const [loading, setLoading] = useState<boolean>(true);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
+  
   useEffect(() => {
     setTimeout(() => setLoading(false), 1000);
   }, []);

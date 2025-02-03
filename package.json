@@ -9,10 +9,15 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^6.7.2",
+    "@fortawesome/free-solid-svg-icons": "^6.7.2",
+    "@fortawesome/react-fontawesome": "^0.2.2",
+    "@heroicons/react": "^2.2.0",
     "@radix-ui/react-dialog": "^1.1.4",
     "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/supabase-js": "^2.47.10",
     "apexcharts": "^3.45.2",
+    "date-fns": "^4.1.0",
     "flatpickr": "^4.6.13",
     "flowbite": "^2.5.2",
     "flowbite-react": "^0.10.2",
@@ -24,9 +29,11 @@
     "react": "^18",
     "react-apexcharts": "^1.4.1",
     "react-dom": "^18",
+    "react-fontawesome": "^1.7.1",
     "react-quill": "^2.0.0",
     "react-select": "^5.8.0",
-    "react-table": "^7.8.0"
+    "react-table": "^7.8.0",
+    "react-toastify": "^11.0.3"
   },
   "devDependencies": {
     "@types/node": "^20",

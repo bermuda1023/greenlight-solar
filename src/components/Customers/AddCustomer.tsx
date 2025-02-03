@@ -4,6 +4,9 @@ import { supabase } from "@/utils/supabase/browserClient";
 import flatpickr from "flatpickr";
 import "flatpickr/dist/flatpickr.css"; // Import Flatpickr CSS
 
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+
 const AddCustomer = () => {
   const [formData, setFormData] = useState({
     email: "",
@@ -12,8 +15,7 @@ const AddCustomer = () => {
     solar_api_key: "",
     installation_date: "",
     installed_capacity: "",
-    electricity_tariff: "",
-    status: "Pending",
+    site_ID: "",
   });
 
   const [error, setError] = useState<string | null>(null);
@@ -31,10 +33,28 @@ const AddCustomer = () => {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    toast.dismiss();  // Dismiss previous toasts before showing new ones
     setError(null);
     setSuccess(null);
     setIsSubmitting(true);
-
+  
+    // Check if any required fields are empty
+    const requiredFields = [
+      formData.email,
+      formData.address,
+      formData.site_name,
+      formData.solar_api_key,
+      formData.installation_date,
+      formData.installed_capacity,
+      formData.site_ID,
+    ];
+  
+    if (requiredFields.some(field => !field)) {
+      toast.error("Please fill out all the fields."); // Toast error if any field is empty
+      setIsSubmitting(false); // Stop submission process
+      return;
+    }
+  
     try {
       const { error } = await supabase.from("customers").insert([
         {
@@ -44,16 +64,16 @@ const AddCustomer = () => {
           solar_api_key: formData.solar_api_key,
           installation_date: formData.installation_date,
           installed_capacity: formData.installed_capacity,
-          electricity_tariff: formData.electricity_tariff,
-          status: formData.status,
+          site_ID: formData.site_ID,
         },
       ]);
-
+  
       if (error) {
         throw error;
       }
-
-      setSuccess("Customer added successfully!");
+  
+      toast.success("Customer added successfully!"); // Toast success message
+  
       setFormData({
         email: "",
         address: "",
@@ -61,15 +81,16 @@ const AddCustomer = () => {
         solar_api_key: "",
         installation_date: "",
         installed_capacity: "",
-        electricity_tariff: "",
-        status: "Pending",
+        site_ID: "",
       });
     } catch (error) {
+      toast.error("Failed to add customer. Please try again."); // Toast error if something goes wrong
       setError("Failed to add customer. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
+  
 
   useEffect(() => {
     const installDatePicker = flatpickr("#installDate", {
@@ -191,21 +212,21 @@ const AddCustomer = () => {
                 name="installed_capacity"
                 value={formData.installed_capacity}
                 onChange={handleChange}
-                placeholder="5 KWH"
+                placeholder="5"
                 className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
                 disabled={isSubmitting}
               />
             </div>
             <div className="w-full xl:w-1/2">
               <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
-                Electricity Tariff
+                Site ID
               </label>
               <input
                 type="text"
-                name="electricity_tariff"
-                value={formData.electricity_tariff}
+                name="site_ID"
+                value={formData.site_ID}
                 onChange={handleChange}
-                placeholder="$0.0163"
+                placeholder="Enter Site ID"
                 className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
                 disabled={isSubmitting}
               />

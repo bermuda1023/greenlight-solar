@@ -23,7 +23,7 @@ export const calculateBilling = (inputs: {
   const numberOfDays =
     (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
 
-  if (numberOfDays <= 0) {
+  if (numberOfDays < 0) {
     throw new Error("Invalid date range: End date must be after start date.");
   }
 
@@ -49,15 +49,18 @@ export const calculateBilling = (inputs: {
   belcoTotal += energyConsumed * fuelRate; // Fuel Fee
   belcoTotal -= 0.2265 * energyExported; // Export Rate
 
-  // Calculate belco per kWh
-  const belcoPerKwh = belcoTotal / energyConsumed;
+  const belcoPerKwhh = belcoTotal / energyConsumed;
+
 
   // Calculate final revenue
-  const effectivePrice = Math.max(belcoPerKwh * 0.8, basePrice);
+  const effectivePrice = Math.max(belcoPerKwhh * 0.8, basePrice);
   const consumptionRevenue = effectivePrice * energyConsumed;
   const exportRevenue = feedInPrice * energyExported;
   const totalRevenue = consumptionRevenue + exportRevenue;
 
+
+  // Calculate energy rate per kWh
+  const belcoPerKwh = totalRevenue / energyConsumed;
   return {
     totalpts,
     numberOfDays,

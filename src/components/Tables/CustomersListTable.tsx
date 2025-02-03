@@ -1,13 +1,13 @@
 "use client";
-
 import React, { useState, useEffect, useCallback } from "react";
 import { FaArrowLeft, FaArrowRight, FaRegTrashAlt } from "react-icons/fa";
-import { HiOutlineTrash, HiOutlineUser } from "react-icons/hi2";
 import { AiOutlineSearch } from "react-icons/ai";
 import { TbReceipt } from "react-icons/tb";
 import flatpickr from "flatpickr";
 import { supabase } from "@/utils/supabase/browserClient";
 import BillModal from "../Billing/BillModal";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 interface Customer {
   id: string;
@@ -17,9 +17,13 @@ interface Customer {
   solar_api_key: string;
   installation_date: string;
   installed_capacity: number;
+  site_ID: number;
   created_at: string;
+  consump_kwh: number; // Total consumption
+  self_cons_kwh: number; // Self-consumption
+  export_kwh: number; // Energy exported
+  production_kwh: number; // Energy produced
 }
-
 
 const CustomersListTable = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -32,10 +36,15 @@ const CustomersListTable = () => {
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [currentPage] = useState(1);
+  const [pageSize] = useState(10);
   const [totalCount, setTotalCount] = useState(0);
   const [showBillModal, setShowBillModal] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  // State for managing the customer ID for deletion
+  const [customerIdToDelete, setCustomerIdToDelete] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     const startDatePicker = flatpickr("#startDate", {
@@ -134,6 +143,7 @@ const CustomersListTable = () => {
       if (fetchError) throw fetchError;
 
       setCustomers(data || []);
+      console.log(data);
       setError(null);
     } catch (err) {
       setError(
@@ -172,6 +182,7 @@ const CustomersListTable = () => {
       setDateError(
         "Please select both Start Date and End Date before generating the bill.",
       );
+      toast.error("Please select both Start Date and End Date.");
       return false;
     }
 
@@ -180,7 +191,7 @@ const CustomersListTable = () => {
 
     if (end < start) {
       setDateError("End Date cannot be earlier than Start Date");
-      alert("End Date cannot be earlier than Start Date");
+      toast.error("End Date cannot be earlier than Start Date.");
       return false;
     }
 
@@ -189,7 +200,7 @@ const CustomersListTable = () => {
 
   const validateCustomerSelection = () => {
     if (selectedCustomers.length === 0) {
-      alert("Please select at least one customer.");
+      toast.error("Please select at least one customer.");
       return false;
     }
     return true;
@@ -210,9 +221,41 @@ const CustomersListTable = () => {
     if (!customersValid) {
       return;
     }
-
-    // If all validations pass, open the modal
     setShowBillModal(true);
+  };
+
+  const handleDelete = async (customerId: string) => {
+    // Specify the type as string
+    try {
+      // Perform the deletion using the customer ID
+      const { error } = await supabase
+        .from("customers")
+        .delete()
+        .eq("id", customerId); // Use the customer ID directly
+
+      if (error) throw error; // Handle any error that occurred during deletion
+
+      // If no error, refetch the updated list of customers
+      fetchCustomers(); // Refetch customers to update the list
+
+      toast.success("Customer has been deleted.");
+
+      // Close the modal
+      setDeleteModalOpen(false);
+    } catch (err) {
+      console.error("Error deleting customer:", err);
+      toast.error("Failed to delete the customer. Please try again.");
+    }
+  };
+
+  const handleClose = () => {
+    // Close the modal without doing anything
+    setDeleteModalOpen(false);
+  };
+
+  const handleDeleteClick = (customerId: string) => {
+    setCustomerIdToDelete(customerId);
+    setDeleteModalOpen(true); // Open the modal
   };
 
   return (
@@ -254,7 +297,6 @@ const CustomersListTable = () => {
           </button>
         </div>
       </div>
-
       <div className="flex flex-col gap-10">
         <div className="rounded-[10px] border border-stroke bg-white shadow-1 dark:border-dark-3 dark:bg-gray-dark dark:shadow-card">
           <div className="p-4">
@@ -334,6 +376,9 @@ const CustomersListTable = () => {
                         Address
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                        Site ID
+                      </th>
+                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Solar API Key
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
@@ -342,6 +387,7 @@ const CustomersListTable = () => {
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Installed Capacity
                       </th>
+
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Action
                       </th>
@@ -371,34 +417,26 @@ const CustomersListTable = () => {
                           {customer.address}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
+                          {customer.site_ID}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.solar_api_key}
                         </td>
-                        {/* <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                        {new Date(customer.created_at).toLocaleDateString()}
-                        </td> */}
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.installation_date}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.installed_capacity}
                         </td>
+
                         {/* Action button */}
                         <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">
                           <button
-                            // key={customer.id}
-                            onClick={() => {}}
-                            className="rounded-lg bg-green-50 p-2 text-primary transition hover:bg-primary hover:text-green-50"
-                          >
-                            <span className="text-xl">
-                              <HiOutlineUser />
-                            </span>
-                          </button>
-                          <button
-                            onClick={() => {}}
+                            onClick={() => handleDeleteClick(customer.id)}
                             className="rounded-lg bg-red-50 p-2 text-red-600 transition hover:bg-red-600 hover:text-red-50"
                           >
                             <span className="text-xl">
-                              <HiOutlineTrash />
+                              <FaRegTrashAlt />
                             </span>
                           </button>
                         </td>
@@ -440,16 +478,43 @@ const CustomersListTable = () => {
           </div>
         </div>
       </div>
-
       {/* Bill Generation Modal */}
-      {showBillModal && (
+      <ToastContainer />{" "}
+      {/* Toast container for displaying notifications globally */}
+      {showBillModal && ( // Conditional rendering based on showBillModal state
         <BillModal
           selectedCustomers={selectedCustomers}
           customers={customers}
           startDate={startDate}
           endDate={endDate}
-          onClose={() => setShowBillModal(false)}
+          onClose={() => setShowBillModal(false)} // Close the modal by setting showBillModal to false
         />
+      )}
+      {deleteModalOpen && (
+        <div className="fixed inset-0 z-999 flex items-center justify-center bg-gray-500 bg-opacity-50">
+          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-lg">
+            <h3 className="mb-4 text-center text-lg font-semibold">
+              Confirm Deletion
+            </h3>
+            <p className="mb-4 text-center">
+              Are you sure you want to delete the selected customer?
+            </p>
+            <div className="flex justify-between">
+              <button
+                onClick={handleClose}
+                className="rounded-md bg-gray-300 px-4 py-2 text-black hover:bg-gray-400"
+              >
+                No
+              </button>
+              <button
+                onClick={() => handleDelete(customerIdToDelete!)} // Use non-null assertion operator for customerIdToDelete
+                className="rounded-md bg-red-500 px-4 py-2 text-white hover:bg-red-600"
+              >
+                Yes
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
