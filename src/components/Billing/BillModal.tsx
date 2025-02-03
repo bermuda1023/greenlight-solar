@@ -30,6 +30,11 @@ interface Parameters {
   tier2: number;
   tier3: number;
 }
+interface MonthlyBills {
+ total_revenue: number;
+ arrears: number;
+ invoice_number: string;
+}
 
 interface CustomerData {
   id: string;
@@ -52,6 +57,8 @@ const BillModal: React.FC<BillModalProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [parameters, setParameters] = useState<Parameters[]>([]);
+  const [bills, setbills] = useState<MonthlyBills[]>([]);
+
   const [customerData, setCustomerData] = useState<CustomerData[]>([]);
   const [status, setStatus] = useState("");
 
@@ -79,6 +86,21 @@ const BillModal: React.FC<BillModalProps> = ({
       );
     }
   }, []);
+// fetch monthly bills
+const fetchbills = useCallback(async () => {
+  try {
+    const { data, error: fetchError } = await supabase
+      .from("monthly_bills")
+      .select("*");
+    if (fetchError) throw fetchError;
+    setbills(data || []);
+  } catch (err) {
+    setError(
+      err instanceof Error ? err.message : "Error fetching Monthly bills",
+    );
+  }
+}, []);
+
 
 
   const fetchCustomerData = useCallback(async () => {
@@ -168,7 +190,8 @@ const BillModal: React.FC<BillModalProps> = ({
   useEffect(() => {
     fetchParameters();
     fetchCustomerData();
-  }, [fetchParameters, fetchCustomerData]);
+    fetchbills();
+  }, [fetchParameters, fetchCustomerData, fetchbills]);
 
   useEffect(() => {
     if (customerData.length > 0) {
@@ -774,6 +797,8 @@ const BillModal: React.FC<BillModalProps> = ({
                 if (!customer) return null;
 
                 const parameter = parameters[0];
+                const bill = bills[0];
+
 
                 // Use individual customer energy sums
                 const customerEnergySums = energySums?.[customerId] || {};
@@ -810,6 +835,11 @@ const BillModal: React.FC<BillModalProps> = ({
                   energy_rate: billResult.belcoPerKwh.toFixed(2),
                   message: parameter.message,
                   total_revenue: billResult.finalRevenue.toFixed(2),
+                  invoice_number:bill.invoice_number,
+                  arrears: bill.arrears,
+                  // this tot_revenue is for balance due wala total_revenue
+                  // total_revenue:bill.total_revenue,  
+
                   total_PTS: billResult.totalpts || "69",
                   status: "Pending",
                 };
