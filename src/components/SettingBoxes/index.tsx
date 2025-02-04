@@ -178,7 +178,7 @@ const SettingBoxes = () => {
         {/* Personal Information Section */}
         {!showUpdateForm && (
           <div className="col-span-5 xl:col-span-3">
-            <div className="rounded-lg border border-stroke bg-white shadow-md dark:border-dark-3 dark:bg-gray-dark">
+            <div className="rounded-lg border border-stroke bg-white  dark:border-dark-3 dark:bg-gray-dark">
               <div className="flex justify-between border-b border-stroke px-7 py-4">
                 <h3 className="font-medium text-dark dark:text-white">
                   Personal Information
@@ -264,7 +264,7 @@ const SettingBoxes = () => {
         {/* Update Information Section */}
         {showUpdateForm && (
           <div className="col-span-5 xl:col-span-3">
-            <div className="rounded-lg border border-stroke bg-white shadow-md dark:border-dark-3 dark:bg-gray-dark">
+            <div className="rounded-lg border border-stroke bg-white  dark:border-dark-3 dark:bg-gray-dark">
               <div className="border-b border-stroke px-7 py-4">
                 <h3 className="font-medium text-dark dark:text-white">
                   Update Information
@@ -372,7 +372,7 @@ const SettingBoxes = () => {
 
         {/* Update Password Section */}
         <div className="col-span-5 xl:col-span-3">
-          <div className="rounded-lg border border-stroke bg-white shadow-md dark:border-dark-3 dark:bg-gray-dark">
+          <div className="rounded-lg border border-stroke bg-white  dark:border-dark-3 dark:bg-gray-dark">
             <div className="border-b border-stroke px-7 py-4">
               <h3 className="font-medium text-dark dark:text-white">
                 Reset Password

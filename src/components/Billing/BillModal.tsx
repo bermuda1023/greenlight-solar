@@ -8,6 +8,8 @@ import { supabase } from "@/utils/supabase/browserClient";
 import { format } from "date-fns";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faTimes } from "@fortawesome/free-solid-svg-icons";
 
 interface BillModalProps {
   selectedCustomers: string[];
@@ -26,14 +28,15 @@ interface Parameters {
   ra_fee: number;
   export_rate: number;
   message: string;
+  emailmsg: string;
   tier1: number;
   tier2: number;
   tier3: number;
 }
 interface MonthlyBills {
- total_revenue: number;
- arrears: number;
- invoice_number: string;
+  total_revenue: number;
+  arrears: number;
+  invoice_number: string;
 }
 
 interface CustomerData {
@@ -86,22 +89,20 @@ const BillModal: React.FC<BillModalProps> = ({
       );
     }
   }, []);
-// fetch monthly bills
-const fetchbills = useCallback(async () => {
-  try {
-    const { data, error: fetchError } = await supabase
-      .from("monthly_bills")
-      .select("*");
-    if (fetchError) throw fetchError;
-    setbills(data || []);
-  } catch (err) {
-    setError(
-      err instanceof Error ? err.message : "Error fetching Monthly bills",
-    );
-  }
-}, []);
-
-
+  // fetch monthly bills
+  const fetchbills = useCallback(async () => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from("monthly_bills")
+        .select("*");
+      if (fetchError) throw fetchError;
+      setbills(data || []);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Error fetching Monthly bills",
+      );
+    }
+  }, []);
 
   const fetchCustomerData = useCallback(async () => {
     try {
@@ -287,9 +288,9 @@ const fetchbills = useCallback(async () => {
         !billData.email ||
         !billData.billing_period_start ||
         !billData.billing_period_end ||
-        !billData.total_revenue ||
-        !billData.total_cost ||
-        !billData.energy_rate
+        !billData?.total_revenue ||
+        !billData?.total_cost ||
+        !billData?.energy_rate
       ) {
         toast.error("All fields are required. Please fill out all fields.");
         return false; // Exit early if validation fails
@@ -490,77 +491,159 @@ const fetchbills = useCallback(async () => {
           ? parameters[0].message
           : "Thank you for doing business with us!";
 
+      const Emailmessage =
+        parameters.length > 0 && parameters[0]?.emailmsg
+          ? parameters[0].emailmsg
+          : "Please find attached your invoice.";
+
       // ✅ Generate Invoice HTML Template
+
       const invoiceHTML = `
-    <div style="max-width: 800px; margin: auto; font-family: Arial, sans-serif; border: 1px solid #ddd; padding: 20px; background-color: #fff;">
-      <header style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px;">
-        <img src="/images/logo/logo.svg" alt="Logo" style="max-width: 180px; height: auto;">
-      </header>
-  
-      <section style="border-bottom: 2px solid #ddd; padding-bottom: 16px;">
-        <h2 style="color: black; font-size: 16px;">RECIPIENT</h2>
-        <p style="color: black; font-size: 20px; font-weight: bold;">INVOICE</p>
-        <p><strong>Name:</strong> ${billData.site_name}</p>
-        <p><strong>Email:</strong> ${billData.email}</p>
-        <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
-        <p><strong>Invoice Number:</strong> ${billData.invoice_number}</p>
-      </section>
-  
-      <table style="width: 100%; margin-top: 16px; border-collapse: collapse;">
-        <thead>
-          <tr style="border-bottom: 2px solid #4CAF50;">
-            <th style="padding: 8px; text-align: left;">Period Start</th>
-            <th style="padding: 8px; text-align: left;">Period End</th>
-            <th style="padding: 8px; text-align: left;">Description</th>
-            <th style="padding: 8px; text-align: left;">Energy PTS</th>
-            <th style="padding: 8px; text-align: left;">Per Unit</th>
-            <th style="padding: 8px; text-align: left;">Total</th>
-          </tr>
-        </thead>
+  <div  
+    class="mx-auto h-[297mm] w-full max-w-[210mm] border border-gray-300 bg-white px-8 pb-12">
+    
+    <!-- Header -->
+    <header class="flex items-center justify-between py-16 mt-6">
+      <img 
+        src="/images/logo/logo.svg" 
+        alt="Logo"
+        width="360" 
+        height="60" 
+        class="max-w-full"
+      />
+    </header>
+
+    <!-- Recipient and Invoice Info -->
+    <section class="mb-26 mt-9">
+      <div class="flex items-center justify-between pb-2">
+        <h2 class="text-md text-black">RECIPIENT</h2>
+        <div class="pr-3 text-2xl font-semibold text-black">INVOICE</div>
+      </div>
+
+      <table class="mt-4 w-full text-left text-gray-600">
         <tbody>
           <tr>
-            <td style="padding: 8px;">${billData.billing_period_start}</td>
-            <td style="padding: 8px;">${billData.billing_period_end}</td>
-            <td style="padding: 8px;">Energy Produced</td>
-            <td style="padding: 8px;">${billData.total_PTS}</td>
-            <td style="padding: 8px;">$${billData.energy_rate}</td>
-            <td style="padding: 8px;">$${billData.total_revenue}</td>
+            <td class="pr-4 text-sm font-semibold text-black">Name:</td>
+            <td class="text-xs">${billData.site_name}</td>
+            <td class="pr-4 text-sm font-semibold text-black">Email:</td>
+            <td class="text-xs">${billData.email}</td>
+            <td class="pr-4 text-sm font-semibold text-black">Date:</td>
+            <td class="text-xs">${new Date().toLocaleDateString()}</td>
+          </tr>
+          <tr>
+            <td class="pr-4 text-sm font-semibold text-black">Address:</td>
+            <td class="text-xs">${billData.address || "N/A"}</td>
+            <td class="pr-4 text-sm font-semibold text-black">Invoice Number:</td>
+            <td class="text-xs">${billData.invoice_number}</td>
+            <td></td>
+            <td></td>
           </tr>
         </tbody>
       </table>
+    </section>
+
+    <!-- Billing Details -->
+    <table class="mb-20 w-full text-left text-sm">
+      <thead class="border-b-2 border-green-300 text-gray-700">
+        <tr>
+          <th class="p-3 text-sm">Period Start</th>
+          <th class="p-3 text-sm">Period End</th>
+          <th class="p-3 text-sm">Description</th>
+          <th class="p-3 text-sm">Energy PTS</th>
+          <th class="p-3 text-sm">Per Unit</th>
+          <th class="p-3 text-sm">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="p-3 text-xs text-gray-600">${billData.billing_period_start}</td>
+          <td class="p-3 text-xs text-gray-600">${billData.billing_period_end}</td>
+          <td class="p-3 text-xs text-gray-600">Energy Produced</td>
+          <td class="p-3 text-xs text-gray-600">${billData.total_PTS.toFixed(2)}</td>
+          <td class="p-3 text-xs text-gray-600">$ ${billData.energy_rate}</td>
+          <td class="p-3 text-xs text-gray-600">$ ${billData.total_revenue}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Balance Due and Overdue Balance -->
+    <section class="mb-6 space-y-6 text-right">
+      <div class="flex w-full justify-end  text-sm font-semibold text-gray-800">
+  <p>TOTAL PERIOD BALANCE</p>
+          <span class="ml-20 w-20 text-black">$ ${billData.total_revenue}</span>
+      </div>
   
-      <section style="margin-top: 20px; text-align: right;">
-        <p><strong>Total Period Balance:</strong> $${billData.total_revenue}</p>
-        <p style="font-weight: bold; color: black;">Overdue Balance: $${billData.overdueBalance}</p>
-        <p style="font-weight: bold; color: red;">Balance Due: $${billData.balanceDue}</p>
-      </section>
+            <div class="flex w-full justify-end  text-sm font-semibold text-gray-800">
+  <p> OVERDUE BALANCE</p>
+          <span class="ml-20 w-20 text-black">$ ${billData.overdueBalance}</span>
+      </div>
   
-      <section style="margin-top: 20px; font-size: 14px;">
-        <h3 style="border-bottom: 2px solid #4CAF50; padding-bottom: 8px;">DIRECT DEPOSIT</h3>
-        <p><strong>Bank Name:</strong> Bank of Butterfield</p>
-        <p><strong>Account Number:</strong> 060400 6770 014</p>
-      </section>
   
-      <footer style="margin-top: 20px; text-align: center; font-size: 12px;">
-        <div style="margin-bottom: 10px;">
-          <p style="text-align: center; font-size: 14px;">${message}</p>
-        </div>
-        <p>Greenlight Financing Ltd. #48 Par-la-ville Road, Suite 1543, Hamilton, HM11</p>
-        <p>
-          <a href="mailto:billing@greenlightenergy.bm" style="color: blue; text-decoration: underline;">
-            billing@greenlightenergy.bm | Phone: 1 (441) 705 3033
-          </a>
+            <div class="flex w-full justify-end  text-sm font-semibold text-red-600">
+  <p> BALANCE DUE</p>
+          <span class="ml-20 w-20">$ ${billData.balanceDue}</span>
+      </div>
+    </section>
+
+    <!-- Direct Deposit Information -->
+    <section class="mt-12 text-sm text-gray-700">
+      <h3 class="mb-4 w-1/2 border-b-2 border-green-300 p-4 font-semibold text-black">
+        DIRECT DEPOSIT
+      </h3>
+      <p class="text-sm">Bank Name: <span class="text-xs font-semibold">Bank of Butterfield</span></p>
+      <p class="text-sm">Account Name: <span class="text-xs font-semibold">GreenLight Financing Ltd.</span></p>
+      <p class="text-sm">Account Number: <span class="text-xs font-semibold">060400 6770 014</span></p>
+    </section>
+
+    <!-- Footer -->
+    <footer class="mt-24 grid grid-cols-3 gap-12 text-gray-800">
+      <div class="col-span-1">
+        <p class="text-center text-sm">
+          ${message || "Thank you for doing business with us!"}
         </p>
-      </footer>
-    </div>
-  `;
+      </div>
+      <div class="col-span-1 text-xs">
+        <p>
+          Greenlight Financing Ltd. #48 Par-la-ville Road, Suite 1543, Hamilton, HM11
+        </p>
+      </div>
+      <div class="col-span-1 text-xs">
+        <a href="mailto:billing@greenlightenergy.bm" class="text-blue-700 underline">
+          billing@greenlightenergy.bm <br/> Phone: 1 (441) 705 3033
+        </a>
+      </div>
+    </footer>
+  </div>
+`;
 
       const invoiceContainer = document.createElement("div");
       invoiceContainer.innerHTML = invoiceHTML;
       document.body.appendChild(invoiceContainer);
 
       // ✅ Convert HTML to PDF
-      const pdfBlob = await html2pdf().from(invoiceContainer).outputPdf("blob");
+      const pdfOptions = {
+        margin: [0, 0, -4, 0], // Adjust margins to avoid extra space that could cause a page break
+        filename: "invoice.pdf",
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: {
+          scale: 2, // Increase scale for better resolution
+          letterRendering: true,
+          useCORS: true, // Ensure images can be loaded from the same domain
+        },
+        jsPDF: {
+          unit: "mm",
+          format: "a4", // Ensure it's A4 size
+          orientation: "portrait", // Portrait orientation
+          autoPaging: false, // Prevent auto-page generation, ensure one page only
+        },
+      };
+
+      // Apply these settings during PDF generation
+      const pdfBlob = await html2pdf()
+        .from(invoiceContainer)
+        .set(pdfOptions)
+        .outputPdf("blob");
+
       document.body.removeChild(invoiceContainer);
 
       // ✅ Convert Blob to Base64
@@ -585,7 +668,7 @@ const fetchbills = useCallback(async () => {
           body: JSON.stringify({
             userEmail: billData.email, // Ensure the email is passed correctly
             subject: "Invoice from Greenlight Energy",
-            htmlContent: `Please find attached your invoice.`,
+            htmlContent: Emailmessage,
             attachment: pdfBase64, // Sending Base64 encoded PDF
           }),
         });
@@ -670,6 +753,9 @@ const fetchbills = useCallback(async () => {
           energy_rate: billResult.belcoPerKwh.toFixed(2),
           total_PTS: consumptionValue || 666999,
           status: "Pending",
+          total_revenue: billResult.finalRevenue.toFixed(2), // Ensure this is calculated
+          // overdueBalance: billResult.belcoTotal.toFixed(2), // Default overdueBalance or get it from somewhere
+          // balanceDue: billResult.finalRevenue.toFixed(2), // Default balanceDue or calculate
         };
       })
       .filter(Boolean); // Filter out any null values (invalid bills)
@@ -683,31 +769,9 @@ const fetchbills = useCallback(async () => {
     for (const billData of billsToProcess) {
       console.log("Processing bill:", billData);
 
-      // Check if the bill already exists for the same customer and date range
-      const { data: existingBills, error: fetchError } = await supabase
-        .from("monthly_bills")
-        .select("id")
-        .eq("site_name", billData?.site_name)
-        .eq("billing_period_start", billData?.billing_period_start)
-        .eq("billing_period_end", billData?.billing_period_end);
-
-      if (fetchError) {
-        toast.error("Error fetching existing bills. Please try again.");
-        console.error(fetchError);
-        failureCount++;
-        continue; // Skip this bill
-      }
-
-      if (existingBills && existingBills.length > 0) {
-        // Skip posting the bill if it already exists for the same customer and period
-        failureCount++;
-        continue;
-      }
-
-      // Now directly send the email (without calling handlePostBill)
       try {
-        // Call handleEmailBill to send the email with PDF for this bill
-        await handleEmailBill(billData);
+        // Now directly send the email (without calling handlePostBill)
+        await handleEmailBill(billData); // Send the email with the bill
         successCount++;
       } catch (emailError) {
         console.error("Failed to send email for bill:", emailError);
@@ -799,7 +863,6 @@ const fetchbills = useCallback(async () => {
                 const parameter = parameters[0];
                 const bill = bills[0];
 
-
                 // Use individual customer energy sums
                 const customerEnergySums = energySums?.[customerId] || {};
                 const consumptionValue = customerEnergySums?.Consumption || 500;
@@ -835,10 +898,10 @@ const fetchbills = useCallback(async () => {
                   energy_rate: billResult.belcoPerKwh.toFixed(2),
                   message: parameter.message,
                   total_revenue: billResult.finalRevenue.toFixed(2),
-                  invoice_number:bill.invoice_number,
+                  invoice_number: bill.invoice_number,
                   arrears: bill.arrears,
                   // this tot_revenue is for balance due wala total_revenue
-                  // total_revenue:bill.total_revenue,  
+                  // total_revenue:bill.total_revenue,
 
                   total_PTS: billResult.totalpts || "69",
                   status: "Pending",
@@ -849,29 +912,43 @@ const fetchbills = useCallback(async () => {
                     key={customerId}
                     className="mb-8 rounded-lg border border-gray-200 bg-gray-50 p-4"
                   >
-                    {/* User Details */}
-                    <div className="flex justify-between">
-                      <div className="mb-4">
-                        <h3 className="text-lg font-semibold text-gray-700">
-                          {customer?.site_name}
-                        </h3>
-                        <p className="text-sm text-gray-500">
-                          <strong>Email:</strong> {customer?.email || "N/A"}{" "}
+{/* top section */}
+                    <div className="relative flex flex-col pr-0 pt-0">
+                      {/* Name and cross button            */}
+                      <div className="mb-1">
+                        <div className="flex w-full justify-between">
+                          <h3 className="text-lg font-semibold text-gray-700">
+                            {customer?.site_name}
+                          </h3>
+                          <button
+                            className="  rounded bg-red-200 px-2 py-1 text-red-800 hover:bg-red-300"
+                            onClick={() => handleRemoveBill(customerId)}
+                          >
+                            <FontAwesomeIcon icon={faTimes} />{" "}
+                          </button>
+                        </div>
+                                </div>
+
+{/* email and billing */}
+                      <div className="mb-4 flex justify-between border-b-2 border-dashed pb-2">
+                      <p className="text-sm text-gray-500">
+                      <strong className="text-base text-gray-dark">Email:</strong> {customer?.email || "N/A"}{" "}
                           <br />
-                          <strong>Address:</strong> {customer?.address || "N/A"}
+                          <strong className="text-base text-gray-dark">Address:</strong> {customer?.address || "N/A"}
                         </p>
-                      </div>
-                      <div className="mb-4 flex flex-col items-end">
+                        <div className="flex flex-col items-end">
                         <strong className="text-base text-gray-dark">
                           Billing Period:
                         </strong>
                         <span className="text-sm text-gray-6">
                           {startDate} to {endDate}
                         </span>
+                        </div>
                       </div>
+
                     </div>
 
-                    {/* Invoice Summary */}
+                    {/* Invoice Section */}
                     <div className="mb-4 grid grid-cols-2 gap-4 text-sm text-gray-600">
                       <div>
                         <p>
@@ -899,7 +976,8 @@ const fetchbills = useCallback(async () => {
                     </div>
 
                     {/* Footer Actions */}
-                    <div className="flex items-end justify-between">
+                    {/* commented for now, but might be needed in future */}
+                    {/* <div className="flex items-end justify-between">
                       <div className="text-sm text-gray-500">
                         <p>Generated on: {new Date().toLocaleDateString()}</p>
                       </div>
@@ -923,7 +1001,7 @@ const fetchbills = useCallback(async () => {
                           Post Bill
                         </button>
                       </div>
-                    </div>
+                    </div> */}
                   </div>
                 );
               })}
@@ -939,13 +1017,13 @@ const fetchbills = useCallback(async () => {
                   onClick={() => handlePostAndEmailAllBills()}
                   className="rounded bg-green-200 px-4 py-2 text-gray-800 hover:bg-green-300"
                 >
-                  Post and Email All
+                  Post and Email
                 </button>
                 <button
                   onClick={handlePostAllBills}
-                  className="rounded bg-primary px-4 py-2 text-white hover:bg-primary/90"
+                  className="rounded bg-dark-2 px-4 py-2 font-medium text-white hover:bg-dark"
                 >
-                  Post All
+                  Post Bills
                 </button>
               </div>
             </>
