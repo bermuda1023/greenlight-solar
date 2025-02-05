@@ -21,14 +21,22 @@ interface Bill {
   created_at: string;
   arrears: number;
   invoice_number: string;
+  customer_id:string;
 }
-interface Parameters {
-  id: string;
-  fuelRate: number;
-  feedInPrice: number;
-  basePrice: number;
-  message: string;
-}
+
+interface CustomerBalanceProp {
+  customer_id:string;
+    total_billed:number;
+  total_paid:number;
+  current_balance:number;  
+  }
+  interface Parameters {
+    id: string;
+    fuelRate: number;
+    feedInPrice: number;
+    basePrice: number;
+    message: string;
+  }
 
 const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
   closeModal,
@@ -36,6 +44,9 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
 }) => {
   const invoiceRef = useRef<HTMLDivElement>(null);
   const [parameters, setParameters] = useState<Parameters[]>([]);
+  const [customerBalance, setCustomerBalance] = useState<CustomerBalanceProp | null>(null);
+  
+
   const [error, setError] = useState<string | null>(null);
 
   const fetchParameters = useCallback(async () => {
@@ -52,8 +63,30 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
       );
     }
   }, []);
+  const fetchCustomerBalance = useCallback(async () => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from("customer_balances")
+        .select("*")
+        .in("customer_id", [bill.customer_id]);
+  
+      if (fetchError) throw fetchError;
+  
+      setCustomerBalance(data?.[0] || null); // Store as a single object
+      console.log(data);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Error fetching parameters"
+      );
+    }
+  }, [bill.customer_id]);
+  
+  // Accessing safely
+  console.log(customerBalance?.current_balance);
+  
 
   useEffect(() => {
+    fetchCustomerBalance();
     fetchParameters();
   }, [fetchParameters]);
   const generatePDF = async () => {
@@ -82,7 +115,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
   };
 
   // Calculate totals
-  const overdueBalance = bill.arrears || 0;
+  const overdueBalance =customerBalance?.current_balance  || 0;
   const balanceDue = bill.total_revenue + overdueBalance;
 
   return (

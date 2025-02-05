@@ -64,13 +64,7 @@ const TransactionsModal = ({
                         Description
                       </th>
                       <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Total Amount
-                      </th>
-                      <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Paid Amount
-                      </th>
-                      <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Pending Amount
                       </th>
                       <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Status
@@ -90,13 +84,7 @@ const TransactionsModal = ({
                           {transaction.description}
                         </td>
                         <td className="px-6.5 py-4 text-sm dark:text-white">
-                          ${transaction.total_bill}
-                        </td>
-                        <td className="px-6.5 py-4 text-sm dark:text-white">
                           ${transaction.paid_amount.toFixed(2)}
-                        </td>
-                        <td className="px-6.5 py-4 text-sm dark:text-white">
-                          ${transaction.pending_amount.toFixed(2)}
                         </td>
                         <td className="px-6.5 py-4 text-sm dark:text-white">
                           <span

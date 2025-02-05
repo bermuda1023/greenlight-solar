@@ -10,6 +10,8 @@ import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTimes } from "@fortawesome/free-solid-svg-icons";
+import { CustomerBalanceService } from "@/services/balance-service";
+
 
 interface BillModalProps {
   selectedCustomers: string[];
@@ -32,6 +34,13 @@ interface Parameters {
   tier1: number;
   tier2: number;
   tier3: number;
+}
+
+interface CustomerBalanceProp {
+customer_id:string;
+  total_billed:number;
+total_paid:number;
+current_balance:number;  
 }
 interface MonthlyBills {
   total_revenue: number;
@@ -60,6 +69,8 @@ const BillModal: React.FC<BillModalProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [parameters, setParameters] = useState<Parameters[]>([]);
+  const [customerBalance, setCustomerBalance] = useState<CustomerBalanceProp[]>([]);
+
   const [bills, setbills] = useState<MonthlyBills[]>([]);
 
   const [customerData, setCustomerData] = useState<CustomerData[]>([]);
@@ -89,6 +100,24 @@ const BillModal: React.FC<BillModalProps> = ({
       );
     }
   }, []);
+
+  const fetchCustomerBalance = useCallback(async () => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from("customer_balances")
+        .select("*")
+        .in("customer_id", selectedCustomers);
+      if (fetchError) throw fetchError;
+      setCustomerBalance(data || []);
+      console.log(data);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Error fetching parameters",
+      );
+    }
+  }, []);
+
+
   // fetch monthly bills
   const fetchbills = useCallback(async () => {
     try {
@@ -190,6 +219,7 @@ const BillModal: React.FC<BillModalProps> = ({
 
   useEffect(() => {
     fetchParameters();
+    fetchCustomerBalance();
     fetchCustomerData();
     fetchbills();
   }, [fetchParameters, fetchCustomerData, fetchbills]);
@@ -278,85 +308,81 @@ const BillModal: React.FC<BillModalProps> = ({
     return `INV-${today}-${sequentialNumber.toString().padStart(3, "0")}`;
   };
 
-  const handlePostBill = async (billData: any) => {
-    try {
-      toast.dismiss(); // Show initial toast before posting
 
-      // ✅ Basic validation for empty fields
-      if (
-        !billData.site_name ||
-        !billData.email ||
-        !billData.billing_period_start ||
-        !billData.billing_period_end ||
-        !billData?.total_revenue ||
-        !billData?.total_cost ||
-        !billData?.energy_rate
-      ) {
-        toast.error("All fields are required. Please fill out all fields.");
-        return false; // Exit early if validation fails
-      }
+const handlePostBill = async (billData: any) => {
+  try {
+    toast.dismiss();
 
-      const invoiceNumber = await generateInvoiceNumber();
-
-      // ✅ Check if a bill already exists with the same site_name, email, and billing period
-      const { data: existingBills, error: fetchError } = await supabase
-        .from("monthly_bills")
-        .select("id, arrears") // ✅ Do NOT fetch 'message'
-        .eq("site_name", billData.site_name)
-        .eq("email", billData.email)
-        .eq("billing_period_start", billData.billing_period_start)
-        .eq("billing_period_end", billData.billing_period_end);
-
-      if (fetchError) {
-        throw fetchError;
-      }
-
-      if (existingBills && existingBills.length > 0) {
-        toast.error("A bill for this date already exists.");
-        return false; // Exit early if the bill already exists
-      }
-
-      const previousArrears = existingBills?.[0]?.arrears || 0;
-      const total_bill = Number(billData.total_revenue) + previousArrears;
-
-      // ✅ Remove 'message' from billData before inserting into Supabase
-      const { message, ...filteredBillData } = billData; // ✅ Exclude message
-
-      // ✅ Insert new bill into `monthly_bills`
-      const { error: insertError } = await supabase
-        .from("monthly_bills")
-        .insert([
-          {
-            ...filteredBillData, // ✅ Insert without 'message'
-            invoice_number: invoiceNumber,
-            total_bill: total_bill,
-            pending_bill: total_bill,
-            arrears: previousArrears,
-            reconciliation_ids: [],
-            status: "Pending",
-          },
-        ]);
-
-      if (insertError) {
-        throw insertError;
-      }
-
-      // ✅ Success
-      toast.success("Bill posted successfully!");
-      return true;
-    } catch (error) {
-      console.error("Error handling bill:", error);
-      toast.error("Failed to post the bill. Please try again.");
+    if (
+      !billData.site_name ||
+      !billData.email ||
+      !billData.billing_period_start ||
+      !billData.billing_period_end ||
+      !billData?.total_revenue ||
+      !billData?.total_cost ||
+      !billData?.energy_rate
+    ) {
+      toast.error("All fields are required.");
       return false;
     }
-  };
+
+    const invoiceNumber = await generateInvoiceNumber();
+
+    const { data: existingBills, error: fetchError } = await supabase
+      .from("monthly_bills")
+      .select("id, arrears")
+      .eq("site_name", billData.site_name)
+      .eq("email", billData.email)
+      .eq("billing_period_start", billData.billing_period_start)
+      .eq("billing_period_end", billData.billing_period_end);
+
+    if (fetchError) throw fetchError;
+    if (existingBills?.length > 0) {
+      toast.error("A bill for this date already exists.");
+      return false;
+    }
+
+    const previousArrears = existingBills?.[0]?.arrears || 0;
+    const total_bill = Number(billData.total_revenue) + previousArrears;
+
+    const { data: insertedBills, error: insertError } = await supabase
+      .from("monthly_bills")
+      .insert([
+        {
+          ...billData,
+          invoice_number: invoiceNumber,
+          total_bill: total_bill,
+          pending_bill: total_bill,
+          arrears: previousArrears,
+          reconciliation_ids: [],
+          status: "Pending",
+        },
+      ])
+      .select("*"); // Ensure the inserted data is retrieved
+
+    if (insertError) throw insertError;
+
+    await new CustomerBalanceService().addNewBill(billData.customer_id, total_bill);
+
+    toast.success("Bill posted successfully!");
+
+    console.log("Inserted Bill:", insertedBills?.[0]);
+
+    return insertedBills?.[0] ?? { invoice_number: invoiceNumber, arrears: previousArrears };
+  } catch (error) {
+    console.error("Error handling bill:", error);
+    toast.error("Failed to post the bill.");
+    return false;
+  }
+};
+
 
   const handlePostAllBills = async () => {
     const parameter = parameters[0];
 
     const billsToProcess = selectedCustomers
       .map((customerId) => {
-        const customer = customerData.find((c) => c.id === customerId); // Fetching from customerData
+        const customer = customers.find((c) => c.id === customerId); // Fetching from customerData
         if (!customer) return null;
 
         const customerEnergySums = energySums?.[customerId] || {};
@@ -402,7 +428,9 @@ const BillModal: React.FC<BillModalProps> = ({
           );
           return null; // Skip this bill if any required data is missing
         }
-
+        const previousArrears = customer.previousArrears || 0;
+        const totalBillAmount = Number(billResult.finalRevenue) + previousArrears;
+  
         return {
           customer_id: customer.id,
           site_name: customer.site_name || "N/A", // Kept original reference
@@ -415,6 +443,9 @@ const BillModal: React.FC<BillModalProps> = ({
           total_revenue: billResult.finalRevenue.toFixed(2),
           total_PTS: consumptionValue || 666999,
           status: "Pending",
+          arrears: previousArrears, // Include the arrears from previous bills
+          total_bill: totalBillAmount, // Total amount including arrears
+       
         };
       })
       .filter(Boolean);
@@ -694,7 +725,7 @@ const BillModal: React.FC<BillModalProps> = ({
     // Process bills for selected customers
     const billsToProcess = selectedCustomers
       .map((customerId) => {
-        const customer = customerData.find((c) => c.id === customerId); // Fetching customer data
+        const customer = customers.find((c) => c.id === customerId); // Fetching customer data
         if (!customer) return null; // If no customer found, skip it
 
         const customerEnergySums = energySums?.[customerId] || {}; // Fetch energy sums for the customer
@@ -857,7 +888,7 @@ const BillModal: React.FC<BillModalProps> = ({
               </div>
 
               {selectedBills.map((customerId) => {
-                const customer = customerData.find((c) => c.id === customerId);
+                const customer = customers.find((c) => c.id === customerId);
                 if (!customer) return null;
 
                 const parameter = parameters[0];
@@ -898,8 +929,8 @@ const BillModal: React.FC<BillModalProps> = ({
                   energy_rate: billResult.belcoPerKwh.toFixed(2),
                   message: parameter.message,
                   total_revenue: billResult.finalRevenue.toFixed(2),
-                  invoice_number: bill.invoice_number,
-                  arrears: bill.arrears,
+                  invoice_number: bill?.invoice_number||"Unknown",
+                  arrears: bill?.arrears||"Unknown",
                   // this tot_revenue is for balance due wala total_revenue
                   // total_revenue:bill.total_revenue,
 

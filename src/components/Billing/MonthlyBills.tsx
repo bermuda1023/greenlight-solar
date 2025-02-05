@@ -9,6 +9,7 @@ import { useSearchParams } from "next/navigation";
 import { toast } from "react-toastify";
 interface Bill {
   id: string;
+  customer_id: string;
   site_name: string;
   email: string;
   address: string;
@@ -56,6 +57,20 @@ const BillingScreen = () => {
 
   const searchParams = useSearchParams();
   const highlightId = searchParams?.get("highlightId");
+
+  useEffect(() => {
+    if (highlightId) {
+      const element = document.getElementById(`transaction-${highlightId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
+        element.classList.add("bg-primary/0.1"); // Add a highlight class
+        setTimeout(() => {
+          element.classList.remove("bg-primary/0.1");
+        }, 3000); // Remove highlight after 3 seconds
+      }
+    }
+  }, [highlightId]);
+
 
   const fetchBills = useCallback(async () => {
     try {
@@ -107,7 +122,7 @@ const BillingScreen = () => {
       }
 
       const { data, error } = await query;
-
+console.log("Bill data:",data)
       if (error) throw error;
       setBills(data || []);
     } catch (err) {
@@ -130,34 +145,31 @@ const BillingScreen = () => {
 
   const handleViewTransactions = async (billId: string) => {
     const bill = bills.find((b) => b.id === billId);
-
+  
     if (!bill) {
       alert("Bill not found.");
       return;
     }
-
+  
     try {
+      // Fetch all transactions that have this billId in their reconciliation_ids array
       const { data: transactions, error: transactionsError } = await supabase
-        .from("reconciliation")
+        .from("transactions")
         .select("*")
-        .eq("bill_id", billId)
+        .in("id", bill.reconciliation_ids || [])
         .order("date", { ascending: false });
-
+  
       if (transactionsError) throw transactionsError;
-
-      // Add the total_bill to each transaction
-      const enrichedTransactions = transactions.map((transaction) => ({
-        ...transaction,
-        total_bill: bill.total_revenue,
-      }));
-
-      setTransactions(enrichedTransactions);
+  
+      setTransactions(transactions);
       setIsTransactionsModalOpen(true);
     } catch (err) {
       console.error("Error fetching transactions:", err);
       alert("Failed to fetch transactions. Please try again.");
     }
   };
+
+
 
   const handleDeleteBill = async (billId: string) => {
     try {
@@ -273,12 +285,7 @@ const BillingScreen = () => {
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Total Revenue ($)
                         </th>
-                        <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Total Bill ($)
-                        </th>
-                        <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Outstanding ($)
-                        </th>
+ 
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Status
                         </th>
@@ -290,8 +297,9 @@ const BillingScreen = () => {
                     <tbody>
                       {bills.map((bill) => (
                         <tr
+                          id={`transaction-${bill.id}`}
                           key={bill.id}
-                          className={`${bill.id === highlightId ? "bg-yellow-100 transition-colors duration-1000" : "border-b border-stroke dark:border-dark-3"}`}
+                          className={`${bill.id === highlightId ? "bg-primary/[.1] transition-colors duration-1000" : "border-b border-stroke dark:border-dark-3"}`}
                         >
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             {bill.site_name}
@@ -319,12 +327,8 @@ const BillingScreen = () => {
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             ${bill.total_revenue}
                           </td>
-                          <td className="px-6.5 py-4 text-sm dark:text-white">
-                            ${bill.total_revenue}
-                          </td>
-                          <td className="px-6.5 py-4 text-sm dark:text-white">
-                            ${bill.arrears.toFixed(2)}
-                          </td>
+
+   
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             <span
                               className={`inline-flex rounded-full px-3 py-1 text-sm font-medium ${
