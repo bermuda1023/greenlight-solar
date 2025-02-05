@@ -18,11 +18,14 @@ interface Parameters {
   tier2: number;
   tier3: number;
   message: string;
+  emailmsg: string;
 }
 
 const BillParams = () => {
   const [showBillForm, setShowBillForm] = useState(false);
   const [showMessageForm, setShowMessageForm] = useState(false);
+  const [showEmailMsgForm, setShowEmailMsgForm] = useState(false);
+
   const [showTierForm, setShowTierForm] = useState(false);
 
 
@@ -37,10 +40,12 @@ const BillParams = () => {
     tier2: "",
     tier3: "",
     message: "",
+    emailmsg: "",
   });
 
   const toggleBillForm = () => setShowBillForm(!showBillForm);
   const toggleMessageForm = () => setShowMessageForm(!showMessageForm);
+  const toggleEmailMsgForm = () => setShowEmailMsgForm(!showEmailMsgForm);
   const toggleTierForm = () => setShowTierForm(!showTierForm);
 
   const [loading, setLoading] = useState(true);
@@ -71,6 +76,7 @@ const BillParams = () => {
           basePrice:
             fetchedParameters.basePrice || prevFormData.basePrice || "",
           message: fetchedParameters.message || prevFormData?.message || "",
+          emailmsg: fetchedParameters.emailmsg || prevFormData?.emailmsg || "",
           belcodisc: fetchedParameters.belcodisc || prevFormData?.belcodisc || "",
           ra_fee: fetchedParameters.ra_fee || prevFormData?.ra_fee || "",
           export_rate: fetchedParameters.export_rate || prevFormData?.export_rate || "",
@@ -122,7 +128,8 @@ const BillParams = () => {
       !formData.tier1 ||
       !formData.tier2 ||
       !formData.tier3 ||
-      !formData.message
+      !formData.message ||
+      !formData.emailmsg
     ) {
       toast.error("All fields are required. Please fill in all the details."); // Toast error for null/empty values
       return;
@@ -152,6 +159,7 @@ const BillParams = () => {
             tier2: formData.tier2,
             tier3: formData.tier3,
             message: formData.message,
+            emailmsg: formData.emailmsg,
           })
           .eq("id", existingRecord.id);
 
@@ -173,6 +181,7 @@ const BillParams = () => {
               tier2: formData.tier2,
               tier3: formData.tier3,
               message: formData.message,
+              emailmsg: formData.emailmsg,
             },
           ]);
 
@@ -191,11 +200,12 @@ const BillParams = () => {
         tier1: "",
         tier2: "",
         tier3: "",
-
         message: "",
+        emailmsg: "",
       });
       setShowBillForm(false);
       setShowMessageForm(false);
+      setShowEmailMsgForm(false);
       setShowTierForm(false);
 
       fetchParameters();
@@ -206,19 +216,17 @@ const BillParams = () => {
 
   return (
     <>
-      <div className="flex items-center justify-between">
         <div className="mb-2 p-1">
           <h1 className="text-2xl font-bold text-dark">Settings</h1>
           <p className="text-sm text-gray-500">View and manage your Profile</p>
         </div>
-        <div className="flex items-center justify-between"></div>
-      </div>
+     <div className="space-y-8">
       {/* Bill Information */}
 
       <div className="grid grid-cols-2 gap-8">
         {!showBillForm && (
           <div className="col-span-5 xl:col-span-3">
-            <div className="rounded-lg border border-stroke bg-white shadow-md">
+            <div className="rounded-lg border border-stroke bg-white">
               <div className="flex justify-between border-b border-stroke px-7 py-4">
                 <h3 className="font-medium text-dark">Bill Information</h3>
 
@@ -330,7 +338,7 @@ const BillParams = () => {
         )}
         {showBillForm && (
           <div className="col-span-5 xl:col-span-3">
-            <div className="rounded-lg border border-stroke bg-white shadow-md">
+            <div className="rounded-lg border border-stroke bg-white ">
               <div className="border-b border-stroke px-7 py-4">
                 <h3 className="font-medium text-dark">Enter Bill Parameters</h3>
               </div>
@@ -474,14 +482,14 @@ const BillParams = () => {
         )}
       </div>
 
-      {/* Display Message */}
+      {/* Bill Display Message */}
 
       <div className="grid grid-cols-2 gap-8">
         {!showMessageForm && (
           <div className="col-span-5 xl:col-span-3">
-            <div className="rounded-lg border border-stroke bg-white shadow-md">
+            <div className="rounded-lg border border-stroke bg-white ">
               <div className="flex justify-between border-b border-stroke px-7 py-4">
-                <h3 className="font-medium text-dark">Display Message</h3>
+                <h3 className="font-medium text-dark">Bill Message</h3>
                 <div>
                   {!showMessageForm && (
                     <button
@@ -511,7 +519,7 @@ const BillParams = () => {
 
         {showMessageForm && (
           <div className="col-span-5 xl:col-span-3">
-            <div className="rounded-lg border border-stroke bg-white shadow-md">
+            <div className="rounded-lg border border-stroke bg-white ">
               <div className="border-b border-stroke px-7 py-4">
                 <h3 className="font-medium text-dark">Enter Display Message</h3>
               </div>
@@ -557,12 +565,96 @@ const BillParams = () => {
       </div>
 
 
+
+            {/* Email Display Message */}
+
+            <div className="grid grid-cols-2 gap-8">
+        {!showEmailMsgForm && (
+          <div className="col-span-5 xl:col-span-3">
+            <div className="rounded-lg border border-stroke bg-white ">
+              <div className="flex justify-between border-b border-stroke px-7 py-4">
+                <h3 className="font-medium text-dark">Email Message</h3>
+                <div>
+                  {!showEmailMsgForm && (
+                    <button
+                      onClick={toggleEmailMsgForm}
+                      className="hover:bg-primary-dark rounded-md bg-primary px-4 py-2 text-white"
+                    >
+                      Edit Message
+                    </button>
+                  )}
+                </div>
+              </div>
+              {parameters.map((parameter) => (
+                <div className="p-7" key={parameter.id}>
+                  <div className="mb-5.5">
+                    <label className="mb-3 block font-medium text-dark">
+                      Message
+                    </label>
+                    <p className="w-full rounded-lg bg-primary/[.07] px-4 py-3 text-dark">
+                      {parameter.emailmsg || "No message provided"}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {showEmailMsgForm && (
+          <div className="col-span-5 xl:col-span-3">
+            <div className="rounded-lg border border-stroke bg-white ">
+              <div className="border-b border-stroke px-7 py-4">
+                <h3 className="font-medium text-dark">Enter Email Message</h3>
+              </div>
+              <div className="p-7">
+                <form onSubmit={handleSubmit}>
+                  <div className="mb-5.5">
+                    <label className="mb-3 block font-medium text-dark">
+                      Message
+                    </label>
+                    <textarea
+                      name="emailmsg"
+                      className="w-full rounded-lg border border-stroke px-4 py-3 text-dark focus:border-primary"
+                      value={formData.emailmsg}
+                      onChange={(e) =>
+                        setFormData({ ...formData, emailmsg: e.target.value })
+                      }
+                      placeholder="Enter a message"
+                    ></textarea>
+                  </div>
+                  <div className="flex justify-end gap-4">
+                    <button
+                      type="button"
+                      onClick={toggleEmailMsgForm}
+                      className="rounded-lg border border-gray-400 bg-white px-4 py-2 text-dark hover:bg-gray-100"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="hover:bg-primary-dark rounded-lg bg-primary px-4 py-2 text-white"
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? "Saving..." : "Save"}
+                    </button>
+                  </div>
+                  {error && <p className="mt-4 text-red-500">{error}</p>}
+                  {success && <p className="mt-4 text-green-500">{success}</p>}
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+
             {/* Tier Information */}
 
             <div className="grid grid-cols-2 gap-8">
         {!showTierForm && (
           <div className="col-span-5 xl:col-span-3">
-            <div className="rounded-lg border border-stroke bg-white shadow-md">
+            <div className="rounded-lg border border-stroke bg-white ">
               <div className="flex justify-between border-b border-stroke px-7 py-4">
                 <h3 className="font-medium text-dark">Tier Information</h3>
 
@@ -678,7 +770,7 @@ const BillParams = () => {
         )}
         {showTierForm && (
           <div className="col-span-5 xl:col-span-3">
-            <div className="rounded-lg border border-stroke bg-white shadow-md">
+            <div className="rounded-lg border border-stroke bg-white ">
               <div className="border-b border-stroke px-7 py-4">
                 <h3 className="font-medium text-dark">Enter Tiers Prices</h3>
               </div>
@@ -822,6 +914,8 @@ const BillParams = () => {
             </div>
           </div>
         )}
+      </div>
+
       </div>
 
     </>

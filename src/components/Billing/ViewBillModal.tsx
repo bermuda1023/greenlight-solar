@@ -14,21 +14,29 @@ interface Bill {
   self_consumption_kwh: number;
   export_kwh: number;
   total_cost: number;
-  total_PTS:number;
+  total_PTS: number;
   energy_rate: number;
   total_revenue: number;
   status: string;
   created_at: string;
   arrears: number;
   invoice_number: string;
+  customer_id:string;
 }
-interface Parameters {
-  id: string;
-  fuelRate: number;
-  feedInPrice: number;
-  basePrice: number;
-  message: string;
-}
+
+interface CustomerBalanceProp {
+  customer_id:string;
+    total_billed:number;
+  total_paid:number;
+  current_balance:number;  
+  }
+  interface Parameters {
+    id: string;
+    fuelRate: number;
+    feedInPrice: number;
+    basePrice: number;
+    message: string;
+  }
 
 const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
   closeModal,
@@ -36,27 +44,52 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
 }) => {
   const invoiceRef = useRef<HTMLDivElement>(null);
   const [parameters, setParameters] = useState<Parameters[]>([]);
-    const [error, setError] = useState<string | null>(null);
+  const [customerBalance, setCustomerBalance] = useState<CustomerBalanceProp | null>(null);
   
-const fetchParameters = useCallback(async () => {
-  try {
-    const { data, error: fetchError } = await supabase
-      .from("parameters")
-      .select("*");
-    if (fetchError) throw fetchError;
-    console.log("Fetched parameters:", data); // Check what data is being fetched
-    setParameters(data || []);
-  } catch (err) {
-    setError(err instanceof Error ? err.message : "Error fetching parameters");
-  }
-}, []);
 
+  const [error, setError] = useState<string | null>(null);
 
+  const fetchParameters = useCallback(async () => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from("parameters")
+        .select("*");
+      if (fetchError) throw fetchError;
+      console.log("Fetched parameters:", data); // Check what data is being fetched
+      setParameters(data || []);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Error fetching parameters",
+      );
+    }
+  }, []);
+  const fetchCustomerBalance = useCallback(async () => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from("customer_balances")
+        .select("*")
+        .in("customer_id", [bill.customer_id]);
+  
+      if (fetchError) throw fetchError;
+  
+      setCustomerBalance(data?.[0] || null); // Store as a single object
+      console.log(data);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Error fetching parameters"
+      );
+    }
+  }, [bill.customer_id]);
+  
+  // Accessing safely
+  console.log(customerBalance?.current_balance);
+  
 
-    useEffect(() => {
-      fetchParameters();
-        }, [fetchParameters]);
-  const generatePDF = () => {
+  useEffect(() => {
+    fetchCustomerBalance();
+    fetchParameters();
+  }, [fetchParameters]);
+  const generatePDF = async () => {
     if (invoiceRef.current) {
       const options = {
         margin: [-1, -1, -1, -1], // Top, Left, Bottom, Right margins in mm
@@ -72,18 +105,20 @@ const fetchParameters = useCallback(async () => {
         },
       };
 
-      html2pdf().from(invoiceRef.current).set(options).save();
+      const abcd = await html2pdf()
+        .from(invoiceRef.current)
+        .set(options)
+        .save();
+
+      console.log(abcd);
     }
   };
 
-
-  
   // Calculate totals
-  const overdueBalance = bill.arrears || 0;
+  const overdueBalance =customerBalance?.current_balance  || 0;
   const balanceDue = bill.total_revenue + overdueBalance;
 
   return (
-    
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-gray-600 bg-opacity-50"
       onClick={closeModal}
@@ -97,7 +132,7 @@ const fetchParameters = useCallback(async () => {
           ref={invoiceRef}
           className="mx-auto h-[297mm] w-full max-w-[210mm] border border-gray-300 bg-white px-8 pb-12 shadow-lg"
         >
-          <header className="flex items-center justify-between py-16">
+          <header className="mt-6 flex items-center justify-between py-16">
             <Image
               src="/images/logo/logo.svg" // Ensure this file exists in the "public/images/logo" folder
               alt="Logo"
@@ -108,7 +143,7 @@ const fetchParameters = useCallback(async () => {
             />
           </header>
 
-          <section className="mb-8">
+          <section className="mb-26 mt-9">
             <div className="flex items-center justify-between pb-2">
               <h2 className="text-md text-black">RECIPIENT</h2>
               <div className="pr-3 text-2xl font-semibold text-black">
@@ -150,14 +185,14 @@ const fetchParameters = useCallback(async () => {
             </table>
           </section>
 
-          <table className="mb-12 w-full text-left text-sm">
-            <thead className="border-b-2 border-green-300 text-gray-700">
+          <table className="mb-20 w-full text-left text-sm">
+            <thead className="border-b-2 border-green-300 text-gray-700 ">
               <tr>
-                <th className="p-3 text-sm">Period Start</th>
-                <th className="p-3 text-sm">Period End</th>
-                <th className="p-3 text-sm">Description</th>
-                <th className="p-3 text-sm">Energy PTS</th>
-                <th className="p-3 text-sm">Per Unit</th>
+                <th className="p-3  text-sm">Period Start</th>
+                <th className="p-3  text-sm">Period End</th>
+                <th className="p-3  text-sm">Description</th>
+                <th className="p-3  text-sm">Energy PTS</th>
+                <th className="p-3  text-sm">Per Unit</th>
                 <th className="p-3 text-sm">Total</th>
               </tr>
             </thead>
@@ -170,9 +205,7 @@ const fetchParameters = useCallback(async () => {
                   {bill.billing_period_end}
                 </td>
                 <td className="p-3 text-xs text-gray-600">Energy Produced</td>
-                <td className="p-3 text-xs text-gray-600">
-                  {bill.total_PTS}
-                </td>
+                <td className="p-3 text-xs text-gray-600">{bill.total_PTS}</td>
                 <td className="p-3 text-xs text-gray-600">
                   ${bill.energy_rate.toFixed(4)}
                 </td>
@@ -183,25 +216,32 @@ const fetchParameters = useCallback(async () => {
             </tbody>
           </table>
 
-          <section className="mb-6 space-y-4 text-right">
-            <p className="text-sm font-semibold text-gray-800">
-              TOTAL PERIOD BALANCE{" "}
-              <span className="ml-20 text-black">
+          <section className="mb-6 space-y-6 text-right">
+            <div className="flex w-full justify-end  text-sm font-semibold text-gray-800">
+              <p className=" "> TOTAL PERIOD BALANCE{" "}</p>
+              <span className="ml-20 w-16 text-black">
                 ${bill.total_revenue.toFixed(2)}
               </span>
-            </p>
-            <p className="text-sm font-bold text-black">
-              OVERDUE BALANCE{" "}
-              <span className=" ml-20">${overdueBalance.toFixed(2)}</span>
-            </p>
-            <p className="text-sm font-bold text-red-600">
-              BALANCE DUE{" "}
-              <span className=" ml-20">${balanceDue.toFixed(2)}</span>
-            </p>
+            </div>
+            <div className="flex w-full justify-end  text-sm font-semibold text-gray-800">
+              <p className=""> OVERDUE BALANCE{" "}</p>
+              <span className="ml-20 w-16 text-black">
+                ${overdueBalance.toFixed(2)}
+              </span>
+            </div>
+
+
+            <div className="flex w-full justify-end  text-sm font-semibold text-red-600">
+              <p className=" "> BALANCE DUE{" "}</p>
+              <span className="ml-20 w-16 ">
+                ${balanceDue.toFixed(2)}
+              </span>
+            </div>
+    
           </section>
 
-          <section className="mt-8 text-sm text-gray-700">
-            <h3 className="mb-4 w-1/2 border-b-2 border-green-300 p-2 font-semibold text-black">
+          <section className="mt-12 text-sm text-gray-700">
+            <h3 className="mb-4 w-1/2 border-b-2 border-green-300 p-4 font-semibold text-black">
               DIRECT DEPOSIT
             </h3>
             <p className="text-sm">
@@ -209,7 +249,10 @@ const fetchParameters = useCallback(async () => {
               <span className="text-xs font-semibold">Bank of Butterfield</span>
             </p>
             <p className="text-sm">
-              Account Name: <span className="text-xs font-semibold">N/A</span>
+              Account Name:{" "}
+              <span className="text-xs font-semibold">
+                GreenLight Financing Ltd.{" "}
+              </span>
             </p>
             <p className="text-sm">
               Account Number:{" "}
@@ -217,31 +260,30 @@ const fetchParameters = useCallback(async () => {
             </p>
           </section>
 
-          <footer className="mt-12 grid grid-cols-3 gap-12 text-gray-800">
-  <div className="col-span-1">
-
-    <p className="text-center text-sm">
-      {parameters.length > 0
-        ? parameters[0].message // Use the message from the first parameter
-        : "Thank you for doing business with us!"} {/* Fallback if no parameters */}
-    </p>
-  </div>
-  <div className="col-span-1 text-xs ">
-    <p>
-      Greenlight Financing Ltd. #48 Par-la-ville Road, Suite 1543,
-      Hamilton, HM11
-    </p>
-  </div>
-  <div className="col-span-1 text-xs">
-    <a
-      href="mailto:billing@greenlightenergy.bm"
-      className="text-blue-700 underline"
-    >
-      billing@greenlightenergy.bm Phone: 1 (441) 705 3033
-    </a>
-  </div>
-</footer>
-
+          <footer className="mt-24 grid grid-cols-3 gap-12 text-gray-800">
+            <div className="col-span-1">
+              <p className="text-center text-sm">
+                {parameters.length > 0
+                  ? parameters[0].message // Use the message from the first parameter
+                  : "Thank you for doing business with us!"}{" "}
+                {/* Fallback if no parameters */}
+              </p>
+            </div>
+            <div className="col-span-1 text-xs ">
+              <p>
+                Greenlight Financing Ltd. #48 Par-la-ville Road, Suite 1543,
+                Hamilton, HM11
+              </p>
+            </div>
+            <div className="col-span-1 text-xs">
+              <a
+                href="mailto:billing@greenlightenergy.bm"
+                className="text-blue-700 underline"
+              >
+                billing@greenlightenergy.bm Phone: 1 (441) 705 3033
+              </a>
+            </div>
+          </footer>
         </div>
 
         {/* Buttons */}

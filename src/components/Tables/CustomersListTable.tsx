@@ -141,7 +141,7 @@ const CustomersListTable = () => {
       }
 
       const { data, error: fetchError } = await query;
-
+console.log("customer data: ",data)
       if (fetchError) throw fetchError;
 
       setCustomers(data || []);
