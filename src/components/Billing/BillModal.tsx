@@ -8,8 +8,6 @@ import { supabase } from "@/utils/supabase/browserClient";
 import { format } from "date-fns";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faTimes } from "@fortawesome/free-solid-svg-icons";
 import { CustomerBalanceService } from "@/services/balance-service";
 
 interface BillModalProps {
