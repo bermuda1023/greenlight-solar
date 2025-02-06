@@ -253,7 +253,6 @@ const BillModal: React.FC<BillModalProps> = ({
         );
   
         // Get `current_balance` (outstanding amount), defaulting to 0 if not found
-        const outstandingBalance = customerBalanceEntry?.current_balance || 0;
   
         // Calculate billing
         const billResult = calculateBilling({
@@ -273,6 +272,8 @@ const BillModal: React.FC<BillModalProps> = ({
           scaling: customer?.scaling_factor || 1,
           price: customer?.price || 0.31,
         });
+        const outstandingBalance = (customerBalanceEntry?.current_balance || 0)-(billResult.finalRevenue || 0);
+
   
         summary.totalRevenue += billResult.finalRevenue;
         summary.totalPts += consumptionValue || 0;
@@ -322,7 +323,6 @@ const BillModal: React.FC<BillModalProps> = ({
 
   const handlePostBill = async (billData: any) => {
     try {
-      toast.dismiss();
 
       if (
         !billData.site_name ||
@@ -348,10 +348,11 @@ const BillModal: React.FC<BillModalProps> = ({
         .eq("billing_period_end", billData.billing_period_end);
 
       if (fetchError) throw fetchError;
-      if (existingBills?.length > 0) {
-        toast.error("A bill for this date already exists.");
-        return false;
-      }
+
+      // if (existingBills?.length > 0) {
+      //   toast.error("A bill for this date already exists.");
+      //   return false;
+      // }
 
       const previousArrears = existingBills?.[0]?.arrears || 0;
       const total_bill = Number(billData.total_revenue) + previousArrears;
@@ -378,7 +379,7 @@ const BillModal: React.FC<BillModalProps> = ({
         total_bill,
       );
 
-      toast.success("Bill posted successfully!");
+      //  toast.success("Bill posted successfully!");
 
       console.log("Inserted Bill:", insertedBills?.[0]);
 
@@ -390,14 +391,14 @@ const BillModal: React.FC<BillModalProps> = ({
       );
     } catch (error) {
       console.error("Error handling bill:", error);
-      toast.error("Failed to post the bill.");
+      //  toast.error("Failed to post the bill.");
       return false;
     }
   };
 
   const handlePostAllBills = async () => {
     const parameter = parameters[0];
-
+toast.info("Processing...");
     const billsToProcess = selectedCustomers
       .map((customerId) => {
         const customer = customers.find((c) => c.id === customerId); // Fetching from customerData
@@ -441,9 +442,7 @@ const BillModal: React.FC<BillModalProps> = ({
           !billResult.belcoTotal ||
           !billResult.belcoPerKwh
         ) {
-          toast.error(
-            `Missing required data for customer ${customer?.site_name}`,
-          );
+          // toast.error(   `Missing required data for customer ${customer?.site_name}`, );
           return null; // Skip this bill if any required data is missing
         }
         const previousArrears = customer.previousArrears || 0;
@@ -505,16 +504,14 @@ const BillModal: React.FC<BillModalProps> = ({
         failureCount++;
       }
     }
-
+toast.dismiss();
     console.log("Final success count:", successCount);
     console.log("Final failure count:", failureCount);
 
     if (failureCount === 0) {
-      toast.success(`Successfully posted all ${successCount} bills!`);
+       toast.success(`Successfully posted all ${successCount} bills!`);
     } else {
-      toast.error(
-        `Posted ${successCount} bills successfully. Failed to post ${failureCount} bills. Check console for details.`,
-      );
+       toast.error(    `Posted ${successCount} bills successfully. Failed to post ${failureCount} bills.`,);
     }
   };
 
@@ -522,13 +519,15 @@ const BillModal: React.FC<BillModalProps> = ({
     setStatus("Processing...");
 
     try {
-      toast.info("Posting bill...");
+      // toast.info("Posting bill...");
 
       // ✅ First, post the bill and retrieve the updated data
       const updatedBillData = await handlePostBill(billData);
+console.log("updatedbill",updatedBillData)
 
-      if (!updatedBillData || !updatedBillData.invoice_number) {
-        toast.error("Failed to post bill. Invoice not sent.");
+
+if (!updatedBillData || !updatedBillData.invoice_number) {
+        // toast.error("Failed to post bill. Invoice not sent.");
         return;
       }
 
@@ -550,7 +549,7 @@ const BillModal: React.FC<BillModalProps> = ({
       // ✅ Compute `balanceDue`
       const balanceDue = parseFloat(billData.total_revenue) + overdueBalance;
 
-      toast.info("Generating invoice PDF...");
+      // toast.info("Generating invoice PDF...");
 
       // ✅ Fetch the message separately from `parameters`
       const message =
@@ -558,11 +557,31 @@ const BillModal: React.FC<BillModalProps> = ({
           ? parameters[0].message
           : "Thank you for doing business with us!";
 
-          const Emailmessage =
-          parameters.length > 0 && parameters[0]?.emailmsg
-            ? `${parameters[0].emailmsg}\n\nTotal Revenue: ${billData.total_revenue}\nOverdue Balance: ${overdueBalance}`
-            : `Please find attached your invoice.\n\nTotal Revenue: ${billData.total_revenue}\nOverdue Balance: ${overdueBalance}`;
         
+          const billingDate = new Date(billData?.billing_period_end);
+        const monthYear = billingDate.toLocaleString("en-US", { month: "long", year: "numeric" });
+        const Emailmessage =
+        parameters.length > 0 && parameters[0]?.emailmsg
+          ? `<p style="color: black;">Dear ${billData?.site_name},</p>
+             <p style="color: black;">${parameters[0].emailmsg}</p>
+             <p style="color: black;"><strong>Invoice Summary:</strong><br>- Total Revenue: $${billData.total_revenue}<br>- Overdue Balance: $${overdueBalance.toFixed(3)}</p>
+             <p style="color: black;">Thank you for your continued partnership.</p>
+             <p style="color: black;">Best regards,<br>Green Light Energy</p>`
+          : `<p style="color: black;">Dear ${billData?.site_name},</p>
+             <p style="color: black;">Please find attached the invoice for your account for the month of ${monthYear}. Kindly review the details and ensure payment is made promptly.</p>
+             <p style="color: black;"><strong>Invoice Summary:</strong><br>- Total Revenue: $${billData.total_revenue}<br>- Overdue Balance: $${overdueBalance.toFixed(3)}</p>
+             <p style="color: black;">Thank you for your continued partnership.</p>
+             <p style="color: black;">Best regards,<br>Green Light Energy</p>`;
+      
+      console.log(Emailmessage);
+      
+      
+      // Display the generated email message
+      
+      
+      
+
+
 
       // ✅ Generate Invoice HTML Template
 
@@ -721,7 +740,7 @@ const BillModal: React.FC<BillModalProps> = ({
       reader.onloadend = async () => {
         // ✅ Null check before using `reader.result`
         if (!reader.result) {
-          toast.error("Failed to generate PDF. Please try again.");
+          // toast.error("Failed to generate PDF. Please try again.");
           return;
         }
 
@@ -749,14 +768,14 @@ const BillModal: React.FC<BillModalProps> = ({
     
 
 
-        const result = await response.json();
-        if (response.ok) {
-          toast.success(
-            `Invoice email sent successfully to ${billData.email}! ✅`,
-          );
-        } else {
-          toast.error(`Error sending email: ${result.error}`);
-        }
+        // const result = await response.json();
+        // if (response.ok) {
+        //   toast.success(
+        //     `Bill Posted & Invoice email sent successfully to ${billData.email}!`,
+        //   );
+        // } else {
+        //   toast.error(`Error sending email: ${result.error}`);
+        // }
       };
     } catch (error) {
       console.error("[ERROR] Failed to process bill or send email:", error);
@@ -765,6 +784,7 @@ const BillModal: React.FC<BillModalProps> = ({
   };
 
   const handlePostAndEmailAllBills = async () => {
+    const toastID=toast.info("Processing...");
     const parameter = parameters[0]; // Using the first parameter from the parameters list
 
     // Process bills for selected customers
@@ -860,8 +880,13 @@ const BillModal: React.FC<BillModalProps> = ({
 
     // Display toast messages based on success/failure
     if (failureCount === 0) {
+       toast.dismiss(toastID);
+
       toast.success(`Successfully emailed all ${successCount} bills!`);
     } else {
+      toast.dismiss(toastID);
+
+
       toast.error(
         `Successfully emailed ${successCount} bills. Failed to email ${failureCount} bills. Check console for details.`,
       );
@@ -952,8 +977,7 @@ const BillModal: React.FC<BillModalProps> = ({
                 );
 
                 // Get the current_balance or default to 0
-                const outstandingBalance =
-                  customerBalanceEntry?.current_balance || 0;
+             
 
                 const customerEnergySums = energySums?.[customerId] || {};
                 const consumptionValue = customerEnergySums?.Consumption || 500;
@@ -978,6 +1002,8 @@ const BillModal: React.FC<BillModalProps> = ({
                   price: customer?.price || 0.31,
                 });
 
+                const outstandingBalance =
+                (customerBalanceEntry?.current_balance || 0)-(billResult?.finalRevenue || 0);
                 return (
                   <div
                     key={customerId}

@@ -182,7 +182,7 @@ console.log("Bill data:",data)
 
       // Update the state to remove the deleted bill from the UI
       setBills((prevBills) => prevBills.filter((bill) => bill.id !== billId));
-
+toast.dismiss();
       toast.success("Bill deleted successfully.");
     } catch (err) {
       console.error("Error deleting bill:", err);

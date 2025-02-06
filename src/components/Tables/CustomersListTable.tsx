@@ -4,6 +4,7 @@ import {
   FaArrowLeft,
   FaArrowRight,
   FaRegEdit,
+  FaRegFilePdf,
   FaRegTrashAlt,
 } from "react-icons/fa";
 import { AiOutlineSearch } from "react-icons/ai";
@@ -290,19 +291,26 @@ const CustomersListTable = () => {
     }
 
     try {
+      // Convert necessary fields to correct data types
+      const updatedData = {
+        email: formData.email,
+        address: formData.address,
+        site_name: formData.site_name,
+        solar_api_key: formData.solar_api_key,
+        installation_date: formData.installation_date,
+        installed_capacity: formData.installed_capacity
+          ? Number(formData.installed_capacity)
+          : null,
+        scaling_factor: formData.scaling_factor
+          ? Number(formData.scaling_factor)
+          : null,
+        price: formData.price ? Number(formData.price) : null,
+        site_ID: formData.site_ID ? Number(formData.site_ID) : null,
+      };
+
       const { error } = await supabase
         .from("customers")
-        .update({
-          email: formData.email,
-          address: formData.address,
-          site_name: formData.site_name,
-          solar_api_key: formData.solar_api_key,
-          installation_date: formData.installation_date,
-          installed_capacity: formData.installed_capacity,
-          scaling_factor: formData.scaling_factor,
-          price: formData.price,
-          site_ID: formData.site_ID,
-        })
+        .update(updatedData)
         .eq("id", customerIdToEdit);
 
       if (error) throw error;
@@ -529,6 +537,15 @@ const CustomersListTable = () => {
 
                         {/* Action button */}
                         <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">
+                        <button
+                            onClick={() => handleEditCustomer(customer.id)}
+                           className="rounded-lg bg-green-50 p-2 text-primary transition hover:bg-primary hover:text-green-50"
+                                    >
+                                      <span className="text-xl">
+                                        <FaRegEdit />
+                                      </span>
+                       
+                          </button>
                           <button
                             onClick={() => handleDeleteClick(customer.id)}
                             className="rounded-lg bg-red-50 p-2 text-red-600 transition hover:bg-red-600 hover:text-red-50"
@@ -538,14 +555,6 @@ const CustomersListTable = () => {
                             </span>
                           </button>
                           {/*  */}
-                          <button
-                            onClick={() => handleEditCustomer(customer.id)}
-                            className="rounded-lg bg-red-50 p-2 text-black transition hover:bg-black hover:text-red-50"
-                          >
-                            <span className="text-xl">
-                              <FaRegEdit />
-                            </span>
-                          </button>
                         </td>
                       </tr>
                     ))}
@@ -623,8 +632,6 @@ const CustomersListTable = () => {
           </div>
         </div>
       )}
-
-
       {EditModalOpen && (
         <div className="fixed inset-0 z-999 flex items-center justify-center bg-gray-500 bg-opacity-50">
           <div className="w-full max-w-6xl rounded-lg bg-white p-6 shadow-lg">
@@ -764,9 +771,14 @@ const CustomersListTable = () => {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-md bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
+                  disabled={isSubmitting}
+                  className={`rounded-md px-4 py-2 text-white ${
+                    isSubmitting
+                      ? "cursor-not-allowed bg-gray-400"
+                      : "bg-blue-500 hover:bg-blue-600"
+                  }`}
                 >
-                  Save
+                  {isSubmitting ? "Saving..." : "Save"}
                 </button>
               </div>
             </form>
