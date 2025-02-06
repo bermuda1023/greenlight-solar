@@ -1,6 +1,11 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
-import { FaArrowLeft, FaArrowRight, FaRegTrashAlt } from "react-icons/fa";
+import {
+  FaArrowLeft,
+  FaArrowRight,
+  FaRegEdit,
+  FaRegTrashAlt,
+} from "react-icons/fa";
 import { AiOutlineSearch } from "react-icons/ai";
 import { TbReceipt } from "react-icons/tb";
 import flatpickr from "flatpickr";
@@ -43,10 +48,34 @@ const CustomersListTable = () => {
   const [totalCount, setTotalCount] = useState(0);
   const [showBillModal, setShowBillModal] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [EditModalOpen, setEditModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [formData, setFormData] = useState({
+    email: "",
+    address: "",
+    site_name: "",
+    solar_api_key: "",
+    installation_date: "",
+    installed_capacity: "",
+    scaling_factor: "",
+    price: "",
+    site_ID: "",
+  });
+
   // State for managing the customer ID for deletion
   const [customerIdToDelete, setCustomerIdToDelete] = useState<string | null>(
     null,
   );
+  const [customerIdToEdit, setCustomerIdToEdit] = useState<string | null>(null);
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+  ) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+  };
 
   useEffect(() => {
     const startDatePicker = flatpickr("#startDate", {
@@ -141,7 +170,7 @@ const CustomersListTable = () => {
       }
 
       const { data, error: fetchError } = await query;
-console.log("customer data: ",data)
+      console.log("customer data: ", data);
       if (fetchError) throw fetchError;
 
       setCustomers(data || []);
@@ -249,15 +278,82 @@ console.log("customer data: ",data)
       toast.error("Failed to delete the customer. Please try again.");
     }
   };
+  const handleEditSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    toast.dismiss();
+    setIsSubmitting(true);
+
+    if (!customerIdToEdit) {
+      toast.error("No customer selected for editing.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("customers")
+        .update({
+          email: formData.email,
+          address: formData.address,
+          site_name: formData.site_name,
+          solar_api_key: formData.solar_api_key,
+          installation_date: formData.installation_date,
+          installed_capacity: formData.installed_capacity,
+          scaling_factor: formData.scaling_factor,
+          price: formData.price,
+          site_ID: formData.site_ID,
+        })
+        .eq("id", customerIdToEdit);
+
+      if (error) throw error;
+
+      toast.success("Customer updated successfully!");
+      setEditModalOpen(false);
+      fetchCustomers(); // Refresh customer list
+    } catch (error) {
+      console.error("Error updating customer:", error);
+      toast.error("Failed to update customer. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleClose = () => {
     // Close the modal without doing anything
     setDeleteModalOpen(false);
   };
+  const handleCloseEdit = () => {
+    // Close the modal without doing anything
+    setEditModalOpen(false);
+  };
 
   const handleDeleteClick = (customerId: string) => {
     setCustomerIdToDelete(customerId);
     setDeleteModalOpen(true); // Open the modal
+  };
+
+  const handleEditCustomer = (customerId: string) => {
+    const customer = customers.find((cust) => cust.id === customerId);
+    if (customer) {
+      setFormData({
+        email: customer.email || "",
+        address: customer.address || "",
+        site_name: customer.site_name || "",
+        solar_api_key: customer.solar_api_key || "",
+        installation_date: customer.installation_date || "",
+        installed_capacity: customer.installed_capacity
+          ? customer.installed_capacity.toString()
+          : "",
+        scaling_factor: customer.scaling_factor
+          ? customer.scaling_factor.toString()
+          : "",
+        price: customer.price ? customer.price.toString() : "",
+        site_ID: customer.site_ID ? customer.site_ID.toString() : "",
+      });
+
+      setCustomerIdToEdit(customerId);
+      setEditModalOpen(true);
+    }
   };
 
   return (
@@ -441,6 +537,15 @@ console.log("customer data: ",data)
                               <FaRegTrashAlt />
                             </span>
                           </button>
+                          {/*  */}
+                          <button
+                            onClick={() => handleEditCustomer(customer.id)}
+                            className="rounded-lg bg-red-50 p-2 text-black transition hover:bg-black hover:text-red-50"
+                          >
+                            <span className="text-xl">
+                              <FaRegEdit />
+                            </span>
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -515,6 +620,156 @@ console.log("customer data: ",data)
                 Yes
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+
+      {EditModalOpen && (
+        <div className="fixed inset-0 z-999 flex items-center justify-center bg-gray-500 bg-opacity-50">
+          <div className="w-full max-w-6xl rounded-lg bg-white p-6 shadow-lg">
+            <h3 className="mb-4 text-center text-lg font-semibold text-gray-700">
+              Edit Customer Details
+            </h3>
+
+            <form onSubmit={handleEditSubmit}>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Site Name
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.site_name}
+                    onChange={handleChange}
+                    name="site_name"
+                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    name="email"
+                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Installation Date
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.installation_date}
+                    onChange={handleChange}
+                    name="installation_date"
+                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Address
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.address}
+                    onChange={handleChange}
+                    name="address"
+                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Installed Capacity
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.installed_capacity}
+                    onChange={handleChange}
+                    name="installed_capacity"
+                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Site ID
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.site_ID}
+                    onChange={handleChange}
+                    name="site_ID"
+                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Scaling Factor
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.scaling_factor}
+                    onChange={handleChange}
+                    name="scaling_factor"
+                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Price
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.price}
+                    onChange={handleChange}
+                    name="price"
+                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Solar API Key
+                </label>
+                <input
+                  type="text"
+                  value={formData.solar_api_key}
+                  onChange={handleChange}
+                  name="solar_api_key"
+                  className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                />
+              </div>
+
+              <div className="mt-6 flex justify-between">
+                <button
+                  type="button"
+                  onClick={handleCloseEdit}
+                  className="rounded-md bg-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-400"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-md bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
+                >
+                  Save
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

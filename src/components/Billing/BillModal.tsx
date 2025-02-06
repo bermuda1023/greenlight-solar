@@ -9,6 +9,8 @@ import { format } from "date-fns";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { CustomerBalanceService } from "@/services/balance-service";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faTimes } from "@fortawesome/free-solid-svg-icons";
 
 interface BillModalProps {
   selectedCustomers: string[];
@@ -543,7 +545,7 @@ const BillModal: React.FC<BillModalProps> = ({
       }
 
       // ✅ Extract `overdueBalance`
-      const overdueBalance = customerBalanceData?.current_balance || 0;
+      const overdueBalance = (customerBalanceData?.current_balance || 0)-(billData?.total_revenue || 0);
 
       // ✅ Compute `balanceDue`
       const balanceDue = parseFloat(billData.total_revenue) + overdueBalance;
@@ -556,10 +558,11 @@ const BillModal: React.FC<BillModalProps> = ({
           ? parameters[0].message
           : "Thank you for doing business with us!";
 
-      const Emailmessage =
-        parameters.length > 0 && parameters[0]?.emailmsg
-          ? parameters[0].emailmsg
-          : "Please find attached your invoice.";
+          const Emailmessage =
+          parameters.length > 0 && parameters[0]?.emailmsg
+            ? `${parameters[0].emailmsg}\n\nTotal Revenue: ${billData.total_revenue}\nOverdue Balance: ${overdueBalance}`
+            : `Please find attached your invoice.\n\nTotal Revenue: ${billData.total_revenue}\nOverdue Balance: ${overdueBalance}`;
+        
 
       // ✅ Generate Invoice HTML Template
 
@@ -723,20 +726,28 @@ const BillModal: React.FC<BillModalProps> = ({
         }
 
         const pdfBase64 = reader.result.toString().split(",")[1]; // Extract base64 data
-
+   
+        const billingDate = new Date(billData?.billing_period_end);
+        const monthYear = billingDate.toLocaleString("en-US", { month: "long", year: "numeric" });
+        
+        const emailsubject = `Greenlight Energy Bill - ${monthYear}`;
         // ✅ Send email with PDF as an attachment
         const response = await fetch("/api/sendmail", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
+          
           body: JSON.stringify({
             userEmail: billData.email, // Ensure the email is passed correctly
-            subject: "Invoice from Greenlight Energy",
+            subject: emailsubject,
             htmlContent: Emailmessage,
             attachment: pdfBase64, // Sending Base64 encoded PDF
           }),
         });
+
+    
+
 
         const result = await response.json();
         if (response.ok) {
@@ -819,8 +830,7 @@ const BillModal: React.FC<BillModalProps> = ({
           total_PTS: consumptionValue || 666999,
           status: "Pending",
           total_revenue: billResult.finalRevenue.toFixed(2), // Ensure this is calculated
-          // overdueBalance: billResult.belcoTotal.toFixed(2), // Default overdueBalance or get it from somewhere
-          // balanceDue: billResult.finalRevenue.toFixed(2), // Default balanceDue or calculate
+   
         };
       })
       .filter(Boolean); // Filter out any null values (invalid bills)
@@ -973,6 +983,48 @@ const BillModal: React.FC<BillModalProps> = ({
                     key={customerId}
                     className="mb-8 rounded-lg border border-gray-200 bg-gray-50 p-4"
                   >
+{/* top section */}
+<div className="relative flex flex-col pr-0 pt-0">
+                      {/* Name and cross button            */}
+                      <div className="mb-1">
+                        <div className="flex w-full justify-between">
+                          <h3 className="text-lg font-semibold text-gray-700">
+                            {customer?.site_name}
+                          </h3>
+                          <button
+                            className="  rounded bg-red-200 px-2 py-1 text-red-800 hover:bg-red-300"
+                            onClick={() => handleRemoveBill(customerId)}
+                          >
+                            <FontAwesomeIcon icon={faTimes} />{" "}
+                          </button>
+                        </div>
+                                </div>
+
+{/* email and billing */}
+                      <div className="mb-4 flex justify-between border-b-2 border-dashed pb-2">
+                      <p className="text-sm text-gray-500">
+                      <strong className="text-base text-gray-dark">Email:</strong> {customer?.email || "N/A"}{" "}
+                          <br />
+                          <strong className="text-base text-gray-dark">Address:</strong> {customer?.address || "N/A"}
+                        </p>
+                        <div className="flex flex-col items-end">
+                        <strong className="text-base text-gray-dark">
+                          Billing Period:
+                        </strong>
+                        <span className="text-sm text-gray-6">
+                          {startDate} to {endDate}
+                        </span>
+                        </div>
+                      </div>
+
+                    </div>
+
+
+
+
+
+
+
                     {/* Invoice Section */}
                     <div className="mb-4 grid grid-cols-2 gap-4 text-sm text-gray-600">
                       <div>
