@@ -181,7 +181,7 @@ const ReconcileModal: React.FC<{
                   <th className="px-4 py-2 text-left">Original Amount</th>
                   <th className="px-4 py-2 text-left">Paid</th>
                   <th className="px-4 py-2 text-left">Pending</th>
-                  <th className="px-4 py-2 text-left">Arrears</th>
+                  {/* <th className="px-4 py-2 text-left">Arrears</th> */}
                 </tr>
               </thead>
               <tbody>
@@ -206,7 +206,7 @@ const ReconcileModal: React.FC<{
                       <td className="px-4 py-2">${monthlyBill.total_revenue.toFixed(2)}</td>
                       <td className="px-4 py-2">${paidAmount.toFixed(2)}</td>
                       <td className="px-4 py-2">${pendingAmount.toFixed(2)}</td>
-                      <td className="px-4 py-2">${(monthlyBill.arrears || 0).toFixed(2)}</td>
+                      {/* <td className="px-4 py-2">${(monthlyBill.arrears || 0).toFixed(2)}</td> */}
                     </tr>
                   );
                 })}
@@ -362,7 +362,7 @@ const ReconciliationTest = () => {
       
       // Fetch updated data immediately
       await fetchData();
-      
+      toast.dismiss();
       toast.success("Transaction unmatched successfully");
     } catch (error) {
       console.error("Error during undo:", error);
