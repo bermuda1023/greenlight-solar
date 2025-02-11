@@ -1,6 +1,12 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
-import { FaArrowLeft, FaArrowRight, FaRegTrashAlt } from "react-icons/fa";
+import {
+  FaArrowLeft,
+  FaArrowRight,
+  FaRegEdit,
+  FaRegFilePdf,
+  FaRegTrashAlt,
+} from "react-icons/fa";
 import { AiOutlineSearch } from "react-icons/ai";
 import { TbReceipt } from "react-icons/tb";
 import flatpickr from "flatpickr";
@@ -25,6 +31,7 @@ interface Customer {
   self_cons_kwh: number; // Self-consumption
   export_kwh: number; // Energy exported
   production_kwh: number; // Energy produced
+  outstanding_balance: number; // Total
 }
 
 const CustomersListTable = () => {
@@ -43,10 +50,34 @@ const CustomersListTable = () => {
   const [totalCount, setTotalCount] = useState(0);
   const [showBillModal, setShowBillModal] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [EditModalOpen, setEditModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [formData, setFormData] = useState({
+    email: "",
+    address: "",
+    site_name: "",
+    solar_api_key: "",
+    installation_date: "",
+    installed_capacity: "",
+    scaling_factor: "",
+    price: "",
+    site_ID: "",
+  });
+
   // State for managing the customer ID for deletion
   const [customerIdToDelete, setCustomerIdToDelete] = useState<string | null>(
     null,
   );
+  const [customerIdToEdit, setCustomerIdToEdit] = useState<string | null>(null);
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+  ) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+  };
 
   useEffect(() => {
     const startDatePicker = flatpickr("#startDate", {
@@ -104,61 +135,71 @@ const CustomersListTable = () => {
   const fetchCustomers = useCallback(async () => {
     try {
       setLoading(true);
-
+  
       // First, get total count for pagination
-      const countQuery = supabase
-        .from("customers")
-        .select("*", { count: "exact" });
-
+      const countQuery = supabase.from("customers").select("*", { count: "exact" });
+  
       if (searchTerm) {
-        countQuery.or(
-          `site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`,
-        );
+        countQuery.or(`site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
       }
-
+  
       if (statusFilter) {
         countQuery.eq("status", statusFilter);
       }
-
+  
       const { count } = await countQuery;
       setTotalCount(count || 0);
-
-      // Then fetch paginated data
+  
+      // Then fetch paginated customer data
       let query = supabase
         .from("customers")
         .select("*")
         .range((currentPage - 1) * pageSize, currentPage * pageSize - 1)
         .order("created_at", { ascending: false });
-
+  
       if (searchTerm) {
-        query = query.or(
-          `site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`,
-        );
+        query = query.or(`site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
       }
-
+  
       if (statusFilter) {
         query = query.eq("status", statusFilter);
       }
-
+  
       const { data, error: fetchError } = await query;
-console.log("customer data: ",data)
       if (fetchError) throw fetchError;
-
-      setCustomers(data || []);
-      console.log(data);
+  
+      // Fetch the outstanding balance (current_balance) for each customer
+      const customersWithBalance = await Promise.all(
+        data.map(async (customer) => {
+          const { data: balanceData, error: balanceError } = await supabase
+            .from("customer_balances")
+            .select("current_balance")
+            .eq("customer_id", customer.id)
+            .single(); // Assuming each customer has one balance record
+  
+          if (balanceError) {
+            console.error("Error fetching balance:", balanceError);
+          }
+  
+          return {
+            ...customer,
+            outstanding_balance: balanceData?.current_balance || 0, // Default to 0 if no balance is found
+          };
+        })
+      );
+  
+      setCustomers(customersWithBalance);
       setError(null);
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "An error occurred while fetching customers",
+        err instanceof Error ? err.message : "An error occurred while fetching customers"
       );
       setCustomers([]);
     } finally {
       setLoading(false);
     }
-  }, [searchTerm, statusFilter, currentPage, pageSize]); // Add all dependencies
-
+  }, [searchTerm, statusFilter, currentPage, pageSize]);
+  
   useEffect(() => {
     fetchCustomers();
   }, [fetchCustomers]);
@@ -249,15 +290,89 @@ console.log("customer data: ",data)
       toast.error("Failed to delete the customer. Please try again.");
     }
   };
+  const handleEditSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    toast.dismiss();
+    setIsSubmitting(true);
+
+    if (!customerIdToEdit) {
+      toast.error("No customer selected for editing.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      // Convert necessary fields to correct data types
+      const updatedData = {
+        email: formData.email,
+        address: formData.address,
+        site_name: formData.site_name,
+        solar_api_key: formData.solar_api_key,
+        installation_date: formData.installation_date,
+        installed_capacity: formData.installed_capacity
+          ? Number(formData.installed_capacity)
+          : null,
+        scaling_factor: formData.scaling_factor
+          ? Number(formData.scaling_factor)
+          : null,
+        price: formData.price ? Number(formData.price) : null,
+        site_ID: formData.site_ID ? Number(formData.site_ID) : null,
+      };
+
+      const { error } = await supabase
+        .from("customers")
+        .update(updatedData)
+        .eq("id", customerIdToEdit);
+
+      if (error) throw error;
+
+      toast.success("Customer updated successfully!");
+      setEditModalOpen(false);
+      fetchCustomers(); // Refresh customer list
+    } catch (error) {
+      console.error("Error updating customer:", error);
+      toast.error("Failed to update customer. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleClose = () => {
     // Close the modal without doing anything
     setDeleteModalOpen(false);
   };
+  const handleCloseEdit = () => {
+    // Close the modal without doing anything
+    setEditModalOpen(false);
+  };
 
   const handleDeleteClick = (customerId: string) => {
     setCustomerIdToDelete(customerId);
     setDeleteModalOpen(true); // Open the modal
+  };
+
+  const handleEditCustomer = (customerId: string) => {
+    const customer = customers.find((cust) => cust.id === customerId);
+    if (customer) {
+      setFormData({
+        email: customer.email || "",
+        address: customer.address || "",
+        site_name: customer.site_name || "",
+        solar_api_key: customer.solar_api_key || "",
+        installation_date: customer.installation_date || "",
+        installed_capacity: customer.installed_capacity
+          ? customer.installed_capacity.toString()
+          : "",
+        scaling_factor: customer.scaling_factor
+          ? customer.scaling_factor.toString()
+          : "",
+        price: customer.price ? customer.price.toString() : "",
+        site_ID: customer.site_ID ? customer.site_ID.toString() : "",
+      });
+
+      setCustomerIdToEdit(customerId);
+      setEditModalOpen(true);
+    }
   };
 
   return (
@@ -389,7 +504,9 @@ console.log("customer data: ",data)
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Installed Capacity
                       </th>
-
+                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                        Outstanding
+                      </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Action
                       </th>
@@ -430,9 +547,22 @@ console.log("customer data: ",data)
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.installed_capacity}
                         </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
+  {customer.outstanding_balance.toFixed(2)} {/* Display outstanding balance */}
+</td>
+
 
                         {/* Action button */}
                         <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">
+                        <button
+                            onClick={() => handleEditCustomer(customer.id)}
+                           className="rounded-lg bg-green-50 p-2 text-primary transition hover:bg-primary hover:text-green-50"
+                                    >
+                                      <span className="text-xl">
+                                        <FaRegEdit />
+                                      </span>
+                       
+                          </button>
                           <button
                             onClick={() => handleDeleteClick(customer.id)}
                             className="rounded-lg bg-red-50 p-2 text-red-600 transition hover:bg-red-600 hover:text-red-50"
@@ -441,6 +571,7 @@ console.log("customer data: ",data)
                               <FaRegTrashAlt />
                             </span>
                           </button>
+                          {/*  */}
                         </td>
                       </tr>
                     ))}
@@ -515,6 +646,159 @@ console.log("customer data: ",data)
                 Yes
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {EditModalOpen && (
+        <div className="fixed inset-0 z-999 flex items-center justify-center bg-gray-500 bg-opacity-50">
+          <div className="w-full max-w-6xl rounded-lg bg-white p-6 shadow-lg">
+            <h3 className="mb-4 text-center text-lg font-semibold text-gray-700">
+              Edit Customer Details
+            </h3>
+
+            <form onSubmit={handleEditSubmit}>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Site Name
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.site_name}
+                    onChange={handleChange}
+                    name="site_name"
+                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    name="email"
+                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Installation Date
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.installation_date}
+                    onChange={handleChange}
+                    name="installation_date"
+                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Address
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.address}
+                    onChange={handleChange}
+                    name="address"
+                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Installed Capacity
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.installed_capacity}
+                    onChange={handleChange}
+                    name="installed_capacity"
+                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Site ID
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.site_ID}
+                    onChange={handleChange}
+                    name="site_ID"
+                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Scaling Factor
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.scaling_factor}
+                    onChange={handleChange}
+                    name="scaling_factor"
+                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    Price
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.price}
+                    onChange={handleChange}
+                    name="price"
+                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Solar API Key
+                </label>
+                <input
+                  type="text"
+                  value={formData.solar_api_key}
+                  onChange={handleChange}
+                  name="solar_api_key"
+                  className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                />
+              </div>
+
+              <div className="mt-6 flex justify-between">
+                <button
+                  type="button"
+                  onClick={handleCloseEdit}
+                  className="rounded-md bg-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-400"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className={`rounded-md px-4 py-2 text-white ${
+                    isSubmitting
+                      ? "cursor-not-allowed bg-gray-400"
+                      : "bg-blue-500 hover:bg-blue-600"
+                  }`}
+                >
+                  {isSubmitting ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

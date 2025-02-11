@@ -71,7 +71,6 @@ const BillingScreen = () => {
     }
   }, [highlightId]);
 
-
   const fetchBills = useCallback(async () => {
     try {
       setLoading(true);
@@ -122,7 +121,7 @@ const BillingScreen = () => {
       }
 
       const { data, error } = await query;
-console.log("Bill data:",data)
+      console.log("Bill data:", data);
       if (error) throw error;
       setBills(data || []);
     } catch (err) {
@@ -145,12 +144,12 @@ console.log("Bill data:",data)
 
   const handleViewTransactions = async (billId: string) => {
     const bill = bills.find((b) => b.id === billId);
-  
+
     if (!bill) {
       alert("Bill not found.");
       return;
     }
-  
+
     try {
       // Fetch all transactions that have this billId in their reconciliation_ids array
       const { data: transactions, error: transactionsError } = await supabase
@@ -158,9 +157,9 @@ console.log("Bill data:",data)
         .select("*")
         .in("id", bill.reconciliation_ids || [])
         .order("date", { ascending: false });
-  
+
       if (transactionsError) throw transactionsError;
-  
+
       setTransactions(transactions);
       setIsTransactionsModalOpen(true);
     } catch (err) {
@@ -169,21 +168,52 @@ console.log("Bill data:",data)
     }
   };
 
-
-
-  const handleDeleteBill = async (billId: string) => {
+  const handleDeleteBill = async (
+    billId: string,
+    billcustomer: string,
+    billrevenue: number,
+  ) => {
     try {
-      const { error } = await supabase
+      // Fetch the current_balance from the customer_balances table
+      const { data: customerBalanceData, error: fetchError } = await supabase
+        .from("customer_balances")
+        .select("current_balance,total_billed")
+        .eq("customer_id", billcustomer)
+        .single();
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      // Calculate the new balance by subtracting the bill revenue from the current balance
+      const newBalance = customerBalanceData.current_balance - billrevenue;
+      const newBalancetotal = customerBalanceData.total_billed - billrevenue;
+
+
+      // Update the customer balance with the new calculated balance
+      const { error: updateError } = await supabase
+        .from("customer_balances")
+        .update({ current_balance: newBalance, total_billed: newBalancetotal })
+        .eq("customer_id", billcustomer);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      // Now, delete the bill from the monthly_bills table
+      const { error: deleteError } = await supabase
         .from("monthly_bills")
         .delete()
         .eq("id", billId);
 
-      if (error) throw error;
+      if (deleteError) throw deleteError;
 
       // Update the state to remove the deleted bill from the UI
       setBills((prevBills) => prevBills.filter((bill) => bill.id !== billId));
 
-      toast.success("Bill deleted successfully.");
+      // Show success messages
+      toast.dismiss();
+      toast.success("Bill deleted successfully and balance updated.");
     } catch (err) {
       console.error("Error deleting bill:", err);
       toast.error("Failed to delete the bill. Please try again.");
@@ -285,7 +315,7 @@ console.log("Bill data:",data)
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Total Revenue ($)
                         </th>
- 
+
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Status
                         </th>
@@ -328,7 +358,6 @@ console.log("Bill data:",data)
                             ${bill.total_revenue}
                           </td>
 
-   
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             <span
                               className={`inline-flex rounded-full px-3 py-1 text-sm font-medium ${
@@ -365,7 +394,13 @@ console.log("Bill data:",data)
                               </span>
                             </button>
                             <button
-                              onClick={() => handleDeleteBill(bill.id)}
+                              onClick={() =>
+                                handleDeleteBill(
+                                  bill.id,
+                                  bill.customer_id,
+                                  bill.total_revenue,
+                                )
+                              }
                               className="rounded-lg bg-red-50 p-2 text-red-600 transition hover:bg-red-600 hover:text-red-50"
                             >
                               <span className="text-xl">

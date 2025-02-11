@@ -88,7 +88,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
   useEffect(() => {
     fetchCustomerBalance();
     fetchParameters();
-  }, [fetchParameters]);
+  }, [fetchParameters, fetchCustomerBalance]);
   const generatePDF = async () => {
     if (invoiceRef.current) {
       const options = {
@@ -112,10 +112,11 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
 
       console.log(abcd);
     }
+    closeModal();
   };
 
   // Calculate totals
-  const overdueBalance =customerBalance?.current_balance  || 0;
+  const overdueBalance = (customerBalance?.current_balance || 0)-(bill.total_revenue || 0);
   const balanceDue = bill.total_revenue + overdueBalance;
 
   return (

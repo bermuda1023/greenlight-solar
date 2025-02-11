@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { FaUser, FaPhone, FaEnvelope, FaLock } from "react-icons/fa";
+import Image from "next/image";
+
 import { supabase } from "@/utils/supabase/browserClient";
 import { toast } from "react-toastify";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -16,6 +18,7 @@ const SettingBoxes = () => {
     email: "",
     phone: "",
     password: "",
+    image_url: "",
   });
 
   const [currentPassword, setCurrentPassword] = useState("");
@@ -24,7 +27,7 @@ const SettingBoxes = () => {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
+  const [isURL, setIsURL] = useState(false);
   const toggleForm = () => {
     setShowUpdateForm(!showUpdateForm);
   };
@@ -41,7 +44,7 @@ const SettingBoxes = () => {
         if (userError) throw userError;
 
         if (user) {
-          // First get the profile data
+          // Fetch the profile data
           const { data: profileData, error: profileError } = await supabase
             .from("profiles")
             .select("*")
@@ -50,14 +53,22 @@ const SettingBoxes = () => {
 
           if (profileError) throw profileError;
 
-          // We already have the email from the auth user
+          // Update state with fetched profile data
           setProfile({
             full_name: profileData?.full_name || "",
             username: profileData?.username || "",
             email: user.email || "",
             phone: profileData?.phone || "",
             password: profileData?.password || "",
+            image_url: profileData?.image_url || "",
           });
+
+          // Set isURL to true once the image_url is available
+          if (profileData?.image_url) {
+            setIsURL(true); // If there is an image_url, set isURL to true
+          } else {
+            setIsURL(false); // If no image_url, set isURL to false
+          }
         }
       } catch (error) {
         console.error("Error fetching profile:", error);
@@ -65,7 +76,7 @@ const SettingBoxes = () => {
     };
 
     fetchProfile();
-  }, []);
+  }, []); // Empty array ensures this runs only once on component mount
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -108,6 +119,7 @@ const SettingBoxes = () => {
         email: user.email || "",
         phone: profileData.phone || "",
         password: profileData.password || "",
+        image_url: profileData.image_url || "",
       });
 
       toggleForm();
@@ -163,6 +175,122 @@ const SettingBoxes = () => {
     }
   };
 
+  // image section
+
+  const [image, setImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+
+  // Handle the image selection or drop
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Preview the image
+      setImage(file); // Store the file
+      setImagePreview(URL.createObjectURL(file));
+    }
+  };
+
+  // Handle the image upload
+  const handleImageUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (image) {
+      setIsUploading(true);
+
+      // Get the user from the session
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("User is not authenticated.");
+        setIsUploading(false);
+        return;
+      }
+
+      // First, check if the user already has an image URL
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("image_url")
+        .eq("user_id", user.id)
+        .single();
+
+      if (profileError) {
+        toast.error("Error fetching profile data.");
+        setIsUploading(false);
+        return;
+      }
+
+      const oldImageUrl = profileData?.image_url;
+
+      // If there's an existing image, delete it from the bucket
+      if (oldImageUrl) {
+        const fileName = oldImageUrl.split("/").pop(); // Get the file name from URL
+        if (fileName) {
+          const { error: deleteError } = await supabase.storage
+            .from("profile_image")
+            .remove([`profile_image/${fileName}`]); // Remove the old image
+          if (deleteError) {
+            toast.error("Error deleting old image.");
+            setIsUploading(false);
+            return;
+          }
+        }
+      }
+
+      // Upload the new image to the 'profile_image' bucket
+      const filePath = `profile_image/${image.name}`; // Use the same path
+      try {
+        const { data, error: uploadError } = await supabase.storage
+          .from("profile_image")
+          .upload(filePath, image);
+
+        if (uploadError) {
+          toast.error("Error uploading image.");
+          setIsUploading(false);
+          return;
+        }
+
+        // If upload is successful, generate the public URL
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from("profile_image").getPublicUrl(filePath);
+
+        // Now, update the profile table with the new image URL
+        const { error: updateError } = await supabase
+          .from("profiles")
+          .update({ image_url: publicUrl })
+          .eq("user_id", user.id);
+
+        if (updateError) {
+          toast.error("Error updating profile.");
+          setIsUploading(false);
+          return;
+        }
+
+        setIsUploading(false);
+        toast.success("Image uploaded and profile updated successfully!");
+        setTimeout(() => {}, 20000);
+        window.location.reload();
+      } catch (err) {
+        toast.error("An error occurred during the upload process.");
+        console.error(err);
+        setIsUploading(false);
+      }
+    } else {
+      toast.error("Please select an image to upload.");
+    }
+  };
+
+  // Clear the image and hide the progress bar
+  const handleClear = () => {
+    setImagePreview(null);
+    setImage(null);
+    setIsUploading(false);
+    setUploadProgress(0);
+  };
+
   return (
     <>
       <div className="flex items-center justify-between">
@@ -175,6 +303,126 @@ const SettingBoxes = () => {
       </div>
 
       <div className="grid grid-cols-2 gap-8">
+        {/* Update Image Section */}
+        <div className="col-span-5 xl:col-span-3">
+          <div className="rounded-lg border border-stroke bg-white dark:border-dark-3 dark:bg-gray-dark">
+            <div className="border-b border-stroke px-7 py-4">
+              <h3 className="font-medium text-dark dark:text-white">
+                Change Image
+              </h3>
+            </div>
+            <div className="p-7">
+              <form onSubmit={handleImageUpload}>
+                {/* Only show upload area if no image is selected or being uploaded */}
+                {!image && !isUploading && (
+                  <div className="mb-4">
+                    <div className="group relative">
+                      <div
+                        className="flex w-full items-center justify-center rounded-lg py-[15px] pl-6 pr-11 font-medium text-dark outline-none"
+                        style={{ minHeight: "132px" }} // Match container size to image size
+                      >
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageChange}
+                          className="hidden"
+                          id="imageUpload"
+                        />
+                        <label
+                          htmlFor="imageUpload"
+                          className="cursor-pointer text-gray-500"
+                        >
+                          {/* Container for the profile image */}
+                          <span className="relative flex h-44 w-44 items-center justify-center rounded-full border-2 border-primary transition-all">
+                            {isURL ? (
+                              <Image
+                                width={250}
+                                height={250}
+                                src={
+                                  profile?.image_url ||
+                                  "/images/user/default-image.png"
+                                } // Fallback to default image if profile?.image_url is undefined
+                                alt="User"
+                                className="overflow-hidden rounded-full object-cover"
+                              />
+                            ) : (
+                              <p>Loading...</p> // Show loading message if isURL is false
+                            )}
+
+                            {/* Hidden "Edit" text div that appears on hover */}
+                            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black bg-opacity-50 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                              <span className="text-lg font-bold text-white">
+                                Upload Image
+                              </span>
+                            </div>
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Show image preview after image is selected */}
+                {imagePreview && !isUploading && (
+                  <div className="mt-4 flex justify-center">
+                    {" "}
+                    {/* Center the preview */}
+                    {/* Preview image with consistent size */}
+                    <span className="relative flex h-44 w-44 items-center justify-center rounded-full border-4 border-transparent transition-all group-hover:border-primary">
+                      <Image
+                        src={imagePreview}
+                        alt="Image Preview"
+                        width={250}
+                        height={250}
+                        className="rounded-full object-cover"
+                      />
+                      {/* Hidden "Edit" text div that appears on hover */}
+                      <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black bg-opacity-50 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                        <span className="text-lg font-bold text-white">
+                          Edit
+                        </span>
+                      </div>
+                    </span>
+                  </div>
+                )}
+
+                {/* Upload Progress Bar */}
+                {isUploading && (
+                  <div className="mt-4 h-[10px] w-full overflow-hidden rounded-lg bg-gray-200">
+                    <div
+                      className="h-full bg-primary"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                )}
+
+                {/* Buttons should only appear when image preview is shown */}
+                {imagePreview && !isUploading && (
+                  <div className="mt-4 flex justify-end space-x-4">
+                    {/* Clear Fields Button */}
+                    <button
+                      type="button"
+                      onClick={handleClear}
+                      className="rounded-lg border border-stroke px-6 py-2 font-medium text-dark hover:shadow-1 dark:text-white"
+                    >
+                      Cancel
+                    </button>
+
+                    {/* Save Image Button */}
+                    <button
+                      type="submit"
+                      disabled={isUploading || !image}
+                      className="rounded-lg bg-primary px-6 py-2 font-medium text-white hover:bg-opacity-90"
+                    >
+                      {isUploading ? "Uploading..." : "Save Image"}
+                    </button>
+                  </div>
+                )}
+              </form>
+            </div>
+          </div>
+        </div>
+
         {/* Personal Information Section */}
         {!showUpdateForm && (
           <div className="col-span-5 xl:col-span-3">
@@ -462,7 +710,21 @@ const SettingBoxes = () => {
                   </div>
                 </div>
 
-                <div className="flex justify-end">
+                <div className="flex justify-end space-x-4">
+                  {/* Clear Fields Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentPassword("");
+                      setNewPassword("");
+                      setConfirmPassword("");
+                    }}
+                    className="rounded-lg border border-stroke px-6 py-2 font-medium text-dark hover:shadow-1 dark:text-white"
+                  >
+                    Clear Fields
+                  </button>
+
+                  {/* reset password */}
                   <button
                     type="submit"
                     className="rounded-lg bg-primary px-6 py-2 font-medium text-white hover:bg-opacity-90"

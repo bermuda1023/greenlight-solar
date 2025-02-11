@@ -1,16 +1,56 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import ClickOutside from "@/components/ClickOutside";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/utils/supabase/browserClient"; // Import Supabase client
 
 const DropdownUser = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const router = useRouter()
+  const [userImage, setUserImage] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string>("loading...");
+  const [userEmail, setUserEmail] = useState<string>("loading...");
+
+  const router = useRouter();
+
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+          return;
+        }
+
+        // Fetch profile data based on the user ID
+        const { data: profileData, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("user_id", user.id)
+          .single();
+
+        if (error) {
+          console.error("Error fetching profile data:", error);
+          return;
+        }
+
+        // Update state with user profile data
+        setUserImage(profileData?.image_url || "/images/user/user-03.png"); // Fallback to default image
+        setUserName(profileData?.full_name || "User Name");
+        setUserEmail(profileData?.email || "User Email");
+      } catch (error) {
+        console.error("Error fetching user profile:", error);
+      }
+    };
+
+    fetchUserProfile();
+  }, []);
 
   const handleLogout = () => {
     router.push("/");
-  }
+  };
 
   return (
     <ClickOutside onClick={() => setDropdownOpen(false)} className="relative">
@@ -23,7 +63,7 @@ const DropdownUser = () => {
           <Image
             width={112}
             height={112}
-            src="/images/user/user-03.png"
+            src={userImage || "/images/user/user-03.png"} // Use the userImage or fallback to the default image
             style={{
               width: "auto",
               height: "auto",
@@ -34,7 +74,7 @@ const DropdownUser = () => {
         </span>
 
         <span className="flex items-center gap-2 font-medium text-dark dark:text-dark-6">
-          <span className="hidden lg:block">Jhon Smith</span>
+          <span className="hidden lg:block">{userName}</span>
 
           <svg
             className={`fill-current duration-200 ease-in ${dropdownOpen && "rotate-180"}`}
@@ -64,7 +104,7 @@ const DropdownUser = () => {
               <Image
                 width={112}
                 height={112}
-                src="/images/user/user-03.png"
+                src={userImage || "/images/user/user-03.png"} // Use the userImage or fallback to the default image
                 style={{
                   width: "auto",
                   height: "auto",
@@ -78,18 +118,19 @@ const DropdownUser = () => {
 
             <span className="block">
               <span className="block font-medium text-dark dark:text-white">
-                Jhon Smith
+                {userName}
               </span>
               <span className="block font-medium text-dark-5 dark:text-dark-6">
-                jonson@nextadmin.com
+                {userEmail}
               </span>
             </span>
           </div>
           <ul className="flex flex-col gap-1 border-y-[0.5px] border-stroke p-2.5 dark:border-dark-3">
             <li>
               <Link
-                href="/profile"
+                href="/dashboard/settings/profile"
                 className="flex w-full items-center gap-2.5 rounded-[7px] p-2.5 text-sm font-medium text-dark-4 duration-300 ease-in-out hover:bg-gray-2 hover:text-dark dark:text-dark-6 dark:hover:bg-dark-3 dark:hover:text-white lg:text-base"
+                onClick={() => setDropdownOpen(false)}
               >
                 <svg
                   className="fill-current"
@@ -113,13 +154,15 @@ const DropdownUser = () => {
                   />
                 </svg>
                 View profile
+                
               </Link>
             </li>
 
             <li>
               <Link
-                href="/pages/settings"
+                href="/dashboard/settings/bill-params"
                 className="flex w-full items-center gap-2.5 rounded-[7px] p-2.5 text-sm font-medium text-dark-4 duration-300 ease-in-out hover:bg-gray-2 hover:text-dark dark:text-dark-6 dark:hover:bg-dark-3 dark:hover:text-white lg:text-base"
+                onClick={() => setDropdownOpen(false)}
               >
                 <svg
                   className="fill-current"
@@ -142,13 +185,15 @@ const DropdownUser = () => {
                     fill=""
                   />
                 </svg>
-                Account Settings
+                View Bill Parameters
               </Link>
             </li>
           </ul>
           <div className="p-2.5">
-            <button className="flex w-full items-center gap-2.5 rounded-[7px] p-2.5 text-sm font-medium text-dark-4 duration-300 ease-in-out hover:bg-gray-2 hover:text-dark dark:text-dark-6 dark:hover:bg-dark-3 dark:hover:text-white lg:text-base"
-            onClick={handleLogout}>
+            <button
+              className="flex w-full items-center gap-2.5 rounded-[7px] p-2.5 text-sm font-medium text-dark-4 duration-300 ease-in-out hover:bg-gray-2 hover:text-dark dark:text-dark-6 dark:hover:bg-dark-3 dark:hover:text-white lg:text-base"
+              onClick={handleLogout}
+            >
               <svg
                 className="fill-current"
                 width="18"

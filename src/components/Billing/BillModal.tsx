@@ -9,6 +9,8 @@ import { format } from "date-fns";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { CustomerBalanceService } from "@/services/balance-service";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faTimes } from "@fortawesome/free-solid-svg-icons";
 
 interface BillModalProps {
   selectedCustomers: string[];
@@ -114,7 +116,7 @@ const BillModal: React.FC<BillModalProps> = ({
         err instanceof Error ? err.message : "Error fetching parameters",
       );
     }
-  }, []);
+  }, [selectedCustomers]);
 
   // fetch monthly bills
   const fetchbills = useCallback(async () => {
@@ -220,7 +222,7 @@ const BillModal: React.FC<BillModalProps> = ({
     fetchCustomerBalance();
     fetchCustomerData();
     fetchbills();
-  }, [fetchParameters, fetchCustomerData, fetchbills]);
+  }, [fetchParameters, fetchCustomerData, fetchbills, fetchCustomerBalance]);
 
   useEffect(() => {
     if (customerData.length > 0) {
@@ -234,7 +236,7 @@ const BillModal: React.FC<BillModalProps> = ({
         const customer = customerData.find((c) => c.id === customerId);
         if (!customer) return summary;
         const parameter = parameters[0];
-  
+
         const customerEnergySums = energySums?.[customerId] || {};
         const consumptionValue =
           typeof customerEnergySums?.Consumption === "number"
@@ -244,15 +246,14 @@ const BillModal: React.FC<BillModalProps> = ({
           typeof customerEnergySums?.FeedIn === "number"
             ? customerEnergySums.FeedIn
             : 50;
-  
+
         // Fetch customer balance entry from `customer_balances`
         const customerBalanceEntry = customerBalance.find(
-          (balance) => balance.customer_id === customerId
+          (balance) => balance.customer_id === customerId,
         );
-  
+
         // Get `current_balance` (outstanding amount), defaulting to 0 if not found
-        const outstandingBalance = customerBalanceEntry?.current_balance || 0;
-  
+
         // Calculate billing
         const billResult = calculateBilling({
           energyConsumed: consumptionValue,
@@ -271,17 +272,19 @@ const BillModal: React.FC<BillModalProps> = ({
           scaling: customer?.scaling_factor || 1,
           price: customer?.price || 0.31,
         });
-  
+        const outstandingBalance = customerBalanceEntry?.current_balance || 0;
+        // -(billResult.finalRevenue || 0);
+
         summary.totalRevenue += billResult.finalRevenue;
         summary.totalPts += consumptionValue || 0;
         summary.totalOutstanding += outstandingBalance; // ✅ Add total outstanding balance
-  
+
         return summary;
       },
-      { totalCost: 0, totalRevenue: 0, totalPts: 0, totalOutstanding: 0 }
+      { totalCost: 0, totalRevenue: 0, totalPts: 0, totalOutstanding: 0 },
     );
   };
-  
+
   const summary = calculateSummary();
 
   const handleRemoveBill = (customerId: string) => {
@@ -320,8 +323,6 @@ const BillModal: React.FC<BillModalProps> = ({
 
   const handlePostBill = async (billData: any) => {
     try {
-      toast.dismiss();
-
       if (
         !billData.site_name ||
         !billData.email ||
@@ -346,10 +347,11 @@ const BillModal: React.FC<BillModalProps> = ({
         .eq("billing_period_end", billData.billing_period_end);
 
       if (fetchError) throw fetchError;
-      if (existingBills?.length > 0) {
-        toast.error("A bill for this date already exists.");
-        return false;
-      }
+
+      // if (existingBills?.length > 0) {
+      //   toast.error("A bill for this date already exists.");
+      //   return false;
+      // }
 
       const previousArrears = existingBills?.[0]?.arrears || 0;
       const total_bill = Number(billData.total_revenue) + previousArrears;
@@ -376,7 +378,7 @@ const BillModal: React.FC<BillModalProps> = ({
         total_bill,
       );
 
-      toast.success("Bill posted successfully!");
+      //  toast.success("Bill posted successfully!");
 
       console.log("Inserted Bill:", insertedBills?.[0]);
 
@@ -388,14 +390,14 @@ const BillModal: React.FC<BillModalProps> = ({
       );
     } catch (error) {
       console.error("Error handling bill:", error);
-      toast.error("Failed to post the bill.");
+      //  toast.error("Failed to post the bill.");
       return false;
     }
   };
 
   const handlePostAllBills = async () => {
     const parameter = parameters[0];
-
+    toast.info("Processing...");
     const billsToProcess = selectedCustomers
       .map((customerId) => {
         const customer = customers.find((c) => c.id === customerId); // Fetching from customerData
@@ -439,9 +441,7 @@ const BillModal: React.FC<BillModalProps> = ({
           !billResult.belcoTotal ||
           !billResult.belcoPerKwh
         ) {
-          toast.error(
-            `Missing required data for customer ${customer?.site_name}`,
-          );
+          // toast.error(   `Missing required data for customer ${customer?.site_name}`, );
           return null; // Skip this bill if any required data is missing
         }
         const previousArrears = customer.previousArrears || 0;
@@ -503,7 +503,7 @@ const BillModal: React.FC<BillModalProps> = ({
         failureCount++;
       }
     }
-
+    toast.dismiss();
     console.log("Final success count:", successCount);
     console.log("Final failure count:", failureCount);
 
@@ -511,22 +511,24 @@ const BillModal: React.FC<BillModalProps> = ({
       toast.success(`Successfully posted all ${successCount} bills!`);
     } else {
       toast.error(
-        `Posted ${successCount} bills successfully. Failed to post ${failureCount} bills. Check console for details.`,
+        `Posted ${successCount} bills successfully. Failed to post ${failureCount} bills.`,
       );
     }
+ onClose();
   };
 
   const handleEmailBill = async (billData: any) => {
     setStatus("Processing...");
 
     try {
-      toast.info("Posting bill...");
+      // toast.info("Posting bill...");
 
       // ✅ First, post the bill and retrieve the updated data
       const updatedBillData = await handlePostBill(billData);
+      console.log("updatedbill", updatedBillData);
 
       if (!updatedBillData || !updatedBillData.invoice_number) {
-        toast.error("Failed to post bill. Invoice not sent.");
+        // toast.error("Failed to post bill. Invoice not sent.");
         return;
       }
 
@@ -543,12 +545,14 @@ const BillModal: React.FC<BillModalProps> = ({
       }
 
       // ✅ Extract `overdueBalance`
-      const overdueBalance = customerBalanceData?.current_balance || 0;
+      const overdueBalance =
+        (customerBalanceData?.current_balance || 0) -
+        (billData?.total_revenue || 0);
 
       // ✅ Compute `balanceDue`
       const balanceDue = parseFloat(billData.total_revenue) + overdueBalance;
 
-      toast.info("Generating invoice PDF...");
+      // toast.info("Generating invoice PDF...");
 
       // ✅ Fetch the message separately from `parameters`
       const message =
@@ -556,10 +560,27 @@ const BillModal: React.FC<BillModalProps> = ({
           ? parameters[0].message
           : "Thank you for doing business with us!";
 
+      const billingDate = new Date(billData?.billing_period_end);
+      const monthYear = billingDate.toLocaleString("en-US", {
+        month: "long",
+        year: "numeric",
+      });
       const Emailmessage =
         parameters.length > 0 && parameters[0]?.emailmsg
-          ? parameters[0].emailmsg
-          : "Please find attached your invoice.";
+          ? `<p style="color: black;">Dear ${billData?.site_name},</p>
+             <p style="color: black;">${parameters[0].emailmsg}</p>
+             <p style="color: black;"><strong>Invoice Summary:</strong><br>- Total Revenue: $${billData.total_revenue}<br>- Overdue Balance: $${overdueBalance.toFixed(3)}</p>
+             <p style="color: black;">Thank you for your continued partnership.</p>
+             <p style="color: black;">Best regards,<br>Green Light Energy</p>`
+          : `<p style="color: black;">Dear ${billData?.site_name},</p>
+             <p style="color: black;">Please find attached the invoice for your account for the month of ${monthYear}. Kindly review the details and ensure payment is made promptly.</p>
+             <p style="color: black;"><strong>Invoice Summary:</strong><br>- Total Revenue: $${billData.total_revenue}<br>- Overdue Balance: $${overdueBalance.toFixed(3)}</p>
+             <p style="color: black;">Thank you for your continued partnership.</p>
+             <p style="color: black;">Best regards,<br>Green Light Energy</p>`;
+
+      console.log(Emailmessage);
+
+      // Display the generated email message
 
       // ✅ Generate Invoice HTML Template
 
@@ -640,7 +661,7 @@ const BillModal: React.FC<BillModalProps> = ({
   
             <div class="flex w-full justify-end  text-sm font-semibold text-gray-800">
   <p> OVERDUE BALANCE</p>
-          <span class="ml-20 w-20 text-black">$ ${overdueBalance}</span>
+          <span class="ml-20 w-20 text-black">$ ${overdueBalance.toFixed(2)}</span>
       </div>
   
   
@@ -718,34 +739,42 @@ const BillModal: React.FC<BillModalProps> = ({
       reader.onloadend = async () => {
         // ✅ Null check before using `reader.result`
         if (!reader.result) {
-          toast.error("Failed to generate PDF. Please try again.");
+          // toast.error("Failed to generate PDF. Please try again.");
           return;
         }
 
         const pdfBase64 = reader.result.toString().split(",")[1]; // Extract base64 data
 
+        const billingDate = new Date(billData?.billing_period_end);
+        const monthYear = billingDate.toLocaleString("en-US", {
+          month: "long",
+          year: "numeric",
+        });
+
+        const emailsubject = `Greenlight Energy Bill - ${monthYear}`;
         // ✅ Send email with PDF as an attachment
         const response = await fetch("/api/sendmail", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
+
           body: JSON.stringify({
             userEmail: billData.email, // Ensure the email is passed correctly
-            subject: "Invoice from Greenlight Energy",
+            subject: emailsubject,
             htmlContent: Emailmessage,
             attachment: pdfBase64, // Sending Base64 encoded PDF
           }),
         });
 
-        const result = await response.json();
-        if (response.ok) {
-          toast.success(
-            `Invoice email sent successfully to ${billData.email}! ✅`,
-          );
-        } else {
-          toast.error(`Error sending email: ${result.error}`);
-        }
+        // const result = await response.json();
+        // if (response.ok) {
+        //   toast.success(
+        //     `Bill Posted & Invoice email sent successfully to ${billData.email}!`,
+        //   );
+        // } else {
+        //   toast.error(`Error sending email: ${result.error}`);
+        // }
       };
     } catch (error) {
       console.error("[ERROR] Failed to process bill or send email:", error);
@@ -754,6 +783,7 @@ const BillModal: React.FC<BillModalProps> = ({
   };
 
   const handlePostAndEmailAllBills = async () => {
+    const toastID = toast.info("Processing...");
     const parameter = parameters[0]; // Using the first parameter from the parameters list
 
     // Process bills for selected customers
@@ -819,8 +849,6 @@ const BillModal: React.FC<BillModalProps> = ({
           total_PTS: consumptionValue || 666999,
           status: "Pending",
           total_revenue: billResult.finalRevenue.toFixed(2), // Ensure this is calculated
-          // overdueBalance: billResult.belcoTotal.toFixed(2), // Default overdueBalance or get it from somewhere
-          // balanceDue: billResult.finalRevenue.toFixed(2), // Default balanceDue or calculate
         };
       })
       .filter(Boolean); // Filter out any null values (invalid bills)
@@ -850,12 +878,18 @@ const BillModal: React.FC<BillModalProps> = ({
 
     // Display toast messages based on success/failure
     if (failureCount === 0) {
+      toast.dismiss(toastID);
+
       toast.success(`Successfully emailed all ${successCount} bills!`);
     } else {
+      toast.dismiss(toastID);
+
       toast.error(
         `Successfully emailed ${successCount} bills. Failed to email ${failureCount} bills. Check console for details.`,
       );
     }
+    onClose();
+
   };
 
   return (
@@ -942,8 +976,6 @@ const BillModal: React.FC<BillModalProps> = ({
                 );
 
                 // Get the current_balance or default to 0
-                const outstandingBalance =
-                  customerBalanceEntry?.current_balance || 0;
 
                 const customerEnergySums = energySums?.[customerId] || {};
                 const consumptionValue = customerEnergySums?.Consumption || 500;
@@ -968,11 +1000,54 @@ const BillModal: React.FC<BillModalProps> = ({
                   price: customer?.price || 0.31,
                 });
 
+                const outstandingBalance =
+                  customerBalanceEntry?.current_balance || 0;
+                // -(billResult?.finalRevenue || 0);
                 return (
                   <div
                     key={customerId}
                     className="mb-8 rounded-lg border border-gray-200 bg-gray-50 p-4"
                   >
+                    {/* top section */}
+                    <div className="relative flex flex-col pr-0 pt-0">
+                      {/* Name and cross button            */}
+                      <div className="mb-1">
+                        <div className="flex w-full justify-between">
+                          <h3 className="text-lg font-semibold text-gray-700">
+                            {customer?.site_name}
+                          </h3>
+                          <button
+                            className="  rounded bg-red-200 px-2 py-1 text-red-800 hover:bg-red-300"
+                            onClick={() => handleRemoveBill(customerId)}
+                          >
+                            <FontAwesomeIcon icon={faTimes} />{" "}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* email and billing */}
+                      <div className="mb-4 flex justify-between border-b-2 border-dashed pb-2">
+                        <p className="text-sm text-gray-500">
+                          <strong className="text-base text-gray-dark">
+                            Email:
+                          </strong>{" "}
+                          {customer?.email || "N/A"} <br />
+                          <strong className="text-base text-gray-dark">
+                            Address:
+                          </strong>{" "}
+                          {customer?.address || "N/A"}
+                        </p>
+                        <div className="flex flex-col items-end">
+                          <strong className="text-base text-gray-dark">
+                            Billing Period:
+                          </strong>
+                          <span className="text-sm text-gray-6">
+                            {startDate} to {endDate}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Invoice Section */}
                     <div className="mb-4 grid grid-cols-2 gap-4 text-sm text-gray-600">
                       <div>
