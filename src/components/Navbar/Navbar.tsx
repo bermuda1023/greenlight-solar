@@ -19,14 +19,14 @@ const Navbar: React.FC = () => {
             </Link>
           </div>
           {/* Sign-in Button */}
-          <div>
+          {/* <div>
             <Link
               href="/"
               className="text-base font-medium text-white bg-primary px-6 py-3 rounded-lg"
             >
               Account
             </Link>
-          </div>
+          </div> */}
         </div>
       </div>
     </nav>

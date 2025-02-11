@@ -305,123 +305,125 @@ const SettingBoxes = () => {
       <div className="grid grid-cols-2 gap-8">
         {/* Update Image Section */}
         <div className="col-span-5 xl:col-span-3">
-          <div className="rounded-lg border border-stroke bg-white dark:border-dark-3 dark:bg-gray-dark">
-            <div className="border-b border-stroke px-7 py-4">
-              <h3 className="font-medium text-dark dark:text-white">
-                Change Image
-              </h3>
-            </div>
-            <div className="p-7">
-              <form onSubmit={handleImageUpload}>
-                {/* Only show upload area if no image is selected or being uploaded */}
-                {!image && !isUploading && (
-                  <div className="mb-4">
-                    <div className="group relative">
-                      <div
-                        className="flex w-full items-center justify-center rounded-lg py-[15px] pl-6 pr-11 font-medium text-dark outline-none"
-                        style={{ minHeight: "132px" }} // Match container size to image size
-                      >
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleImageChange}
-                          className="hidden"
-                          id="imageUpload"
+  <div className="rounded-lg border border-stroke bg-white dark:border-dark-3 dark:bg-gray-dark">
+    <div className="border-b border-stroke px-7 py-4">
+      <h3 className="font-medium text-dark dark:text-white">
+        Change Image
+      </h3>
+    </div>
+    <div className="p-7">
+      <form onSubmit={handleImageUpload}>
+        {/* Only show upload area if no image is selected or being uploaded */}
+        {!image && !isUploading && (
+          <div className="mb-4 p-4 rounded-lg">
+            <div className="relative">
+              <div
+                className="flex w-full items-center justify-center rounded-lg py-[15px] pl-6 pr-11 font-medium text-dark outline-none"
+                style={{ maxHeight: "132px", width: "auto" }} // Container size fix
+              >
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="hidden"
+                  id="imageUpload"
+                />
+                <label
+                  htmlFor="imageUpload"
+                  className="cursor-pointer text-gray-500"
+                >
+                  {/* Container for the profile image */}
+                  <span className="relative group">
+                    {/* Profile Image Circle */}
+                    <span className="relative flex h-44 w-44 items-center justify-center rounded-full border-2 border-primary transition-all">
+                      {isURL ? (
+                        <Image
+                          width={250}
+                          height={250}
+                          src={
+                            profile?.image_url ||
+                            "/images/user/default-image.png"
+                          } // Fallback to default image if profile?.image_url is undefined
+                          alt="User"
+                          className="overflow-hidden rounded-full object-cover" // Use object-cover to crop and fit the image
                         />
-                        <label
-                          htmlFor="imageUpload"
-                          className="cursor-pointer text-gray-500"
-                        >
-                          {/* Container for the profile image */}
-                          <span className="relative flex h-44 w-44 items-center justify-center rounded-full border-2 border-primary transition-all">
-                            {isURL ? (
-                              <Image
-                                width={250}
-                                height={250}
-                                src={
-                                  profile?.image_url ||
-                                  "/images/user/default-image.png"
-                                } // Fallback to default image if profile?.image_url is undefined
-                                alt="User"
-                                className="overflow-hidden rounded-full object-cover"
-                              />
-                            ) : (
-                              <p>Loading...</p> // Show loading message if isURL is false
-                            )}
+                      ) : (
+                        <p>Loading...</p> // Show loading message if isURL is false
+                      )}
 
-                            {/* Hidden "Edit" text div that appears on hover */}
-                            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black bg-opacity-50 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                              <span className="text-lg font-bold text-white">
-                                Upload Image
-                              </span>
-                            </div>
-                          </span>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Show image preview after image is selected */}
-                {imagePreview && !isUploading && (
-                  <div className="mt-4 flex justify-center">
-                    {" "}
-                    {/* Center the preview */}
-                    {/* Preview image with consistent size */}
-                    <span className="relative flex h-44 w-44 items-center justify-center rounded-full border-4 border-transparent transition-all group-hover:border-primary">
-                      <Image
-                        src={imagePreview}
-                        alt="Image Preview"
-                        width={250}
-                        height={250}
-                        className="rounded-full object-cover"
-                      />
-                      {/* Hidden "Edit" text div that appears on hover */}
+                      {/* Hidden "Upload Image" text div that appears only when hovering over the circle */}
                       <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black bg-opacity-50 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
                         <span className="text-lg font-bold text-white">
-                          Edit
+                          Upload Image
                         </span>
                       </div>
                     </span>
-                  </div>
-                )}
-
-                {/* Upload Progress Bar */}
-                {isUploading && (
-                  <div className="mt-4 h-[10px] w-full overflow-hidden rounded-lg bg-gray-200">
-                    <div
-                      className="h-full bg-primary"
-                      style={{ width: `${uploadProgress}%` }}
-                    />
-                  </div>
-                )}
-
-                {/* Buttons should only appear when image preview is shown */}
-                {imagePreview && !isUploading && (
-                  <div className="mt-4 flex justify-end space-x-4">
-                    {/* Clear Fields Button */}
-                    <button
-                      type="button"
-                      onClick={handleClear}
-                      className="rounded-lg border border-stroke px-6 py-2 font-medium text-dark hover:shadow-1 dark:text-white"
-                    >
-                      Cancel
-                    </button>
-
-                    {/* Save Image Button */}
-                    <button
-                      type="submit"
-                      disabled={isUploading || !image}
-                      className="rounded-lg bg-primary px-6 py-2 font-medium text-white hover:bg-opacity-90"
-                    >
-                      {isUploading ? "Uploading..." : "Save Image"}
-                    </button>
-                  </div>
-                )}
-              </form>
+                  </span>
+                </label>
+              </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* Show image preview after image is selected */}
+        {imagePreview && !isUploading && (
+          <div className="mt-4 flex justify-center">
+            {/* Center the preview */}
+            {/* Preview image with consistent size */}
+            <span className="relative flex h-44 w-44 items-center justify-center rounded-full border-4 border-transparent transition-all group-hover:border-primary">
+              <Image
+                src={imagePreview}
+                alt="Image Preview"
+                width={250}
+                height={250}
+                className="rounded-full object-cover" // Ensures image stays within the circle and covers it completely
+              />
+              {/* Hidden "Edit" text div that appears on hover */}
+              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black bg-opacity-50 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                <span className="text-lg font-bold text-white">
+                  Edit
+                </span>
+              </div>
+            </span>
+          </div>
+        )}
+
+        {/* Upload Progress Bar */}
+        {isUploading && (
+          <div className="mt-4 h-[10px] w-full overflow-hidden rounded-lg bg-gray-200">
+            <div
+              className="h-full bg-primary"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+        )}
+
+        {/* Buttons should only appear when image preview is shown */}
+        {imagePreview && !isUploading && (
+          <div className="mt-4 flex justify-end space-x-4">
+            {/* Clear Fields Button */}
+            <button
+              type="button"
+              onClick={handleClear}
+              className="rounded-lg border border-stroke px-6 py-2 font-medium text-dark hover:shadow-1 dark:text-white"
+            >
+              Cancel
+            </button>
+
+            {/* Save Image Button */}
+            <button
+              type="submit"
+              disabled={isUploading || !image}
+              className="rounded-lg bg-primary px-6 py-2 font-medium text-white hover:bg-opacity-90"
+            >
+              {isUploading ? "Uploading..." : "Save Image"}
+            </button>
+          </div>
+        )}
+      </form>
+    </div>
+  </div>
+</div>
 
         {/* Personal Information Section */}
         {!showUpdateForm && (
