@@ -177,7 +177,7 @@ const BillingScreen = () => {
       // Fetch the current_balance from the customer_balances table
       const { data: customerBalanceData, error: fetchError } = await supabase
         .from("customer_balances")
-        .select("current_balance")
+        .select("current_balance,total_billed")
         .eq("customer_id", billcustomer)
         .single();
 
@@ -187,11 +187,13 @@ const BillingScreen = () => {
 
       // Calculate the new balance by subtracting the bill revenue from the current balance
       const newBalance = customerBalanceData.current_balance - billrevenue;
+      const newBalancetotal = customerBalanceData.total_billed - billrevenue;
+
 
       // Update the customer balance with the new calculated balance
       const { error: updateError } = await supabase
         .from("customer_balances")
-        .update({ current_balance: newBalance })
+        .update({ current_balance: newBalance, total_billed: newBalancetotal })
         .eq("customer_id", billcustomer);
 
       if (updateError) {

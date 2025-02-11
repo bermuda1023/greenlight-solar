@@ -116,7 +116,7 @@ const BillModal: React.FC<BillModalProps> = ({
         err instanceof Error ? err.message : "Error fetching parameters",
       );
     }
-  }, []);
+  }, [selectedCustomers]);
 
   // fetch monthly bills
   const fetchbills = useCallback(async () => {
@@ -222,7 +222,7 @@ const BillModal: React.FC<BillModalProps> = ({
     fetchCustomerBalance();
     fetchCustomerData();
     fetchbills();
-  }, [fetchParameters, fetchCustomerData, fetchbills]);
+  }, [fetchParameters, fetchCustomerData, fetchbills, fetchCustomerBalance]);
 
   useEffect(() => {
     if (customerData.length > 0) {
@@ -514,6 +514,7 @@ const BillModal: React.FC<BillModalProps> = ({
         `Posted ${successCount} bills successfully. Failed to post ${failureCount} bills.`,
       );
     }
+ onClose();
   };
 
   const handleEmailBill = async (billData: any) => {
@@ -660,7 +661,7 @@ const BillModal: React.FC<BillModalProps> = ({
   
             <div class="flex w-full justify-end  text-sm font-semibold text-gray-800">
   <p> OVERDUE BALANCE</p>
-          <span class="ml-20 w-20 text-black">$ ${overdueBalance}</span>
+          <span class="ml-20 w-20 text-black">$ ${overdueBalance.toFixed(2)}</span>
       </div>
   
   
@@ -887,6 +888,8 @@ const BillModal: React.FC<BillModalProps> = ({
         `Successfully emailed ${successCount} bills. Failed to email ${failureCount} bills. Check console for details.`,
       );
     }
+    onClose();
+
   };
 
   return (

@@ -31,6 +31,7 @@ interface Customer {
   self_cons_kwh: number; // Self-consumption
   export_kwh: number; // Energy exported
   production_kwh: number; // Energy produced
+  outstanding_balance: number; // Total
 }
 
 const CustomersListTable = () => {
@@ -134,61 +135,71 @@ const CustomersListTable = () => {
   const fetchCustomers = useCallback(async () => {
     try {
       setLoading(true);
-
+  
       // First, get total count for pagination
-      const countQuery = supabase
-        .from("customers")
-        .select("*", { count: "exact" });
-
+      const countQuery = supabase.from("customers").select("*", { count: "exact" });
+  
       if (searchTerm) {
-        countQuery.or(
-          `site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`,
-        );
+        countQuery.or(`site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
       }
-
+  
       if (statusFilter) {
         countQuery.eq("status", statusFilter);
       }
-
+  
       const { count } = await countQuery;
       setTotalCount(count || 0);
-
-      // Then fetch paginated data
+  
+      // Then fetch paginated customer data
       let query = supabase
         .from("customers")
         .select("*")
         .range((currentPage - 1) * pageSize, currentPage * pageSize - 1)
         .order("created_at", { ascending: false });
-
+  
       if (searchTerm) {
-        query = query.or(
-          `site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`,
-        );
+        query = query.or(`site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
       }
-
+  
       if (statusFilter) {
         query = query.eq("status", statusFilter);
       }
-
+  
       const { data, error: fetchError } = await query;
-      console.log("customer data: ", data);
       if (fetchError) throw fetchError;
-
-      setCustomers(data || []);
-      console.log(data);
+  
+      // Fetch the outstanding balance (current_balance) for each customer
+      const customersWithBalance = await Promise.all(
+        data.map(async (customer) => {
+          const { data: balanceData, error: balanceError } = await supabase
+            .from("customer_balances")
+            .select("current_balance")
+            .eq("customer_id", customer.id)
+            .single(); // Assuming each customer has one balance record
+  
+          if (balanceError) {
+            console.error("Error fetching balance:", balanceError);
+          }
+  
+          return {
+            ...customer,
+            outstanding_balance: balanceData?.current_balance || 0, // Default to 0 if no balance is found
+          };
+        })
+      );
+  
+      setCustomers(customersWithBalance);
       setError(null);
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "An error occurred while fetching customers",
+        err instanceof Error ? err.message : "An error occurred while fetching customers"
       );
       setCustomers([]);
     } finally {
       setLoading(false);
     }
-  }, [searchTerm, statusFilter, currentPage, pageSize]); // Add all dependencies
-
+  }, [searchTerm, statusFilter, currentPage, pageSize]);
+  
   useEffect(() => {
     fetchCustomers();
   }, [fetchCustomers]);
@@ -493,7 +504,9 @@ const CustomersListTable = () => {
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Installed Capacity
                       </th>
-
+                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                        Outstanding
+                      </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Action
                       </th>
@@ -534,6 +547,10 @@ const CustomersListTable = () => {
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.installed_capacity}
                         </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
+  {customer.outstanding_balance.toFixed(2)} {/* Display outstanding balance */}
+</td>
+
 
                         {/* Action button */}
                         <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">

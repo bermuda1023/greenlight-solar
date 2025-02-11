@@ -580,7 +580,7 @@ const BillParams = () => {
             <div className="col-span-5 xl:col-span-3">
               <div className="rounded-lg border border-stroke bg-white ">
                 <div className="flex justify-between border-b border-stroke px-7 py-4">
-                  <h3 className="font-medium text-dark">Email Message</h3>
+                  <h3 className="font-medium text-dark">Email Body</h3>
                   <div>
                     {!showEmailMsgForm && (
                       <button
@@ -664,7 +664,7 @@ const BillParams = () => {
             <div className="col-span-5 xl:col-span-3">
               <div className="rounded-lg border border-stroke bg-white ">
                 <div className="flex justify-between border-b border-stroke px-7 py-4">
-                  <h3 className="font-medium text-dark">Tier Information</h3>
+                  <h3 className="font-medium text-dark">Tiers Rate</h3>
 
                   <div>
                     {!showTierForm && (
