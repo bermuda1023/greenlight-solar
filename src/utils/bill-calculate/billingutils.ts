@@ -96,6 +96,8 @@ export const calculateBilling = (inputs: {
   const savings =
     belcoRevenue - greenlightRevenue + fixedFeeSaving - belcoTotal;
 
+
+    
   return {
     totalpts,
     numberOfDays,

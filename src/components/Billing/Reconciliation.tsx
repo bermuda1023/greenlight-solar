@@ -170,7 +170,7 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
   
         await onReconcile(bill.id, bill.amount, selectedBillId, newPendingAmount);
   
-        // Save selectedBillId to local storage
+        
         localStorage.setItem("selectedBillId", selectedBillId);
   
         // Keep the modal open and update the selected bill data
