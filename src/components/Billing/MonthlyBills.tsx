@@ -189,7 +189,6 @@ const BillingScreen = () => {
       const newBalance = customerBalanceData.current_balance - billrevenue;
       const newBalancetotal = customerBalanceData.total_billed - billrevenue;
 
-
       // Update the customer balance with the new calculated balance
       const { error: updateError } = await supabase
         .from("customer_balances")

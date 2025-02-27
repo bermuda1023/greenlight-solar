@@ -1,5 +1,6 @@
 "use client";
 import html2pdf from "html2pdf.js";
+import { useMemo } from "react";
 
 import React, { useCallback, useEffect, useState } from "react";
 import { Dialog } from "@/components/ui/Dialog";
@@ -85,6 +86,7 @@ const BillModal: React.FC<BillModalProps> = ({
       Consumption?: number;
       FeedIn?: number;
       Production?: number;
+      SelfConsumption?: number;
     };
   } | null>(null);
 
@@ -187,11 +189,14 @@ const BillModal: React.FC<BillModalProps> = ({
             ) / 1000; // Convert to kWh
         });
 
+        console.log(
+          `Computed Energy Sums for Customer ${customer.id}:`,
+          customerEnergySums,
+        );
+
         return {
           customerId: customer.id,
           energySums: customerEnergySums,
-          // scaling:customer.scaling_factor,
-          // price:customer.price,
         };
       });
 
@@ -230,14 +235,21 @@ const BillModal: React.FC<BillModalProps> = ({
     }
   }, [customerData, fetchEnergyData]);
 
+  
   const calculateSummary = () => {
-    return selectedBills.reduce(
+    return selectedCustomers.reduce(
       (summary, customerId) => {
-        const customer = customerData.find((c) => c.id === customerId);
+        const customer = customers.find((c) => c.id === customerId);
         if (!customer) return summary;
         const parameter = parameters[0];
 
         const customerEnergySums = energySums?.[customerId] || {};
+
+        console.log(
+          `Energy Sums for Customer 👀👀👀🐱‍🚀👀 ${customerId}:`,
+          customerEnergySums,
+        );
+
         const consumptionValue =
           typeof customerEnergySums?.Consumption === "number"
             ? customerEnergySums.Consumption
@@ -246,21 +258,27 @@ const BillModal: React.FC<BillModalProps> = ({
           typeof customerEnergySums?.FeedIn === "number"
             ? customerEnergySums.FeedIn
             : 50;
+        const selfConsumptionValue =
+          typeof customerEnergySums?.SelfConsumption === "number"
+            ? customerEnergySums.SelfConsumption
+            : 0;
 
-        // Fetch customer balance entry from `customer_balances`
         const customerBalanceEntry = customerBalance.find(
           (balance) => balance.customer_id === customerId,
         );
 
-        // Get `current_balance` (outstanding amount), defaulting to 0 if not found
+        console.log(`Customer Energy Data - ID: ${customerId}`);
+        console.log("Consumption:🌹🌹🌹", consumptionValue);
+        console.log("FeedIn (Export):", exportValue);
+        console.log("Self Consumption 🤦‍♀️🤦‍♀️🤦‍♀️:", selfConsumptionValue);
 
-        // Calculate billing
         const billResult = calculateBilling({
           energyConsumed: consumptionValue,
+          energyExported: exportValue,
+          selfConsumption: selfConsumptionValue,
           startDate: new Date(startDate || ""),
           endDate: new Date(endDate || ""),
           fuelRate: parameter?.fuelRate || 0.14304,
-          energyExported: exportValue,
           basePrice: parameter?.basePrice || 0.15,
           feedInPrice: parameter?.feedInPrice || 0.5,
           belcodisc: parameter?.belcodisc || 0.8,
@@ -271,21 +289,113 @@ const BillModal: React.FC<BillModalProps> = ({
           tier3: parameter?.tier3 || 0.3337,
           scaling: customer?.scaling_factor || 1,
           price: customer?.price || 0.31,
+          fixedFeeSaving: 54.37,
         });
+
+        console.log(
+          `Billing Calculation Result for Customer  🍟🍟🍟🍔🍔 ${customerId}:`,
+        );
+        console.log("Final Revenue:", billResult.finalRevenue);
+        console.log("Total PTS:", billResult.totalpts);
+        console.log("Belco Total:", billResult.belcoTotal);
+        console.log("Belco Per kWh:", billResult.belcoPerKwh);
+        console.log("GreenLight Revenue:", billResult.greenlightRevenue);
+        console.log("Belco Revenue:", billResult.belcoRevenue);
+        console.log("Savings:", billResult.savings);
+
         const outstandingBalance = customerBalanceEntry?.current_balance || 0;
-        // -(billResult.finalRevenue || 0);
 
         summary.totalRevenue += billResult.finalRevenue;
         summary.totalPts += consumptionValue || 0;
-        summary.totalOutstanding += outstandingBalance; // ✅ Add total outstanding balance
+        summary.totalOutstanding += outstandingBalance;
+        summary.totalBelcoRevenue += billResult.belcoRevenue;
+        summary.totalGreenlightRevenue += billResult.greenlightRevenue;
+        summary.totalSavings += billResult.savings;
 
         return summary;
       },
-      { totalCost: 0, totalRevenue: 0, totalPts: 0, totalOutstanding: 0 },
+      {
+        totalCost: 0,
+        totalRevenue: 0,
+        totalPts: 0,
+        totalOutstanding: 0,
+        totalBelcoRevenue: 0,
+        totalGreenlightRevenue: 0,
+        totalSavings: 0,
+      },
     );
   };
 
-  const summary = calculateSummary();
+  const summary = useMemo(() => {
+    return selectedBills.reduce(
+      (summary, customerId) => {
+        const customer = customers.find((c) => c.id === customerId);
+        if (!customer) return summary;
+        const parameter = parameters[0];
+
+        const customerEnergySums = energySums?.[customerId] || {};
+
+        const consumptionValue =
+          typeof customerEnergySums?.Consumption === "number"
+            ? customerEnergySums.Consumption
+            : 500;
+        const exportValue =
+          typeof customerEnergySums?.FeedIn === "number"
+            ? customerEnergySums.FeedIn
+            : 50;
+        const selfConsumptionValue =
+          typeof customerEnergySums?.SelfConsumption === "number"
+            ? customerEnergySums.SelfConsumption
+            : 0;
+
+        const customerBalanceEntry = customerBalance.find(
+          (balance) => balance.customer_id === customerId,
+        );
+
+        const billResult = calculateBilling({
+          energyConsumed: consumptionValue,
+          energyExported: exportValue,
+          selfConsumption: selfConsumptionValue,
+          startDate: new Date(startDate || ""),
+          endDate: new Date(endDate || ""),
+          fuelRate: parameter?.fuelRate || 0.14304,
+          basePrice: parameter?.basePrice || 0.15,
+          feedInPrice: parameter?.feedInPrice || 0.5,
+          belcodisc: parameter?.belcodisc || 0.8,
+          ra_fee: parameter?.ra_fee || 0.00635,
+          export_rate: parameter?.export_rate || 0.2265,
+          tier1: parameter?.tier1 || 0.13333,
+          tier2: parameter?.tier2 || 0.2259,
+          tier3: parameter?.tier3 || 0.3337,
+          scaling: customer?.scaling_factor || 1,
+          price: customer?.price || 0.31,
+          fixedFeeSaving: 54.37,
+        });
+
+        const outstandingBalance = customerBalanceEntry?.current_balance || 0;
+
+        summary.totalRevenue += billResult.finalRevenue;
+        summary.totalPts += consumptionValue || 0;
+        summary.totalOutstanding += outstandingBalance;
+        summary.totalBelcoRevenue += billResult.belcoRevenue;
+        summary.totalGreenlightRevenue += billResult.greenlightRevenue;
+        summary.totalSavings += billResult.savings;
+
+        return summary;
+      },
+      {
+        totalCost: 0,
+        totalRevenue: 0,
+        totalPts: 0,
+        totalOutstanding: 0,
+        totalBelcoRevenue: 0,
+        totalGreenlightRevenue: 0,
+        totalSavings: 0,
+      },
+    );
+  }, [selectedBills, customers, energySums, parameters, customerBalance]);
+
+  // const summary = calculateSummary();
 
   const handleRemoveBill = (customerId: string) => {
     try {
@@ -356,6 +466,17 @@ const BillModal: React.FC<BillModalProps> = ({
       const previousArrears = existingBills?.[0]?.arrears || 0;
       const total_bill = Number(billData.total_revenue) + previousArrears;
 
+      console.log("Saving Bill Data:", {
+        ...billData,
+        invoice_number: invoiceNumber,
+        total_bill,
+        pending_bill: total_bill,
+        arrears: previousArrears,
+        savings: Number(billData.savings) || 0, // Ensure number value
+        belco_revenue: Number(billData.belcoRevenue) || 0, // Ensure number value
+        greenlight_revenue: Number(billData.greenlightRevenue) || 0, // Ensure number value
+      });
+
       const { data: insertedBills, error: insertError } = await supabase
         .from("monthly_bills")
         .insert([
@@ -367,6 +488,9 @@ const BillModal: React.FC<BillModalProps> = ({
             arrears: previousArrears,
             reconciliation_ids: [],
             status: "Pending",
+            savings: Number(billData.savings),
+            belco_revenue: Number(billData.belcoRevenue),
+            greenlight_revenue: Number(billData.greenlightRevenue),
           },
         ])
         .select("*"); // Ensure the inserted data is retrieved
@@ -413,9 +537,15 @@ const BillModal: React.FC<BillModalProps> = ({
             ? customerEnergySums.FeedIn
             : 50;
 
+        const selfConsumptionValue =
+          typeof customerEnergySums?.SelfConsumption === "number"
+            ? customerEnergySums.SelfConsumption
+            : 0;
+
         const billResult = calculateBilling({
           energyConsumed: consumptionValue,
           startDate: new Date(startDate || ""),
+          selfConsumption: selfConsumptionValue,
           endDate: new Date(endDate || ""),
           fuelRate: parameter?.fuelRate || 0.14304,
           energyExported: exportValue,
@@ -428,7 +558,8 @@ const BillModal: React.FC<BillModalProps> = ({
           tier2: parameter?.tier2 || 0.2259,
           tier3: parameter?.tier3 || 0.3337,
           scaling: customer?.scaling_factor || 1, // Correctly fetched
-          price: customer?.price || 0.31, // Correctly fetched
+          price: customer?.price || 0.31,
+          fixedFeeSaving: 54.37,
         });
 
         // Validation for empty fields
@@ -514,7 +645,7 @@ const BillModal: React.FC<BillModalProps> = ({
         `Posted ${successCount} bills successfully. Failed to post ${failureCount} bills.`,
       );
     }
- onClose();
+    onClose();
   };
 
   const handleEmailBill = async (billData: any) => {
@@ -767,14 +898,7 @@ const BillModal: React.FC<BillModalProps> = ({
           }),
         });
 
-        // const result = await response.json();
-        // if (response.ok) {
-        //   toast.success(
-        //     `Bill Posted & Invoice email sent successfully to ${billData.email}!`,
-        //   );
-        // } else {
-        //   toast.error(`Error sending email: ${result.error}`);
-        // }
+        
       };
     } catch (error) {
       console.error("[ERROR] Failed to process bill or send email:", error);
@@ -802,10 +926,17 @@ const BillModal: React.FC<BillModalProps> = ({
             ? customerEnergySums.FeedIn
             : 50;
 
+        const selfConsumptionValue =
+          typeof customerEnergySums?.SelfConsumption === "number"
+            ? customerEnergySums.SelfConsumption
+            : 0;
+
         // Calculate the bill for this customer
         const billResult = calculateBilling({
           energyConsumed: consumptionValue,
           startDate: new Date(startDate || ""),
+          selfConsumption: selfConsumptionValue,
+
           endDate: new Date(endDate || ""),
           fuelRate: parameter?.fuelRate || 0.14304,
           energyExported: exportValue,
@@ -819,6 +950,7 @@ const BillModal: React.FC<BillModalProps> = ({
           tier3: parameter?.tier3 || 0.3337,
           scaling: customer?.scaling_factor || 1,
           price: customer?.price || 0.31,
+          fixedFeeSaving: 54.37,
         });
 
         // Validate that necessary fields are present before proceeding
@@ -889,7 +1021,6 @@ const BillModal: React.FC<BillModalProps> = ({
       );
     }
     onClose();
-
   };
 
   return (
@@ -939,6 +1070,31 @@ const BillModal: React.FC<BillModalProps> = ({
                       {summary.totalPts.toFixed(2)}
                     </span>
                   </div>
+                  {/* Newly Added Sections */}
+                  <div className="flex justify-between border-b border-gray-300 pb-2">
+                    <span className="font-medium text-gray-700">
+                      Total Belco Revenue:
+                    </span>
+                    <span className="font-semibold text-gray-900">
+                      ${summary.totalBelcoRevenue.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-b border-gray-300 pb-2">
+                    <span className="font-medium text-gray-700">
+                      Total Greenlight Revenue:
+                    </span>
+                    <span className="font-semibold text-gray-900">
+                      ${summary.totalGreenlightRevenue.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-b border-gray-300 pb-2">
+                    <span className="font-medium text-gray-700">
+                      Total Savings:
+                    </span>
+                    <span className="font-semibold text-gray-900">
+                      ${summary.totalSavings.toFixed(2)}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Footer (optional for additional details) */}
@@ -981,10 +1137,16 @@ const BillModal: React.FC<BillModalProps> = ({
                 const consumptionValue = customerEnergySums?.Consumption || 500;
                 const exportValue = customerEnergySums?.FeedIn || 50;
                 const productionValue = customerEnergySums?.Production || 0;
+                const selfConsumptionValue =
+                  typeof customerEnergySums?.SelfConsumption === "number"
+                    ? customerEnergySums.SelfConsumption
+                    : 0;
 
                 const billResult = calculateBilling({
                   energyConsumed: consumptionValue,
                   startDate: new Date(startDate || ""),
+                  selfConsumption: selfConsumptionValue,
+
                   endDate: new Date(endDate || ""),
                   fuelRate: parameter?.fuelRate || 0.14304,
                   energyExported: exportValue,
@@ -998,6 +1160,7 @@ const BillModal: React.FC<BillModalProps> = ({
                   tier3: parameter?.tier3 || 0.3337,
                   scaling: customer?.scaling_factor || 1.0,
                   price: customer?.price || 0.31,
+                  fixedFeeSaving: 54.37,
                 });
 
                 const outstandingBalance =
@@ -1062,6 +1225,10 @@ const BillModal: React.FC<BillModalProps> = ({
                           <strong>Energy Rate:</strong> ${" "}
                           {billResult.belcoPerKwh.toFixed(2)}/kWh
                         </p>
+                        <p>
+                          <strong>Belco Revenue:</strong> ${" "}
+                          {billResult.belcoRevenue.toFixed(2)}
+                        </p>
                       </div>
                       <div>
                         <p>
@@ -1073,8 +1240,16 @@ const BillModal: React.FC<BillModalProps> = ({
                           {outstandingBalance.toFixed(2)}
                         </p>
                         <p>
-                          <strong>Description:</strong> sample description
+                          <strong>Greenlight Revenue:</strong> ${" "}
+                          {billResult.greenlightRevenue.toFixed(2)}
                         </p>
+                        <p>
+                          <strong>Savings:</strong> ${" "}
+                          {billResult.savings.toFixed(2)}
+                        </p>
+                        {/* <p>
+                          <strong>Description:</strong> sample description
+                        </p> */}
                       </div>
                     </div>
                   </div>

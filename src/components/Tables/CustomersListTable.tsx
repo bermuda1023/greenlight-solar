@@ -31,7 +31,10 @@ interface Customer {
   self_cons_kwh: number; // Self-consumption
   export_kwh: number; // Energy exported
   production_kwh: number; // Energy produced
-  outstanding_balance: number; // Total
+  outstanding_balance: number;
+  savings: number;
+  belco_revenue: number;
+  greenlight_revenue: number; // Total
 }
 
 const CustomersListTable = () => {
