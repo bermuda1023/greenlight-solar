@@ -45,76 +45,56 @@ export const calculateBilling = (inputs: {
   if (numberOfDays < 0) {
     throw new Error("Invalid date range: End date must be after start date.");
   }
+
   const scalledenergyConsumed = energyConsumed * scaling;
   const scalledSelfConsumed = selfConsumption * scaling;
 
   const dayRateKwH = scalledenergyConsumed / numberOfDays;
   const totalpts = scalledenergyConsumed + energyExported;
 
-  // **Log Before Belco Calculation**
-  console.log("Before Belco Calculation:💕💕💕😘😉😉");
-  console.log("Scaled Energy Consumed:", scalledenergyConsumed);
-  console.log("Scaled Self Consumed 😢😢😢😢:", scalledSelfConsumed);
-  console.log("Number of Days:", numberOfDays);
-  console.log("Day Rate kWh:", dayRateKwH);
-  console.log(
-    "Total PTS (Consumed + Exported) 🎂🎂🐱‍👤🐱‍👤🤳🤳🎉🎉👏:",
-    totalpts,
-  );
-
-  // Belco Calculation
+  // **Belco Calculation**
   let belcoTotal = 0;
-  if (scalledSelfConsumed > 0) {
-    belcoTotal += Math.min(scalledSelfConsumed, 250) * tier1; //tier1 variable
-    belcoTotal += Math.max(Math.min(scalledSelfConsumed - 250, 450), 0) * tier2; //tier2 variable
-    belcoTotal += Math.max(scalledSelfConsumed - 700, 0) * tier3; //tier3 variable
+  if (scalledenergyConsumed) {
+    belcoTotal += Math.min(scalledenergyConsumed) * tier1;
+    belcoTotal += Math.max(Math.min(scalledenergyConsumed, 450), 0) * tier2;
+    belcoTotal += Math.max(scalledenergyConsumed, 0) * tier3;
   }
 
-  // Facility Charges
-  if (dayRateKwH > 0 && dayRateKwH <= 10)
-    belcoTotal += 21.33; //dayrate1 variable
-  else if (dayRateKwH <= 15)
-    belcoTotal += 32.0; //dayrate2 variable
-  else if (dayRateKwH <= 25)
-    belcoTotal += 42.61; //dayrate3 variable
-  else if (dayRateKwH <= 50)
-    belcoTotal += 66.66; //dayrate4 variable
-  else if (dayRateKwH > 50) belcoTotal += 101.33; //dayrate5 variable
+  // **Facility Charges**
+  if (dayRateKwH > 0 && dayRateKwH <= 10) belcoTotal += 21.33;
+  else if (dayRateKwH <= 15) belcoTotal += 32.0;
+  else if (dayRateKwH <= 25) belcoTotal += 42.61;
+  else if (dayRateKwH <= 50) belcoTotal += 66.66;
+  else if (dayRateKwH > 50) belcoTotal += 101.33;
 
-  console.log("After Belco Calculation 🐱‍🏍🐱‍🏍😜😜💖💖😢😢🎶:");
-  console.log("Belco Total:", belcoTotal);
-
-  // Additional Fees
-  belcoTotal += ra_fee * scalledenergyConsumed; // RA Fee variable
-  belcoTotal += scalledenergyConsumed * fuelRate; // Fuel Fee
-  belcoTotal -= export_rate * energyExported; // Export Rate variable
+  // **Additional Fees**
+  belcoTotal += ra_fee * scalledenergyConsumed;
+  belcoTotal += scalledenergyConsumed * fuelRate;
+  belcoTotal -= export_rate * energyExported;
 
   const belcoPerKwhh = belcoTotal / scalledenergyConsumed;
 
-  console.log("After Belco Calculation Additional Fee:");
-  console.log("Belco Total:", belcoTotal);
-  console.log("Belco Per kWh:", belcoPerKwhh);
+  // **Updated Revenue Calculation (Using scalledSelfConsumed in the condition only)**
+  let consumptionRevenue;
+  if (belcoPerKwhh * belcodisc < basePrice) {
+    // Case 1: (Belco Total * 0.8) < Base Price
+    consumptionRevenue = basePrice * scalledSelfConsumed; // Used scaled self-consumption
+  } else {
+    // Case 2: (Belco Total * 0.8) > Base Price
+    consumptionRevenue = belcoPerKwhh * belcodisc * scalledSelfConsumed; // Used scaled self-consumption
+  }
 
-  // Calculate final revenue
-  const effectivePrice = Math.max(belcoPerKwhh * belcodisc, basePrice); //belcomultiplier variable
-  const consumptionRevenue = effectivePrice * scalledenergyConsumed;
   const exportRevenue = feedInPrice * energyExported;
   const totalRevenue = consumptionRevenue + exportRevenue;
 
-  // Calculate energy rate per kWh
+  // **Energy Rate Calculation remains unchanged**
   const belcoPerKwh = totalRevenue / scalledenergyConsumed;
 
-  // Savings Calculation
+  // **Savings Calculation remains unchanged**
   const belcoRevenue = scalledenergyConsumed * belcoPerKwhh;
-  const greenlightRevenue = scalledSelfConsumed * effectivePrice;
+  const greenlightRevenue = scalledSelfConsumed * Math.max(belcoPerKwhh * belcodisc, basePrice);
   const savings =
     belcoRevenue - greenlightRevenue + fixedFeeSaving - belcoTotal;
-
-  console.log("✅ Savings Calculation:");
-  console.log("   🔹 Belco Revenue:", belcoRevenue);
-  console.log("   🔹 Greenlight Revenue:", greenlightRevenue);
-  console.log("   🔹 Fixed Fee Saving:", fixedFeeSaving);
-  console.log("   🔹 Total Savings:", savings);
 
   return {
     totalpts,
@@ -122,8 +102,8 @@ export const calculateBilling = (inputs: {
     belcoPerKwh,
     belcoTotal: parseFloat(belcoTotal.toFixed(2)),
     finalRevenue: parseFloat(totalRevenue.toFixed(2)),
-    belcoRevenue: parseFloat(belcoRevenue.toFixed(2)), // ✅ Added this
-    greenlightRevenue: parseFloat(greenlightRevenue.toFixed(2)), // ✅ Added this
-    savings: parseFloat(savings.toFixed(2)), // ✅ Added this
+    belcoRevenue: parseFloat(belcoRevenue.toFixed(2)),
+    greenlightRevenue: parseFloat(greenlightRevenue.toFixed(2)),
+    savings: parseFloat(savings.toFixed(2)),
   };
 };
