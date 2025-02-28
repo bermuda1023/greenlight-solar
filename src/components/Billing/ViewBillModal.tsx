@@ -21,22 +21,27 @@ interface Bill {
   created_at: string;
   arrears: number;
   invoice_number: string;
-  customer_id:string;
+  customer_id: string;
+  // NEW FIELDS
+  belco_revenue?: number;
+  greenlight_revenue?: number;
+  savings?: number;
 }
 
 interface CustomerBalanceProp {
-  customer_id:string;
-    total_billed:number;
-  total_paid:number;
-  current_balance:number;  
-  }
-  interface Parameters {
-    id: string;
-    fuelRate: number;
-    feedInPrice: number;
-    basePrice: number;
-    message: string;
-  }
+  customer_id: string;
+  total_billed: number;
+  total_paid: number;
+  current_balance: number;
+}
+
+interface Parameters {
+  id: string;
+  fuelRate: number;
+  feedInPrice: number;
+  basePrice: number;
+  message: string;
+}
 
 const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
   closeModal,
@@ -44,8 +49,8 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
 }) => {
   const invoiceRef = useRef<HTMLDivElement>(null);
   const [parameters, setParameters] = useState<Parameters[]>([]);
-  const [customerBalance, setCustomerBalance] = useState<CustomerBalanceProp | null>(null);
-  
+  const [customerBalance, setCustomerBalance] =
+    useState<CustomerBalanceProp | null>(null);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -55,7 +60,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
         .from("parameters")
         .select("*");
       if (fetchError) throw fetchError;
-      console.log("Fetched parameters:", data); // Check what data is being fetched
+      console.log("Fetched parameters:", data);
       setParameters(data || []);
     } catch (err) {
       setError(
@@ -63,36 +68,39 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
       );
     }
   }, []);
+
   const fetchCustomerBalance = useCallback(async () => {
     try {
       const { data, error: fetchError } = await supabase
         .from("customer_balances")
         .select("*")
-        .in("customer_id", [bill.customer_id]);
-  
+        .eq("customer_id", bill.customer_id)
+        .single();
+
       if (fetchError) throw fetchError;
-  
-      setCustomerBalance(data?.[0] || null); // Store as a single object
-      console.log(data);
+      setCustomerBalance(data || null);
+      console.log("Fetched customer balance:", data);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Error fetching parameters"
+        err instanceof Error ? err.message : "Error fetching customer balance",
       );
     }
   }, [bill.customer_id]);
-  
-  // Accessing safely
-  console.log(customerBalance?.current_balance);
-  
 
   useEffect(() => {
     fetchCustomerBalance();
     fetchParameters();
   }, [fetchParameters, fetchCustomerBalance]);
+
+  // Calculate totals
+  const overdueBalance =
+    (customerBalance?.current_balance || 0) - (bill.total_revenue || 0);
+  const balanceDue = (bill.total_revenue || 0) + overdueBalance;
+
   const generatePDF = async () => {
     if (invoiceRef.current) {
       const options = {
-        margin: [-1, -1, -1, -1], // Top, Left, Bottom, Right margins in mm
+        margin: [-1, -1, -1, -1],
         filename: `Invoice-${bill.id}.pdf`,
         html2canvas: {
           scale: 3,
@@ -105,19 +113,10 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
         },
       };
 
-      const abcd = await html2pdf()
-        .from(invoiceRef.current)
-        .set(options)
-        .save();
-
-      console.log(abcd);
+      await html2pdf().from(invoiceRef.current).set(options).save();
     }
     closeModal();
   };
-
-  // Calculate totals
-  const overdueBalance = (customerBalance?.current_balance || 0)-(bill.total_revenue || 0);
-  const balanceDue = bill.total_revenue + overdueBalance;
 
   return (
     <div
@@ -135,11 +134,11 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
         >
           <header className="mt-6 flex items-center justify-between py-16">
             <Image
-              src="/images/logo/logo.svg" // Ensure this file exists in the "public/images/logo" folder
+              src="/images/logo/logo.svg"
               alt="Logo"
               width={360}
               height={60}
-              priority // Ensures the logo is loaded as soon as possible, optimizing LCP
+              priority
               className="max-w-full"
             />
           </header>
@@ -186,14 +185,15 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
             </table>
           </section>
 
-          <table className="mb-20 w-full text-left text-sm">
-            <thead className="border-b-2 border-green-300 text-gray-700 ">
+          {/* Main Billing Table */}
+          <table className="mb-10 w-full text-left text-sm">
+            <thead className="border-b-2 border-green-300 text-gray-700">
               <tr>
-                <th className="p-3  text-sm">Period Start</th>
-                <th className="p-3  text-sm">Period End</th>
-                <th className="p-3  text-sm">Description</th>
-                <th className="p-3  text-sm">Energy PTS</th>
-                <th className="p-3  text-sm">Per Unit</th>
+                <th className="p-3 text-sm">Period Start</th>
+                <th className="p-3 text-sm">Period End</th>
+                <th className="p-3 text-sm">Description</th>
+                <th className="p-3 text-sm">Energy PTS</th>
+                <th className="p-3 text-sm">Per Unit</th>
                 <th className="p-3 text-sm">Total</th>
               </tr>
             </thead>
@@ -217,28 +217,54 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
             </tbody>
           </table>
 
+          {/* NEW SECTION: Additional Revenue Details */}
+          <table className="mb-10 w-full text-left text-sm">
+            <tbody>
+              <tr>
+                <td className="px-3 text-sm font-semibold text-black">
+                  Belco Revenue:
+                </td>
+                <td className="px-3 text-xs text-gray-600">
+                  ${bill.belco_revenue?.toFixed(2) ?? "0.00"}
+                </td>
+              </tr>
+              <tr>
+                <td className="px-3 text-sm font-semibold text-black">
+                  Greenlight Revenue:
+                </td>
+                <td className="px-3 text-xs text-gray-600">
+                  ${bill.greenlight_revenue?.toFixed(2) ?? "0.00"}
+                </td>
+              </tr>
+              <tr>
+                <td className="px-3 text-sm font-semibold text-black">
+                  Savings:
+                </td>
+                <td className="px-3 text-xs text-gray-600">
+                  ${bill.savings?.toFixed(2) ?? "0.00"}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          {/* END NEW SECTION */}
+
           <section className="mb-6 space-y-6 text-right">
-            <div className="flex w-full justify-end  text-sm font-semibold text-gray-800">
-              <p className=" "> TOTAL PERIOD BALANCE{" "}</p>
+            <div className="flex w-full justify-end text-sm font-semibold text-gray-800">
+              <p>TOTAL PERIOD BALANCE</p>
               <span className="ml-20 w-16 text-black">
                 ${bill.total_revenue.toFixed(2)}
               </span>
             </div>
-            <div className="flex w-full justify-end  text-sm font-semibold text-gray-800">
-              <p className=""> OVERDUE BALANCE{" "}</p>
+            <div className="flex w-full justify-end text-sm font-semibold text-gray-800">
+              <p>OVERDUE BALANCE</p>
               <span className="ml-20 w-16 text-black">
                 ${overdueBalance.toFixed(2)}
               </span>
             </div>
-
-
-            <div className="flex w-full justify-end  text-sm font-semibold text-red-600">
-              <p className=" "> BALANCE DUE{" "}</p>
-              <span className="ml-20 w-16 ">
-                ${balanceDue.toFixed(2)}
-              </span>
+            <div className="flex w-full justify-end text-sm font-semibold text-red-600">
+              <p>BALANCE DUE</p>
+              <span className="ml-20 w-16">${balanceDue.toFixed(2)}</span>
             </div>
-    
           </section>
 
           <section className="mt-12 text-sm text-gray-700">
@@ -252,7 +278,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
             <p className="text-sm">
               Account Name:{" "}
               <span className="text-xs font-semibold">
-                GreenLight Financing Ltd.{" "}
+                GreenLight Financing Ltd.
               </span>
             </p>
             <p className="text-sm">
@@ -265,12 +291,11 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
             <div className="col-span-1">
               <p className="text-center text-sm">
                 {parameters.length > 0
-                  ? parameters[0].message // Use the message from the first parameter
-                  : "Thank you for doing business with us!"}{" "}
-                {/* Fallback if no parameters */}
+                  ? parameters[0].message
+                  : "Thank you for doing business with us!"}
               </p>
             </div>
-            <div className="col-span-1 text-xs ">
+            <div className="col-span-1 text-xs">
               <p>
                 Greenlight Financing Ltd. #48 Par-la-ville Road, Suite 1543,
                 Hamilton, HM11
@@ -281,23 +306,23 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                 href="mailto:billing@greenlightenergy.bm"
                 className="text-blue-700 underline"
               >
-                billing@greenlightenergy.bm Phone: 1 (441) 705 3033
+                billing@greenlightenergy.bm <br /> Phone: 1 (441) 705 3033
               </a>
             </div>
           </footer>
         </div>
 
         {/* Buttons */}
-        <div className="flex gap-2">
+        <div className="mt-4 flex gap-2">
           <button
             onClick={closeModal}
-            className="mt-4 w-full rounded-lg bg-gray-200 text-dark-2 hover:text-red-700"
+            className="w-full rounded-lg bg-gray-200 py-2 text-dark-2 hover:text-red-700"
           >
             Close
           </button>
           <button
             onClick={generatePDF}
-            className="mt-4 w-full rounded-lg bg-primary py-2 text-white hover:bg-green-500"
+            className="w-full rounded-lg bg-primary py-2 text-white hover:bg-green-500"
           >
             Download PDF
           </button>

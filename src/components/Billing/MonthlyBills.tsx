@@ -28,6 +28,10 @@ interface Bill {
   arrears: number;
   invoice_number: string;
   reconciliation_ids: string[] | null;
+  // Add these three:
+  belco_revenue?: number;
+  greenlight_revenue?: number;
+  savings?: number;
 }
 
 interface Transaction {

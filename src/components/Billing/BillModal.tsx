@@ -235,7 +235,6 @@ const BillModal: React.FC<BillModalProps> = ({
     }
   }, [customerData, fetchEnergyData]);
 
-  
   const calculateSummary = () => {
     return selectedCustomers.reduce(
       (summary, customerId) => {
@@ -473,8 +472,8 @@ const BillModal: React.FC<BillModalProps> = ({
         pending_bill: total_bill,
         arrears: previousArrears,
         savings: Number(billData.savings) || 0, // Ensure number value
-        belco_revenue: Number(billData.belcoRevenue) || 0, // Ensure number value
-        greenlight_revenue: Number(billData.greenlightRevenue) || 0, // Ensure number value
+        belco_revenue: Number(billData.belco_revenue) || 0, // Ensure number value
+        greenlight_revenue: Number(billData.greenlight_revenue) || 0, // Ensure number value
       });
 
       const { data: insertedBills, error: insertError } = await supabase
@@ -488,9 +487,9 @@ const BillModal: React.FC<BillModalProps> = ({
             arrears: previousArrears,
             reconciliation_ids: [],
             status: "Pending",
-            savings: Number(billData.savings),
-            belco_revenue: Number(billData.belcoRevenue),
-            greenlight_revenue: Number(billData.greenlightRevenue),
+            savings: billData.savings,
+            belco_revenue: billData.belco_revenue,
+            greenlight_revenue: billData.greenlight_revenue,
           },
         ])
         .select("*"); // Ensure the inserted data is retrieved
@@ -593,6 +592,10 @@ const BillModal: React.FC<BillModalProps> = ({
           status: "Pending",
           arrears: previousArrears, // Include the arrears from previous bills
           total_bill: totalBillAmount, // Total amount including arrears
+          // Include the additional fields
+          savings: billResult.savings.toFixed(2),
+          belco_revenue: billResult.belcoRevenue.toFixed(2),
+          greenlight_revenue: billResult.greenlightRevenue.toFixed(2),
         };
       })
       .filter(Boolean);
@@ -625,6 +628,11 @@ const BillModal: React.FC<BillModalProps> = ({
         failureCount++;
         continue; // Skip posting this bill
       }
+
+      console.log(
+        "Sending billData to handlePostBill from handlePostAllBills 🦪🦪🦪🦪🦪:",
+        billData,
+      );
 
       // Proceed with posting the bill if no existing bill is found
       const success = await handlePostBill(billData);
@@ -783,22 +791,39 @@ const BillModal: React.FC<BillModalProps> = ({
       </tbody>
     </table>
 
+    <!-- Additional Revenue Details -->
+    <table class="mb-20 w-full text-left text-sm">
+      <tbody>
+        <tr>
+          <td class="px-3 text-sm font-semibold text-black">Belco Revenue:</td>
+          <td class="px-3 text-xs text-gray-600">$ ${billData.belco_revenue}</td>
+        </tr>
+        <tr>
+          <td class="px-3 text-sm font-semibold text-black">Greenlight Revenue:</td>
+          <td class="px-3 text-xs text-gray-600">$ ${billData.greenlight_revenue}</td>
+        </tr>
+        <tr>
+          <td class="px-3 text-sm font-semibold text-black">Savings:</td>
+          <td class="px-3 text-xs text-gray-600">$ ${billData.savings}</td>
+        </tr>
+      </tbody>
+    </table>
+
     <!-- Balance Due and Overdue Balance -->
     <section class="mb-6 space-y-6 text-right">
-      <div class="flex w-full justify-end  text-sm font-semibold text-gray-800">
-  <p>TOTAL PERIOD BALANCE</p>
-          <span class="ml-20 w-20 text-black">$ ${billData.total_revenue}</span>
+      <div class="flex w-full justify-end text-sm font-semibold text-gray-800">
+        <p>TOTAL PERIOD BALANCE</p>
+        <span class="ml-20 w-20 text-black">$ ${billData.total_revenue}</span>
       </div>
   
-            <div class="flex w-full justify-end  text-sm font-semibold text-gray-800">
-  <p> OVERDUE BALANCE</p>
-          <span class="ml-20 w-20 text-black">$ ${overdueBalance.toFixed(2)}</span>
+      <div class="flex w-full justify-end text-sm font-semibold text-gray-800">
+        <p> OVERDUE BALANCE</p>
+        <span class="ml-20 w-20 text-black">$ ${overdueBalance.toFixed(2)}</span>
       </div>
   
-  
-            <div class="flex w-full justify-end  text-sm font-semibold text-red-600">
-  <p> BALANCE DUE</p>
-          <span class="ml-20 w-20">$ ${balanceDue}</span>
+      <div class="flex w-full justify-end text-sm font-semibold text-red-600">
+        <p> BALANCE DUE</p>
+        <span class="ml-20 w-20">$ ${balanceDue}</span>
       </div>
     </section>
 
@@ -897,8 +922,6 @@ const BillModal: React.FC<BillModalProps> = ({
             attachment: pdfBase64, // Sending Base64 encoded PDF
           }),
         });
-
-        
       };
     } catch (error) {
       console.error("[ERROR] Failed to process bill or send email:", error);
@@ -981,6 +1004,9 @@ const BillModal: React.FC<BillModalProps> = ({
           total_PTS: consumptionValue || 666999,
           status: "Pending",
           total_revenue: billResult.finalRevenue.toFixed(2), // Ensure this is calculated
+          savings: billResult.savings.toFixed(2),
+          belco_revenue: billResult.belcoRevenue.toFixed(2),
+          greenlight_revenue: billResult.greenlightRevenue.toFixed(2),
         };
       })
       .filter(Boolean); // Filter out any null values (invalid bills)
