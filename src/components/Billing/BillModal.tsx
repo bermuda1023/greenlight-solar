@@ -266,15 +266,23 @@ const BillModal: React.FC<BillModalProps> = ({
           (balance) => balance.customer_id === customerId,
         );
 
+        const productionValue =
+          typeof customerEnergySums?.Production === "number"
+            ? customerEnergySums.Production
+            : 0;
+
         console.log(`Customer Energy Data - ID: ${customerId}`);
         console.log("Consumption:🌹🌹🌹", consumptionValue);
         console.log("FeedIn (Export):", exportValue);
         console.log("Self Consumption 🤦‍♀️🤦‍♀️🤦‍♀️:", selfConsumptionValue);
+        console.log("Total Production 🍤🍤🍤🍤:", productionValue);
 
         const billResult = calculateBilling({
           energyConsumed: consumptionValue,
           energyExported: exportValue,
           selfConsumption: selfConsumptionValue,
+          totalProduction: productionValue, // Add this line
+
           startDate: new Date(startDate || ""),
           endDate: new Date(endDate || ""),
           fuelRate: parameter?.fuelRate || 0.14304,
@@ -351,10 +359,23 @@ const BillModal: React.FC<BillModalProps> = ({
           (balance) => balance.customer_id === customerId,
         );
 
+        const productionValue =
+          typeof customerEnergySums?.Production === "number"
+            ? customerEnergySums.Production
+            : 0;
+
+        console.log(`Customer Energy Data - ID: ${customerId}`);
+        console.log("Consumption:🌹🌹🌹", consumptionValue);
+        console.log("FeedIn (Export):", exportValue);
+        console.log("Self Consumption 🤦‍♀️🤦‍♀️🤦‍♀️:", selfConsumptionValue);
+        console.log("Total Production 🍤🍤🍤🍤:", productionValue);
+
         const billResult = calculateBilling({
           energyConsumed: consumptionValue,
           energyExported: exportValue,
           selfConsumption: selfConsumptionValue,
+          totalProduction: productionValue, // Add this line
+
           startDate: new Date(startDate || ""),
           endDate: new Date(endDate || ""),
           fuelRate: parameter?.fuelRate || 0.14304,
@@ -541,10 +562,17 @@ const BillModal: React.FC<BillModalProps> = ({
             ? customerEnergySums.SelfConsumption
             : 0;
 
+        const productionValue =
+          typeof customerEnergySums?.Production === "number"
+            ? customerEnergySums.Production
+            : 0;
+
         const billResult = calculateBilling({
           energyConsumed: consumptionValue,
           startDate: new Date(startDate || ""),
           selfConsumption: selfConsumptionValue,
+          totalProduction: productionValue, // Add this line
+
           endDate: new Date(endDate || ""),
           fuelRate: parameter?.fuelRate || 0.14304,
           energyExported: exportValue,
@@ -954,11 +982,17 @@ const BillModal: React.FC<BillModalProps> = ({
             ? customerEnergySums.SelfConsumption
             : 0;
 
+        const productionValue =
+          typeof customerEnergySums?.Production === "number"
+            ? customerEnergySums.Production
+            : 0;
+
         // Calculate the bill for this customer
         const billResult = calculateBilling({
           energyConsumed: consumptionValue,
           startDate: new Date(startDate || ""),
           selfConsumption: selfConsumptionValue,
+          totalProduction: productionValue, // Add this line
 
           endDate: new Date(endDate || ""),
           fuelRate: parameter?.fuelRate || 0.14304,
@@ -1168,10 +1202,17 @@ const BillModal: React.FC<BillModalProps> = ({
                     ? customerEnergySums.SelfConsumption
                     : 0;
 
+                console.log(`Customer Energy Data - ID: ${customerId}`);
+                console.log("Consumption:🌹🌹🌹", consumptionValue);
+                console.log("FeedIn (Export):", exportValue);
+                console.log("Self Consumption 🤦‍♀️🤦‍♀️🤦‍♀️:", selfConsumptionValue);
+                console.log("Total Production 🍤🍤🍤🍤:", productionValue);
+                
                 const billResult = calculateBilling({
                   energyConsumed: consumptionValue,
                   startDate: new Date(startDate || ""),
                   selfConsumption: selfConsumptionValue,
+                  totalProduction: productionValue, // Add this line
 
                   endDate: new Date(endDate || ""),
                   fuelRate: parameter?.fuelRate || 0.14304,
