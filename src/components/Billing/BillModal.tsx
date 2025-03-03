@@ -285,20 +285,19 @@ const BillModal: React.FC<BillModalProps> = ({
 
           startDate: new Date(startDate || ""),
           endDate: new Date(endDate || ""),
-          fuelRate: parameter?.fuelRate || 0.14304,
-          basePrice: parameter?.basePrice || 0.15,
-          feedInPrice: parameter?.feedInPrice || 0.5,
-          belcodisc: parameter?.belcodisc || 0.8,
-          ra_fee: parameter?.ra_fee || 0.00635,
-          export_rate: parameter?.export_rate || 0.2265,
-          tier1: parameter?.tier1 || 0.13333,
-          tier2: parameter?.tier2 || 0.2259,
-          tier3: parameter?.tier3 || 0.3337,
-          scaling: customer?.scaling_factor || 1,
-          price: customer?.price || 0.31,
+          fuelRate: parameter?.fuelRate,
+          basePrice: parameter?.basePrice,
+          feedInPrice: parameter?.feedInPrice,
+          belcodisc: parameter?.belcodisc,
+          ra_fee: parameter?.ra_fee,
+          export_rate: parameter?.export_rate,
+          tier1: parameter?.tier1,
+          tier2: parameter?.tier2,
+          tier3: parameter?.tier3,
+          scaling: customer?.scaling_factor,
+          price: customer?.price,
           fixedFeeSaving: 54.37,
         });
-
         console.log(
           `Billing Calculation Result for Customer  🍟🍟🍟🍔🍔 ${customerId}:`,
         );
@@ -378,17 +377,17 @@ const BillModal: React.FC<BillModalProps> = ({
 
           startDate: new Date(startDate || ""),
           endDate: new Date(endDate || ""),
-          fuelRate: parameter?.fuelRate || 0.14304,
-          basePrice: parameter?.basePrice || 0.15,
-          feedInPrice: parameter?.feedInPrice || 0.5,
-          belcodisc: parameter?.belcodisc || 0.8,
-          ra_fee: parameter?.ra_fee || 0.00635,
-          export_rate: parameter?.export_rate || 0.2265,
-          tier1: parameter?.tier1 || 0.13333,
-          tier2: parameter?.tier2 || 0.2259,
-          tier3: parameter?.tier3 || 0.3337,
-          scaling: customer?.scaling_factor || 1,
-          price: customer?.price || 0.31,
+          fuelRate: parameter?.fuelRate,
+          basePrice: parameter?.basePrice,
+          feedInPrice: parameter?.feedInPrice,
+          belcodisc: parameter?.belcodisc,
+          ra_fee: parameter?.ra_fee,
+          export_rate: parameter?.export_rate,
+          tier1: parameter?.tier1,
+          tier2: parameter?.tier2,
+          tier3: parameter?.tier3,
+          scaling: customer?.scaling_factor,
+          price: customer?.price,
           fixedFeeSaving: 54.37,
         });
 
@@ -569,26 +568,25 @@ const BillModal: React.FC<BillModalProps> = ({
 
         const billResult = calculateBilling({
           energyConsumed: consumptionValue,
-          startDate: new Date(startDate || ""),
+          energyExported: exportValue,
           selfConsumption: selfConsumptionValue,
           totalProduction: productionValue, // Add this line
 
+          startDate: new Date(startDate || ""),
           endDate: new Date(endDate || ""),
-          fuelRate: parameter?.fuelRate || 0.14304,
-          energyExported: exportValue,
-          basePrice: parameter?.basePrice || 0.15,
-          feedInPrice: parameter?.feedInPrice || 0.5,
-          belcodisc: parameter?.belcodisc || 0.8,
-          ra_fee: parameter?.ra_fee || 0.00635,
-          export_rate: parameter?.export_rate || 0.2265,
-          tier1: parameter?.tier1 || 0.13333,
-          tier2: parameter?.tier2 || 0.2259,
-          tier3: parameter?.tier3 || 0.3337,
-          scaling: customer?.scaling_factor || 1, // Correctly fetched
-          price: customer?.price || 0.31,
+          fuelRate: parameter?.fuelRate,
+          basePrice: parameter?.basePrice,
+          feedInPrice: parameter?.feedInPrice,
+          belcodisc: parameter?.belcodisc,
+          ra_fee: parameter?.ra_fee,
+          export_rate: parameter?.export_rate,
+          tier1: parameter?.tier1,
+          tier2: parameter?.tier2,
+          tier3: parameter?.tier3,
+          scaling: customer?.scaling_factor,
+          price: customer?.price,
           fixedFeeSaving: 54.37,
         });
-
         // Validation for empty fields
         if (
           !customer?.site_name ||
@@ -990,26 +988,25 @@ const BillModal: React.FC<BillModalProps> = ({
         // Calculate the bill for this customer
         const billResult = calculateBilling({
           energyConsumed: consumptionValue,
-          startDate: new Date(startDate || ""),
+          energyExported: exportValue,
           selfConsumption: selfConsumptionValue,
           totalProduction: productionValue, // Add this line
 
+          startDate: new Date(startDate || ""),
           endDate: new Date(endDate || ""),
-          fuelRate: parameter?.fuelRate || 0.14304,
-          energyExported: exportValue,
-          basePrice: parameter?.basePrice || 0.15,
-          feedInPrice: parameter?.feedInPrice || 0.5,
-          belcodisc: parameter?.belcodisc || 0.8,
-          ra_fee: parameter?.ra_fee || 0.00635,
-          export_rate: parameter?.export_rate || 0.2265,
-          tier1: parameter?.tier1 || 0.13333,
-          tier2: parameter?.tier2 || 0.2259,
-          tier3: parameter?.tier3 || 0.3337,
-          scaling: customer?.scaling_factor || 1,
-          price: customer?.price || 0.31,
+          fuelRate: parameter?.fuelRate,
+          basePrice: parameter?.basePrice,
+          feedInPrice: parameter?.feedInPrice,
+          belcodisc: parameter?.belcodisc,
+          ra_fee: parameter?.ra_fee,
+          export_rate: parameter?.export_rate,
+          tier1: parameter?.tier1,
+          tier2: parameter?.tier2,
+          tier3: parameter?.tier3,
+          scaling: customer?.scaling_factor,
+          price: customer?.price,
           fixedFeeSaving: 54.37,
         });
-
         // Validate that necessary fields are present before proceeding
         if (
           !customer?.site_name ||
@@ -1207,26 +1204,26 @@ const BillModal: React.FC<BillModalProps> = ({
                 console.log("FeedIn (Export):", exportValue);
                 console.log("Self Consumption 🤦‍♀️🤦‍♀️🤦‍♀️:", selfConsumptionValue);
                 console.log("Total Production 🍤🍤🍤🍤:", productionValue);
-                
+
                 const billResult = calculateBilling({
                   energyConsumed: consumptionValue,
-                  startDate: new Date(startDate || ""),
+                  energyExported: exportValue,
                   selfConsumption: selfConsumptionValue,
                   totalProduction: productionValue, // Add this line
 
+                  startDate: new Date(startDate || ""),
                   endDate: new Date(endDate || ""),
-                  fuelRate: parameter?.fuelRate || 0.14304,
-                  energyExported: exportValue,
-                  basePrice: parameter?.basePrice || 0.15,
-                  feedInPrice: parameter?.feedInPrice || 0.5,
-                  belcodisc: parameter?.belcodisc || 0.8,
-                  ra_fee: parameter?.ra_fee || 0.00635,
-                  export_rate: parameter?.export_rate || 0.2265,
-                  tier1: parameter?.tier1 || 0.13333,
-                  tier2: parameter?.tier2 || 0.2259,
-                  tier3: parameter?.tier3 || 0.3337,
-                  scaling: customer?.scaling_factor || 1.0,
-                  price: customer?.price || 0.31,
+                  fuelRate: parameter?.fuelRate,
+                  basePrice: parameter?.basePrice,
+                  feedInPrice: parameter?.feedInPrice,
+                  belcodisc: parameter?.belcodisc,
+                  ra_fee: parameter?.ra_fee,
+                  export_rate: parameter?.export_rate,
+                  tier1: parameter?.tier1,
+                  tier2: parameter?.tier2,
+                  tier3: parameter?.tier3,
+                  scaling: customer?.scaling_factor,
+                  price: customer?.price,
                   fixedFeeSaving: 54.37,
                 });
 

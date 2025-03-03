@@ -96,7 +96,8 @@ export const calculateBilling = (inputs: {
 
   // **Savings Calculation remains unchanged**
   const belcoRevenue = scalledenergyConsumed * belcoPerKwhh;
-  const greenlightRevenue = scalledSelfConsumed * totalProduction;
+  const greenlightRevenue =
+    (scalledSelfConsumed * totalRevenue) / totalProduction;
   const savings =
     belcoRevenue - greenlightRevenue + fixedFeeSaving - belcoTotal;
 
