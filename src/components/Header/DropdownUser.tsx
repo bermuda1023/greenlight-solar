@@ -59,17 +59,13 @@ const DropdownUser = () => {
         className="flex items-center gap-4"
         href="#"
       >
-        <span className="h-12 w-12 rounded-full">
+        <span className="h-12 w-12 overflow-hidden rounded-full">
           <Image
-            width={112}
-            height={112}
+            width={250}
+            height={250}
             src={userImage || "/images/user/user-03.png"} // Use the userImage or fallback to the default image
-            style={{
-              width: "auto",
-              height: "auto",
-            }}
             alt="User"
-            className="overflow-hidden rounded-full"
+            className="h-full w-full object-cover"
           />
         </span>
 
@@ -99,19 +95,16 @@ const DropdownUser = () => {
         <div
           className={`absolute right-0 mt-7.5 flex w-[280px] flex-col rounded-lg border-[0.5px] border-stroke bg-white shadow-default dark:border-dark-3 dark:bg-gray-dark`}
         >
-          <div className="flex items-center gap-2.5 px-5 pb-5.5 pt-3.5">
-            <span className="relative block h-12 w-12 rounded-full">
-              <Image
-                width={112}
-                height={112}
-                src={userImage || "/images/user/user-03.png"} // Use the userImage or fallback to the default image
-                style={{
-                  width: "auto",
-                  height: "auto",
-                }}
-                alt="User"
-                className="overflow-hidden rounded-full"
-              />
+          <div className="flex items-center gap-2.5 px-2 pb-5.5 pt-3.5">
+          <span className="h-10 w-10 rounded-full overflow-hidden">
+  <Image
+    width={112}
+    height={112}
+    src={userImage || "/images/user/user-03.png"} // Use the userImage or fallback to the default image
+    alt="User"
+    className="object-cover w-full h-full"
+  />
+
 
               <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-green dark:border-gray-dark"></span>
             </span>
@@ -154,7 +147,6 @@ const DropdownUser = () => {
                   />
                 </svg>
                 View profile
-                
               </Link>
             </li>
 
