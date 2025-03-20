@@ -193,7 +193,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                 <th className="p-3 text-sm">Period End</th>
                 <th className="p-3 text-sm">Description</th>
                 <th className="p-3 text-sm">Energy PTS</th>
-                <th className="p-3 text-sm">Per Unit</th>
+                
                 <th className="p-3 text-sm">Total</th>
               </tr>
             </thead>
@@ -207,9 +207,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                 </td>
                 <td className="p-3 text-xs text-gray-600">Energy Produced</td>
                 <td className="p-3 text-xs text-gray-600">{bill.total_PTS}</td>
-                <td className="p-3 text-xs text-gray-600">
-                  ${bill.energy_rate.toFixed(4)}
-                </td>
+               
                 <td className="p-3 text-xs text-gray-600">
                   ${bill.total_revenue.toFixed(2)}
                 </td>
@@ -217,36 +215,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
             </tbody>
           </table>
 
-          {/* NEW SECTION: Additional Revenue Details */}
-          <table className="mb-10 w-full text-left text-sm">
-            <tbody>
-              <tr>
-                <td className="px-3 text-sm font-semibold text-black">
-                  Belco Revenue:
-                </td>
-                <td className="px-3 text-xs text-gray-600">
-                  ${bill.belco_revenue?.toFixed(2) ?? "0.00"}
-                </td>
-              </tr>
-              <tr>
-                <td className="px-3 text-sm font-semibold text-black">
-                  Greenlight Revenue:
-                </td>
-                <td className="px-3 text-xs text-gray-600">
-                  ${bill.greenlight_revenue?.toFixed(2) ?? "0.00"}
-                </td>
-              </tr>
-              <tr>
-                <td className="px-3 text-sm font-semibold text-black">
-                  Savings:
-                </td>
-                <td className="px-3 text-xs text-gray-600">
-                  ${bill.savings?.toFixed(2) ?? "0.00"}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          {/* END NEW SECTION */}
+
 
           <section className="mb-6 space-y-6 text-right">
             <div className="flex w-full justify-end text-sm font-semibold text-gray-800">

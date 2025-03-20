@@ -801,7 +801,6 @@ const BillModal: React.FC<BillModalProps> = ({
           <th class="p-3 text-sm">Period End</th>
           <th class="p-3 text-sm">Description</th>
           <th class="p-3 text-sm">Energy PTS</th>
-          <th class="p-3 text-sm">Per Unit</th>
           <th class="p-3 text-sm">Total</th>
         </tr>
       </thead>
@@ -811,29 +810,12 @@ const BillModal: React.FC<BillModalProps> = ({
           <td class="p-3 text-xs text-gray-600">${billData.billing_period_end}</td>
           <td class="p-3 text-xs text-gray-600">Energy Produced</td>
           <td class="p-3 text-xs text-gray-600">${billData.total_PTS.toFixed(2)}</td>
-          <td class="p-3 text-xs text-gray-600">$ ${billData.energy_rate}</td>
           <td class="p-3 text-xs text-gray-600">$ ${billData.total_revenue}</td>
         </tr>
       </tbody>
     </table>
 
-    <!-- Additional Revenue Details -->
-    <table class="mb-20 w-full text-left text-sm">
-      <tbody>
-        <tr>
-          <td class="px-3 text-sm font-semibold text-black">Belco Revenue:</td>
-          <td class="px-3 text-xs text-gray-600">$ ${billData.belco_revenue}</td>
-        </tr>
-        <tr>
-          <td class="px-3 text-sm font-semibold text-black">Greenlight Revenue:</td>
-          <td class="px-3 text-xs text-gray-600">$ ${billData.greenlight_revenue}</td>
-        </tr>
-        <tr>
-          <td class="px-3 text-sm font-semibold text-black">Savings:</td>
-          <td class="px-3 text-xs text-gray-600">$ ${billData.savings}</td>
-        </tr>
-      </tbody>
-    </table>
+    
 
     <!-- Balance Due and Overdue Balance -->
     <section class="mb-6 space-y-6 text-right">

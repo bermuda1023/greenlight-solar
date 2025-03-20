@@ -41,8 +41,7 @@ export const calculateBilling = (inputs: {
   // Calculate the number of days between the start and end dates
   const start = new Date(startDate);
   const end = new Date(endDate);
-  const numberOfDays =
-    (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+  const numberOfDays =Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
 
   if (numberOfDays < 0) {
     throw new Error("Invalid date range: End date must be after start date.");
@@ -51,13 +50,13 @@ export const calculateBilling = (inputs: {
   const scalledenergyConsumed = energyConsumed * scaling;
   const scalledSelfConsumed = selfConsumption * scaling;
 
-  const dayRateKwH = scalledenergyConsumed / numberOfDays;
+  const dayRateKwH = Math.round(scalledenergyConsumed / numberOfDays);
   const totalpts = scalledenergyConsumed + energyExported;
 
   // **Belco Calculation**
   let belcoTotal = 0;
   if (scalledenergyConsumed) {
-    belcoTotal += Math.min(scalledenergyConsumed) * tier1;
+    belcoTotal += Math.min(scalledenergyConsumed,250) * tier1;
     belcoTotal +=
       Math.max(Math.min(scalledenergyConsumed - 250, 450), 0) * tier2;
     belcoTotal += Math.max(scalledenergyConsumed - 700, 0) * tier3;
@@ -82,7 +81,7 @@ export const calculateBilling = (inputs: {
   if (belcoPerKwhh * belcodisc < basePrice) {
     // Case 1: (Belco Total * belcodisc) is less than Base Price
     consumptionRevenue =
-      basePrice * scalledSelfConsumed + export_rate * energyExported; // Used scaled self-consumption
+      basePrice * scalledSelfConsumed + energyExported * export_rate; // Used scaled self-consumption
   } else {
     // Case 2: (Belco Total * belcodisc) is greater than Base Price
     consumptionRevenue = belcoPerKwhh * belcodisc * scalledSelfConsumed; // Used scaled self-consumption
