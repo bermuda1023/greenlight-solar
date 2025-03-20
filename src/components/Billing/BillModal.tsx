@@ -733,16 +733,17 @@ const BillModal: React.FC<BillModalProps> = ({
       const Emailmessage =
         parameters.length > 0 && parameters[0]?.emailmsg
           ? `<p style="color: black;">Dear ${billData?.site_name},</p>
-             <p style="color: black;">${parameters[0].emailmsg}</p>
-             <p style="color: black;"><strong>Invoice Summary:</strong><br>- Total Revenue: $${billData.total_revenue}<br>- Overdue Balance: $${overdueBalance.toFixed(3)}</p>
-             <p style="color: black;">Thank you for your continued partnership.</p>
-             <p style="color: black;">Best regards,<br>Green Light Energy</p>`
+         <p style="color: black;">We hope this message finds you well!</p>
+         <p style="color: black;">Your latest invoice for the month of ${monthYear} has been generated, and the total amount due is $${billData.total_revenue}. Please take a moment to review your bill and proceed with payment at your earliest convenience.</p>
+         <p style="color: black;">If you have any questions or need assistance, feel free to reach out to our support team. We’re here to help!</p>
+         <p style="color: black;">Thank you for being a valued customer.</p>
+         <p style="color: black;">Best regards,<br>Green Light Energy</p>`
           : `<p style="color: black;">Dear ${billData?.site_name},</p>
-             <p style="color: black;">Please find attached the invoice for your account for the month of ${monthYear}. Kindly review the details and ensure payment is made promptly.</p>
-             <p style="color: black;"><strong>Invoice Summary:</strong><br>- Total Revenue: $${billData.total_revenue}<br>- Overdue Balance: $${overdueBalance.toFixed(3)}</p>
-             <p style="color: black;">Thank you for your continued partnership.</p>
-             <p style="color: black;">Best regards,<br>Green Light Energy</p>`;
-
+         <p style="color: black;">We hope this message finds you well!</p>
+         <p style="color: black;">Your latest invoice for the month of ${monthYear} has been generated, and the total amount due is $${billData.total_revenue}. Please take a moment to review your bill and proceed with payment at your earliest convenience.</p>
+         <p style="color: black;">If you have any questions or need assistance, feel free to reach out to our support team. We’re here to help!</p>
+         <p style="color: black;">Thank you for being a valued customer.</p>
+         <p style="color: black;">Best regards,<br>Green Light Energy</p>`;
       console.log(Emailmessage);
 
       // Display the generated email message
@@ -915,7 +916,7 @@ const BillModal: React.FC<BillModalProps> = ({
           year: "numeric",
         });
 
-        const emailsubject = `Greenlight Energy Bill - ${monthYear}`;
+        const emailsubject = `Greenlight E-Bill : ${monthYear}`;
         // ✅ Send email with PDF as an attachment
         const response = await fetch("/api/sendmail", {
           method: "POST",
