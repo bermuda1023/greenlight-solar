@@ -102,18 +102,43 @@ const ReconcileModal: React.FC<{
   const billingService = useMemo(() => new CustomerBalanceService(), []);
 
   const router = useRouter();
-  const handleBillSelection = async (monthlyBill: MonthlyBill) => {
-      // Get the current customer balance
-  const customerBalance = await billingService.getCustomerBalance(monthlyBill.customer_id);
+  // const handleBillSelection = async (monthlyBill: MonthlyBill) => {
+  //     // Get the current customer balance
+  // const customerBalance = await billingService.getCustomerBalance(monthlyBill.customer_id);
 
-    setLocalSelectedBillId(monthlyBill.id);
-  setLocalSelectedMonthlyBill({
-    ...monthlyBill,
-    pending_balance: customerBalance // Use the accurate customer balance
-  });
-    setSelectedBillId(monthlyBill.id);
-    setSelectedMonthlyBill(monthlyBill);
+  //   setLocalSelectedBillId(monthlyBill.id);
+  // setLocalSelectedMonthlyBill({
+  //   ...monthlyBill,
+  //   pending_balance: customerBalance // Use the accurate customer balance
+  // });
+  //   setSelectedBillId(monthlyBill.id);
+  //   setSelectedMonthlyBill(monthlyBill);
+  // };
+
+  const handleBillSelection = async (monthlyBill: MonthlyBill) => {
+    try {
+      // Fetch the current balance (arrears) from the customer_balances table
+      const currentBalance = await billingService.getCustomerBalance(monthlyBill.customer_id);
+
+      // Now use currentBalance as a number
+      const updatedMonthlyBill = {
+        ...monthlyBill,
+        arrears: currentBalance-(monthlyBill.total_revenue), // Correctly assign the number
+      };
+  
+      setLocalSelectedBillId(monthlyBill.id);
+      setLocalSelectedMonthlyBill(updatedMonthlyBill);
+      setSelectedBillId(monthlyBill.id);
+      setSelectedMonthlyBill(updatedMonthlyBill);
+    } catch (error) {
+      console.error("Error during bill selection:", error);
+      toast.error("Failed to select bill.");
+    }
   };
+  
+  
+
+
 
   const handleReconcile = async () => {
     try {
@@ -162,7 +187,7 @@ const ReconcileModal: React.FC<{
                 {selectedMonthlyBill.total_revenue.toFixed(2)}
               </p>
               <p>
-                <strong>Previous Arrears:</strong> $
+                <strong>Outstanding:</strong> $
                 {selectedMonthlyBill.arrears?.toFixed(2) || "0.00"}
               </p>
             </>
@@ -181,7 +206,7 @@ const ReconcileModal: React.FC<{
                   <th className="px-4 py-2 text-left">Original Amount</th>
                   <th className="px-4 py-2 text-left">Paid</th>
                   <th className="px-4 py-2 text-left">Pending</th>
-                  <th className="px-4 py-2 text-left">Arrears</th>
+                  {/* <th className="px-4 py-2 text-left">Arrears</th> */}
                 </tr>
               </thead>
               <tbody>
@@ -206,7 +231,7 @@ const ReconcileModal: React.FC<{
                       <td className="px-4 py-2">${monthlyBill.total_revenue.toFixed(2)}</td>
                       <td className="px-4 py-2">${paidAmount.toFixed(2)}</td>
                       <td className="px-4 py-2">${pendingAmount.toFixed(2)}</td>
-                      <td className="px-4 py-2">${(monthlyBill.arrears || 0).toFixed(2)}</td>
+                      {/* <td className="px-4 py-2">${(monthlyBill.arrears || 0).toFixed(2)}</td> */}
                     </tr>
                   );
                 })}
@@ -362,7 +387,7 @@ const ReconciliationTest = () => {
       
       // Fetch updated data immediately
       await fetchData();
-      
+      toast.dismiss();
       toast.success("Transaction unmatched successfully");
     } catch (error) {
       console.error("Error during undo:", error);
@@ -764,28 +789,18 @@ const ReconciliationTest = () => {
       {/* Summary Cards */}
       <div className="mt-6 grid grid-cols-4 gap-4">
         <div className="rounded-lg bg-white p-6 shadow">
-          <h3 className="text-sm font-medium text-gray-500">Total Bills</h3>
+          <h3 className="text-sm font-medium text-gray-500">Total Transactions</h3>
           <p className="mt-2 text-3xl font-semibold">{mappedData.length}</p>
         </div>
         <div className="rounded-lg bg-white p-6 shadow">
-          <h3 className="text-sm font-medium text-gray-500">Matched</h3>
+          <h3 className="text-sm font-medium text-gray-500">Matched Transaction</h3>
           <p className="mt-2 text-3xl font-semibold text-green-600">
             {mappedData.filter((item) => item.status === "Matched").length}
           </p>
         </div>
+
         <div className="rounded-lg bg-white p-6 shadow">
-          <h3 className="text-sm font-medium text-gray-500">
-            Partially Matched
-          </h3>
-          <p className="mt-2 text-3xl font-semibold text-yellow-600">
-            {
-              mappedData.filter((item) => item.status === "Partially Matched")
-                .length
-            }
-          </p>
-        </div>
-        <div className="rounded-lg bg-white p-6 shadow">
-          <h3 className="text-sm font-medium text-gray-500">Unmatched</h3>
+          <h3 className="text-sm font-medium text-gray-500">Unmatched Transactions</h3>
           <p className="mt-2 text-3xl font-semibold text-red-600">
             {mappedData.filter((item) => item.status === "Unmatched").length}
           </p>
@@ -796,7 +811,7 @@ const ReconciliationTest = () => {
       <div className="mt-8 rounded-lg bg-white shadow">
         <div className="border-b px-4">
           <nav className="-mb-px flex">
-            {["all", "matched", "partially-matched", "unmatched"].map((tab) => (
+            {["all", "matched", "unmatched"].map((tab) => (
               <button
                 key={tab}
                 onClick={() => handleTabChange(tab)}
@@ -810,7 +825,7 @@ const ReconciliationTest = () => {
                   .split("-")
                   .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
                   .join(" ")}{" "}
-                Bills
+                Transactions
               </button>
             ))}
           </nav>
@@ -832,9 +847,9 @@ const ReconciliationTest = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                   Paid ($)
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                {/* <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                   Pending ($)
-                </th>
+                </th> */}
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                   Status
                 </th>
@@ -862,9 +877,9 @@ const ReconciliationTest = () => {
                   <td className="whitespace-nowrap px-6 py-4">
                     {row.paid_amount.toFixed(2)}
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4">
+                  {/* <td className="whitespace-nowrap px-6 py-4">
                     {row.pending_amount.toFixed(2)}
-                  </td>
+                  </td> */}
                   <td className="whitespace-nowrap px-6 py-4">
                     <span
                       className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${

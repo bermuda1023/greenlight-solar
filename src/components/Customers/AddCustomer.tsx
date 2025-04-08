@@ -15,6 +15,8 @@ const AddCustomer = () => {
     solar_api_key: "",
     installation_date: "",
     installed_capacity: "",
+    scaling_factor: "",
+    price: "",
     site_ID: "",
   });
 
@@ -46,6 +48,8 @@ const AddCustomer = () => {
       formData.solar_api_key,
       formData.installation_date,
       formData.installed_capacity,
+      formData.scaling_factor,
+      formData.price,
       formData.site_ID,
     ];
   
@@ -64,6 +68,8 @@ const AddCustomer = () => {
           solar_api_key: formData.solar_api_key,
           installation_date: formData.installation_date,
           installed_capacity: formData.installed_capacity,
+          scaling_factor: formData.scaling_factor,
+          price: formData.price,
           site_ID: formData.site_ID,
         },
       ]);
@@ -81,6 +87,8 @@ const AddCustomer = () => {
         solar_api_key: "",
         installation_date: "",
         installed_capacity: "",
+        scaling_factor: "",
+        price: "",
         site_ID: "",
       });
     } catch (error) {
@@ -227,6 +235,38 @@ const AddCustomer = () => {
                 value={formData.site_ID}
                 onChange={handleChange}
                 placeholder="Enter Site ID"
+                className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
+                disabled={isSubmitting}
+              />
+            </div>
+          </div>
+
+{/* Scalling factor and price */}
+          <div className="mb-4.5 flex flex-col gap-4.5 xl:flex-row">
+            <div className="w-full xl:w-1/2">
+              <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
+                Scalling factor
+              </label>
+              <input
+                type="text"
+                name="scaling_factor"
+                value={formData.scaling_factor}
+                onChange={handleChange}
+                placeholder="1"
+                className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="w-full xl:w-1/2">
+              <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
+                Price
+              </label>
+              <input
+                type="text"
+                name="price"
+                value={formData.price}
+                onChange={handleChange}
+                placeholder="Enter Price"
                 className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
                 disabled={isSubmitting}
               />

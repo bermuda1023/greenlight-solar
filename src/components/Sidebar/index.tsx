@@ -67,7 +67,7 @@ const menuGroups = [
         label: "Customers",
         route: "#",
         children: [
-          { label: "Customer List", route: "/dashboard/customers/list" },
+          { label: "Customers List", route: "/dashboard/customers/list" },
           { label: "Add Customer", route: "/dashboard/customers/add" },
         ],
       },
@@ -92,7 +92,7 @@ const menuGroups = [
         label: "Billing",
         route: "#",
         children: [
-          { label: "Monthly Bills", route: "/dashboard/billing/monthly" },
+          { label: "Generated Bills", route: "/dashboard/billing/monthly" },
           {
             label: "Reconciliation",
             route: "/dashboard/billing/reconciliation",

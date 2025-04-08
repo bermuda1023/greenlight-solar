@@ -17,14 +17,14 @@ export default function Signin() {
       <div>
         <SigninWithPassword />
       </div>
-      <div className="mt-6 text-center">
+      {/* <div className="mt-6 text-center">
         <p>
           Don’t have an account?{" "}
           <Link href="/authentication/signup" className="text-green-500 hover:underline">
             Sign Up
           </Link>
         </p>
-      </div>
+      </div> */}
     </>
   );
 }

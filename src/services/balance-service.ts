@@ -118,9 +118,27 @@ async addNewBill(customer_id: string, billAmount: number): Promise<void> {
     if (error) throw error;
   }
 
-  // Get current balance for a customer
-  async getCustomerBalance(customer_id: string): Promise<number> {
-    const balance = await this.getOrCreateCustomerBalance(customer_id);
-    return balance.current_balance;
+  // // Get current balance for a customer
+  // async getCustomerBalance(customer_id: string): Promise<number> {
+  //   const balance = await this.getOrCreateCustomerBalance(customer_id);
+  //   return balance.current_balance;
+  // }
+// old service
+async getCustomerBalance(customerId: string) {
+  const { data, error } = await supabase
+    .from("customer_balances")
+    .select("current_balance")
+    .eq("customer_id", customerId)
+    .single(); // Assumes one record per customer
+
+  if (error) {
+    throw error;
   }
+
+  // Extract current_balance and ensure it's a number
+  const currentBalance = data?.current_balance ?? 0; // Default to 0 if not found
+  return currentBalance; // Return as a number
+}
+
+
 }
