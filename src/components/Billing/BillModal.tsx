@@ -52,6 +52,7 @@ interface CustomerData {
   id: string;
   site_ID: number;
   solar_api_key: string;
+  refresh_token?: string; // Added for Enphase customers
   site_name?: string; // Ensure this is defined
   email?: string; // Ensure this is defined
   address?: string; // Ensure this is defined
@@ -158,6 +159,7 @@ const BillModal: React.FC<BillModalProps> = ({
       setError("Start and End dates are required");
       return;
     }
+
     const formattedStartDate = format(
       new Date(startDate),
       "yyyy-MM-dd HH:mm:ss",
@@ -167,15 +169,34 @@ const BillModal: React.FC<BillModalProps> = ({
     try {
       // Fetch energy data for each customer individually
       const energyDataPromises = customerData.map(async (customer) => {
-        const proxyUrl = `/api/proxy-energy-data?startTime=${encodeURIComponent(
-          formattedStartDate,
-        )}&endTime=${encodeURIComponent(
-          formattedEndDate,
-        )}&siteid=${customer.site_ID}&api_key=${customer.solar_api_key}`;
+        let proxyUrl;
+        let response;
 
-        const response = await fetch(proxyUrl);
-        if (!response.ok)
+        // Determine which API to use based on the customer type
+        if (customer.refresh_token) {
+          // For Enphase customers (those with refresh_token)
+          console.log(`Using Enphase API for customer ${customer.id}`);
+          proxyUrl = `/api/enphase-energy-data?startTime=${encodeURIComponent(
+            formattedStartDate,
+          )}&endTime=${encodeURIComponent(
+            formattedEndDate,
+          )}&siteId=${customer.site_ID}&customerId=${customer.id}`;
+        } else {
+          // For SolarEdge customers
+          console.log(`Using SolarEdge API for customer ${customer.id}`);
+          proxyUrl = `/api/proxy-energy-data?startTime=${encodeURIComponent(
+            formattedStartDate,
+          )}&endTime=${encodeURIComponent(
+            formattedEndDate,
+          )}&siteid=${customer.site_ID}&api_key=${customer.solar_api_key}`;
+        }
+
+        console.log(`Fetching energy data from: ${proxyUrl}`);
+        response = await fetch(proxyUrl);
+
+        if (!response.ok) {
           throw new Error(`HTTP error! Status: ${response.status}`);
+        }
 
         const data = await response.json();
 
@@ -207,6 +228,7 @@ const BillModal: React.FC<BillModalProps> = ({
       const individualCustomerEnergySums: {
         [key: string]: { [key: string]: number };
       } = {};
+
       energyDataResults.forEach((result) => {
         individualCustomerEnergySums[result.customerId] = result.energySums;
       });
@@ -215,6 +237,7 @@ const BillModal: React.FC<BillModalProps> = ({
       setEnergySums(individualCustomerEnergySums);
       setLoading(false);
     } catch (err) {
+      console.error("Error in fetchEnergyData:", err);
       setError(
         err instanceof Error ? err.message : "Error fetching energy data",
       );
@@ -735,13 +758,13 @@ const BillModal: React.FC<BillModalProps> = ({
           ? `<p style="color: black;">Dear ${billData?.site_name},</p>
          <p style="color: black;">We hope this message finds you well!</p>
          <p style="color: black;">Your latest invoice for the month of ${monthYear} has been generated, and the total amount due is $${billData.total_revenue}. Please take a moment to review your bill and proceed with payment at your earliest convenience.</p>
-         <p style="color: black;">If you have any questions or need assistance, feel free to reach out to our support team. We’re here to help!</p>
+         <p style="color: black;">If you have any questions or need assistance, feel free to reach out to our support team. We're here to help!</p>
          <p style="color: black;">Thank you for being a valued customer.</p>
          <p style="color: black;">Best regards,<br>Green Light Energy</p>`
           : `<p style="color: black;">Dear ${billData?.site_name},</p>
          <p style="color: black;">We hope this message finds you well!</p>
          <p style="color: black;">Your latest invoice for the month of ${monthYear} has been generated, and the total amount due is $${billData.total_revenue}. Please take a moment to review your bill and proceed with payment at your earliest convenience.</p>
-         <p style="color: black;">If you have any questions or need assistance, feel free to reach out to our support team. We’re here to help!</p>
+         <p style="color: black;">If you have any questions or need assistance, feel free to reach out to our support team. We're here to help!</p>
          <p style="color: black;">Thank you for being a valued customer.</p>
          <p style="color: black;">Best regards,<br>Green Light Energy</p>`;
       console.log(Emailmessage);
