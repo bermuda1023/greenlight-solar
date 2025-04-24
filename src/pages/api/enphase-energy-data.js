@@ -158,9 +158,14 @@ export default async function handler(req, res) {
         Array.isArray(exportData?.intervals[0]),
     });
 
-    // 5. Fetch Production Data with the fresh access token
-    console.log("Fetching production data...");
-    const productionUrl = `https://api.enphaseenergy.com/api/v4/systems/${process.env.ENPHASE_SYSTEM_ID}/telemetry/production_meter?start_date=${startDateFormatted}&granularity=15mins&key=${apiKey}`;
+    // Replace the existing production data fetch (lines 161-189) with this code:
+
+    // 5. Fetch Production Data using energy_lifetime API
+    console.log("Fetching production data using energy_lifetime API...");
+    const endDateFormatted = new Date(endTime || new Date())
+      .toISOString()
+      .split("T")[0]; // Format end date
+    const productionUrl = `https://api.enphaseenergy.com/api/v4/systems/${process.env.ENPHASE_SYSTEM_ID}/energy_lifetime?start_date=${startDateFormatted}&end_date=${endDateFormatted}&key=${apiKey}`;
     console.log("Production URL:", productionUrl);
 
     const productionResponse = await fetch(productionUrl, {
@@ -181,16 +186,37 @@ export default async function handler(req, res) {
       );
     }
 
-    const productionData = await productionResponse.json();
-    console.log("Production data structure:", {
-      intervalsCount: productionData?.intervals?.length || 0,
-      sampleInterval: productionData?.intervals?.[0] || null,
+    const lifetimeData = await productionResponse.json();
+    console.log("Energy lifetime data received:", {
+      daysCount: lifetimeData?.production?.length || 0,
+      startDate: lifetimeData?.start_date,
+      systemId: lifetimeData?.system_id,
     });
 
     // Calculate totals
     let totalImport = 0;
     let totalExport = 0;
     let totalProduction = 1;
+
+    // Sum all production values in the array (they're already in Wh)
+    const totalProductionWh = lifetimeData.production.reduce(
+      (sum, dayValue) => sum + dayValue,
+      0,
+    );
+    totalProduction = totalProductionWh / 1000; // Convert Wh to kWh for consistency with other metrics
+
+    console.log(
+      "Total production calculated from energy_lifetime:",
+      totalProduction,
+      "kWh",
+      `(${totalProductionWh} Wh from ${lifetimeData.production.length} days)`,
+    );
+
+    // We don't need to create intervals since we're just using the total
+    // but for consistency with the rest of your code, maintain the productionData variable
+    const productionData = {
+      intervals: [{ wh_del: totalProductionWh }],
+    };
 
     // Sum up import values - handle the nested array structure
     if (importData && importData.intervals && importData.intervals.length > 0) {
@@ -224,19 +250,6 @@ export default async function handler(req, res) {
       console.log(`Summed ${exportIntervals.length} export intervals`);
     }
 
-    // Sum up production values
-    if (productionData && productionData.intervals) {
-      totalProduction =
-        productionData.intervals.reduce(
-          (sum, interval) => sum + (interval.wh_del || 0),
-          0,
-        ) / 1000; // Convert Wh to kWh
-
-      console.log(
-        `Summed ${productionData.intervals.length} production intervals`,
-      );
-    }
-
     // Calculate consumption using the formula: Consumption = Import + Production - Export
     const totalConsumption = totalImport + totalProduction - totalExport;
 
@@ -246,8 +259,6 @@ export default async function handler(req, res) {
       totalProduction,
       totalConsumption,
     });
-
-  
 
     // Then proceed with your response formatting...
     // Format the response to match the structure expected by BillModal
