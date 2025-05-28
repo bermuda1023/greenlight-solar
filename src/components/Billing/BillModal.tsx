@@ -435,6 +435,7 @@ const BillModal: React.FC<BillModalProps> = ({
         totalSavings: 0,
       },
     );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBills, customers, energySums, parameters, customerBalance]);
 
   // const summary = calculateSummary();
