@@ -23,10 +23,16 @@ const AddCustomer = () => {
 
   const [showSimpleForm, setShowSimpleForm] = useState(false);
   const [additionalField, setAdditionalField] = useState("");
+  const [isAuthWindowOpen, setIsAuthWindowOpen] = useState(false);
+  const [authWindow, setAuthWindow] = useState<Window | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const ENPHASE_AUTH_URL = "https://api.enphaseenergy.com/oauth/authorize";
+  const CLIENT_ID = "ba5228e4f843a94607e6cc245043bc54";
+  const REDIRECT_URI = "https://api.enphaseenergy.com/oauth/redirect_uri";
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
@@ -68,6 +74,33 @@ const AddCustomer = () => {
       console.error("Error getting Enphase token:", error);
       throw error;
     }
+  };
+
+  // Function to handle opening the auth window
+  const openEnphaseAuth = () => {
+    const authUrl = `${ENPHASE_AUTH_URL}?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}`;
+    const width = 600;
+    const height = 700;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+
+    const authWindowRef = window.open(
+      authUrl,
+      "EnphaseAuth",
+      `width=${width},height=${height},left=${left},top=${top}`,
+    );
+
+    setAuthWindow(authWindowRef);
+    setIsAuthWindowOpen(true);
+
+    // Check if window was closed
+    const checkWindow = setInterval(() => {
+      if (authWindowRef?.closed) {
+        clearInterval(checkWindow);
+        setIsAuthWindowOpen(false);
+        setAuthWindow(null);
+      }
+    }, 500);
   };
 
   const handleSimpleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -255,17 +288,44 @@ const AddCustomer = () => {
 
   return (
     <div className="rounded-[10px] border border-stroke bg-white shadow-1 dark:border-dark-3 dark:bg-gray-dark dark:shadow-card">
-      <div className="flex items-center justify-between border-b border-stroke px-6.5 py-4 dark:border-dark-3">
-        <h3 className="font-semibold text-dark dark:text-white">
-          {showSimpleForm ? "Add New Enphase Customer" : "Add New Customer"}
-        </h3>
-        <button
-          type="button"
-          onClick={() => setShowSimpleForm(!showSimpleForm)}
-          className="rounded-md bg-primary px-4 py-2 text-white hover:bg-opacity-90"
-        >
-          {showSimpleForm ? "Switch to Full Form" : "Switch to Simple Form"}
-        </button>
+      <div className="border-b border-stroke px-6.5 py-4 dark:border-dark-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-xl font-semibold text-dark dark:text-white">
+              Add New Customer
+            </h3>
+            <p className="text-body-color mt-1 text-sm">
+              Current Provider:{" "}
+              <span className="font-medium text-primary">
+                {showSimpleForm ? "Enphase" : "Solar API"}
+              </span>
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowSimpleForm(true)}
+              className={`rounded-md px-4 py-2 text-sm transition-all ${
+                showSimpleForm
+                  ? "bg-primary text-white"
+                  : "text-body-color dark:hover:bg-dark-1 bg-gray-1 hover:bg-gray-2 dark:bg-dark-2"
+              }`}
+            >
+              Enphase Provider
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSimpleForm(false)}
+              className={`rounded-md px-4 py-2 text-sm transition-all ${
+                !showSimpleForm
+                  ? "bg-primary text-white"
+                  : "text-body-color dark:hover:bg-dark-1 bg-gray-1 hover:bg-gray-2 dark:bg-dark-2"
+              }`}
+            >
+              Solar API Provider
+            </button>
+          </div>
+        </div>
       </div>
 
       {showSimpleForm ? (
@@ -362,15 +422,37 @@ const AddCustomer = () => {
                 <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
                   Authorization Code
                 </label>
-                <input
-                  type="text"
-                  name="authorization_code"
-                  value={formData.authorization_code}
-                  onChange={handleChange}
-                  placeholder="Enter Authorization Code"
-                  className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
-                  disabled={isSubmitting}
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    name="authorization_code"
+                    value={formData.authorization_code}
+                    onChange={handleChange}
+                    placeholder="Enter Authorization Code"
+                    className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
+                    disabled={isSubmitting}
+                  />
+                  <button
+                    type="button"
+                    onClick={openEnphaseAuth}
+                    disabled={isAuthWindowOpen || isSubmitting}
+                    className="flex-shrink-0 rounded-[7px] bg-primary px-4 py-3 text-white transition hover:bg-opacity-90 disabled:bg-opacity-50"
+                  >
+                    {isAuthWindowOpen ? "Window Open" : "Get Auth Code"}
+                  </button>
+                </div>
+                <div className="text-body-color mt-2 space-y-1 text-sm">
+                  <p>Follow these steps to get the authorization code:</p>
+                  <ol className="list-decimal pl-4">
+                    <li>Click the &ldquo;Get Auth Code&rdquo; button above</li>
+                    <li>
+                      Log in with the customer&rsquo;s Enphase credentials
+                    </li>
+                    <li>Click &ldquo;Allow Access&rdquo; when prompted</li>
+                    <li>Copy the authorization code shown on the final page</li>
+                    <li>Paste the code in the input field above</li>
+                  </ol>
+                </div>
               </div>
             </div>
 
@@ -507,14 +589,14 @@ const AddCustomer = () => {
               </div>
               <div className="w-full xl:w-1/2">
                 <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
-                  Authorization Code
+                  Solar API Key
                 </label>
                 <input
                   type="text"
-                  name="authorization_code"
-                  value={formData.authorization_code}
+                  name="solar_api_key"
+                  value={formData.solar_api_key}
                   onChange={handleChange}
-                  placeholder="Enter Authorization Code"
+                  placeholder="ABCDABCDABCDABCDABCDABCDABCDABCD"
                   className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
                   disabled={isSubmitting}
                 />
@@ -547,23 +629,6 @@ const AddCustomer = () => {
                   value={formData.price}
                   onChange={handleChange}
                   placeholder="Enter Price"
-                  className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
-                  disabled={isSubmitting}
-                />
-              </div>
-            </div>
-
-            <div className="mb-4.5 flex flex-col gap-4.5 xl:flex-row">
-              <div className="w-full">
-                <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
-                  Solar API Key
-                </label>
-                <input
-                  type="text"
-                  name="solar_api_key"
-                  value={formData.solar_api_key}
-                  onChange={handleChange}
-                  placeholder="ABCDABCDABCDABCDABCDABCDABCDABCD"
                   className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
                   disabled={isSubmitting}
                 />
