@@ -6,6 +6,7 @@ import "flatpickr/dist/flatpickr.css"; // Import Flatpickr CSS
 
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { v4 as uuidv4 } from "uuid";
 
 const AddCustomer = () => {
   const [formData, setFormData] = useState({
@@ -50,7 +51,7 @@ const AddCustomer = () => {
 
       // Create a serverless function call instead of direct API call
       // to avoid CORS issues
-      const response = await fetch("/api/enphase-token", {
+      const response = await fetch("http://localhost:3000/api/enphase-token", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -119,7 +120,7 @@ const AddCustomer = () => {
       formData.installed_capacity,
       formData.scaling_factor,
       formData.price,
-      formData.authorization_code,
+      // formData.authorization_code,
     ];
 
     if (requiredFields.some((field) => !field)) {
@@ -131,23 +132,23 @@ const AddCustomer = () => {
     try {
       // Get refresh token from Enphase API
       let refreshToken;
-      try {
-        toast.info("Getting authorization from Enphase...");
-        refreshToken = await getEnphaseToken(formData.authorization_code);
-        console.log("Received refresh token:", refreshToken);
-      } catch (tokenError) {
-        console.error("Error getting Enphase token:", tokenError);
-        setError(
-          tokenError instanceof Error
-            ? tokenError.message
-            : "Authorization failed",
-        );
-        toast.error(
-          "Failed to authorize with Enphase. The authorization code may be expired or invalid.",
-        );
-        setIsSubmitting(false);
-        return;
-      }
+      // try {
+      //   toast.info("Getting authorization from Enphase...");
+      //   refreshToken = await getEnphaseToken(formData.authorization_code);
+      //   console.log("Received refresh token:", refreshToken);
+      // } catch (tokenError) {
+      //   console.error("Error getting Enphase token:", tokenError);
+      //   setError(
+      //     tokenError instanceof Error
+      //       ? tokenError.message
+      //       : "Authorization failed",
+      //   );
+      //   toast.error(
+      //     "Failed to authorize with Enphase. The authorization code may be expired or invalid.",
+      //   );
+      //   setIsSubmitting(false);
+      //   return;
+      // }
 
       // Insert customer with refresh token
       const { error } = await supabase.from("customers").insert([
@@ -159,8 +160,11 @@ const AddCustomer = () => {
           installed_capacity: Number(formData.installed_capacity),
           scaling_factor: Number(formData.scaling_factor),
           price: Number(formData.price),
-          authorization_code: formData.authorization_code,
-          refresh_token: refreshToken, // Save refresh token to database
+          authorization_code: formData.authorization_code
+            ? formData.authorization_code
+            : null,
+          verification: !!formData.authorization_code, // <-- Set verification based on presence of code
+          // refresh_token: refreshToken ? refreshToken : null, // Save refresh token to database
         },
       ]);
 
@@ -169,6 +173,30 @@ const AddCustomer = () => {
       }
 
       toast.success("Enphase customer added successfully!");
+
+      // After successful insert in handleSimpleSubmit
+      if (!formData.authorization_code) {
+        // Get the new customer ID (fetch by email, or if Supabase returns it, use that)
+        const { data: customerData, error: fetchError } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("email", formData.email)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (!fetchError && customerData?.id) {
+          // Call the API to generate the link and send the email
+          await fetch("/api/customers/generate-auth-link", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              customerId: customerData.id,
+              customerEmail: formData.email,
+            }),
+          });
+        }
+      }
 
       setFormData({
         email: "",
@@ -208,7 +236,7 @@ const AddCustomer = () => {
       formData.installed_capacity,
       formData.scaling_factor,
       formData.price,
-      formData.site_ID,
+      // formData.site_ID,
     ];
 
     if (requiredFields.some((field) => !field)) {
@@ -225,10 +253,11 @@ const AddCustomer = () => {
           site_name: formData.site_name,
           solar_api_key: formData.solar_api_key,
           installation_date: formData.installation_date,
-          installed_capacity: formData.installed_capacity,
-          scaling_factor: formData.scaling_factor,
-          price: formData.price,
-          site_ID: formData.site_ID,
+          installed_capacity: Number(formData.installed_capacity),
+          scaling_factor: Number(formData.scaling_factor),
+          price: Number(formData.price),
+          site_ID: Number(formData.site_ID),
+          verification: true,
         },
       ]);
 

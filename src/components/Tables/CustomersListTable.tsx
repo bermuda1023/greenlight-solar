@@ -7,6 +7,14 @@ import {
   FaRegFilePdf,
   FaRegTrashAlt,
 } from "react-icons/fa";
+
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faClock,
+  faCheckCircle,
+  faTimesCircle,
+  faCircleCheck,
+} from "@fortawesome/free-solid-svg-icons";
 import { AiOutlineSearch } from "react-icons/ai";
 import { TbReceipt } from "react-icons/tb";
 import flatpickr from "flatpickr";
@@ -14,6 +22,7 @@ import { supabase } from "@/utils/supabase/browserClient";
 import BillModal from "../Billing/BillModal";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { useRef } from "react";
 
 interface Customer {
   id: string;
@@ -35,6 +44,10 @@ interface Customer {
   savings: number;
   belco_revenue: number;
   greenlight_revenue: number; // Total
+  authorization_status: string;
+  authorization_token: string | null;
+  verification: boolean;
+  authorization_code: string | null;
 }
 
 const CustomersListTable = () => {
@@ -138,39 +151,45 @@ const CustomersListTable = () => {
   const fetchCustomers = useCallback(async () => {
     try {
       setLoading(true);
-  
+
       // First, get total count for pagination
-      const countQuery = supabase.from("customers").select("*", { count: "exact" });
-  
+      const countQuery = supabase
+        .from("customers")
+        .select("*", { count: "exact" });
+
       if (searchTerm) {
-        countQuery.or(`site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+        countQuery.or(
+          `site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`,
+        );
       }
-  
+
       if (statusFilter) {
         countQuery.eq("status", statusFilter);
       }
-  
+
       const { count } = await countQuery;
       setTotalCount(count || 0);
-  
+
       // Then fetch paginated customer data
       let query = supabase
         .from("customers")
         .select("*")
         .range((currentPage - 1) * pageSize, currentPage * pageSize - 1)
         .order("created_at", { ascending: false });
-  
+
       if (searchTerm) {
-        query = query.or(`site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`);
+        query = query.or(
+          `site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`,
+        );
       }
-  
+
       if (statusFilter) {
         query = query.eq("status", statusFilter);
       }
-  
+
       const { data, error: fetchError } = await query;
       if (fetchError) throw fetchError;
-  
+
       // Fetch the outstanding balance (current_balance) for each customer
       const customersWithBalance = await Promise.all(
         data.map(async (customer) => {
@@ -179,30 +198,32 @@ const CustomersListTable = () => {
             .select("current_balance")
             .eq("customer_id", customer.id)
             .single(); // Assuming each customer has one balance record
-  
+
           if (balanceError) {
             console.error("Error fetching balance:", balanceError);
           }
-  
+
           return {
             ...customer,
             outstanding_balance: balanceData?.current_balance || 0, // Default to 0 if no balance is found
           };
-        })
+        }),
       );
-  
+
       setCustomers(customersWithBalance);
       setError(null);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "An error occurred while fetching customers"
+        err instanceof Error
+          ? err.message
+          : "An error occurred while fetching customers",
       );
       setCustomers([]);
     } finally {
       setLoading(false);
     }
   }, [searchTerm, statusFilter, currentPage, pageSize]);
-  
+
   useEffect(() => {
     fetchCustomers();
   }, [fetchCustomers]);
@@ -378,6 +399,108 @@ const CustomersListTable = () => {
     }
   };
 
+  const generateAuthLink = async (customerId: string) => {
+    try {
+      const res = await fetch("/api/customers/generate-auth-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.link) {
+        toast.success(
+          "Authorization link generated! Link copied to clipboard.",
+        );
+        await navigator.clipboard.writeText(data.link);
+      } else {
+        toast.error(data.error || "Failed to generate link.");
+      }
+    } catch (err) {
+      toast.error("Failed to generate link.");
+    }
+  };
+
+  // Add these states at the top of your component
+  // const [showAuthModal, setShowAuthModal] = useState(false);
+  // const [authModalCustomer, setAuthModalCustomer] = useState<Customer | null>(
+  //   null,
+  // );
+  // const [authCode, setAuthCode] = useState("");
+  // const [isAuthWindowOpen, setIsAuthWindowOpen] = useState(false);
+  // const [authWindow, setAuthWindow] = useState<Window | null>(null);
+
+  // Function to open Enphase Auth window (copy from AddCustomer)
+  const ENPHASE_AUTH_URL = "https://api.enphaseenergy.com/oauth/authorize";
+  const CLIENT_ID = "ba5228e4f843a94607e6cc245043bc54";
+  const REDIRECT_URI = "https://api.enphaseenergy.com/oauth/redirect_uri";
+
+  const openEnphaseAuth = () => {
+    const authUrl = `${ENPHASE_AUTH_URL}?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}`;
+    const width = 600;
+    const height = 700;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+
+    const authWindowRef = window.open(
+      authUrl,
+      "EnphaseAuth",
+      `width=${width},height=${height},left=${left},top=${top}`,
+    );
+
+    // setAuthWindow(authWindowRef); // This state is no longer needed
+    // setIsAuthWindowOpen(true); // This state is no longer needed
+
+    // Check if window was closed
+    const checkWindow = setInterval(() => {
+      if (authWindowRef?.closed) {
+        clearInterval(checkWindow);
+        // setIsAuthWindowOpen(false); // This state is no longer needed
+        // setAuthWindow(null); // This state is no longer needed
+      }
+    }, 500);
+  };
+
+  // Handler for clicking Pending badge
+  const handlePendingClick = async (customer: Customer) => {
+    try {
+      const res = await fetch("/api/customers/generate-auth-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerId: customer.id }),
+      });
+      const data = await res.json();
+      if (res.ok && data.link) {
+        await navigator.clipboard.writeText(data.link);
+        toast.success(
+          "Verification link copied to clipboard! Send it to the customer.",
+        );
+      } else {
+        toast.error(data.error || "Failed to generate verification link.");
+      }
+    } catch (err) {
+      toast.error("Failed to generate verification link.");
+    }
+  };
+
+  // Handler for submitting the modal (save code to DB, etc.)
+  // const handleAuthModalSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  //   e.preventDefault();
+  //   if (!authModalCustomer) return;
+  //   // Save the code to the customer (update in Supabase)
+  //   const { error } = await supabase
+  //     .from("customers")
+  //     .update({ authorization_code: authCode, verification: true })
+  //     .eq("id", authModalCustomer.id);
+
+  //   if (!error) {
+  //     toast.success("Authorization code saved!");
+  //     setShowAuthModal(false);
+  //     fetchCustomers(); // Refresh list
+  //   } else {
+  //     toast.error("Failed to save authorization code.");
+  //   }
+  // };
+
   return (
     <>
       {/* Header Section */}
@@ -393,9 +516,8 @@ const CustomersListTable = () => {
               className={`form-datepicker w-full rounded-[7px] border-[1.5px] ${
                 !startDate && dateError ? "border-red-500" : "border-stroke"
               } bg-transparent bg-white px-5 py-3 font-normal outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:focus:border-primary`}
-              placeholder="Start Date *"
-              required
-              value={startDate || "Start Date"}
+              placeholder="Start Date"
+              value={startDate ?? ""}
             />
           </div>
           <div className="flex flex-col">
@@ -404,9 +526,8 @@ const CustomersListTable = () => {
               className={`form-datepicker w-full rounded-[7px] border-[1.5px] ${
                 !endDate && dateError ? "border-red-500" : "border-stroke"
               } bg-transparent bg-white px-5 py-3 font-normal outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:focus:border-primary`}
-              placeholder="End Date *"
-              required
-              value={endDate || "End Date"}
+              placeholder="End Date"
+              value={endDate ?? ""}
             />
           </div>
           <button
@@ -510,6 +631,10 @@ const CustomersListTable = () => {
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Outstanding
                       </th>
+
+                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                        Verification
+                      </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Action
                       </th>
@@ -551,13 +676,45 @@ const CustomersListTable = () => {
                           {customer.installed_capacity}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-  {customer.outstanding_balance.toFixed(2)} {/* Display outstanding balance */}
-</td>
-
+                          {customer.outstanding_balance.toFixed(2)}{" "}
+                          {/* Display outstanding balance */}
+                        </td>
 
                         {/* Action button */}
+
+                        <td className="whitespace-nowrap px-6 py-4 text-sm">
+                          {customer.verification ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800">
+                              <FontAwesomeIcon
+                                icon={faCircleCheck}
+                                className="h-3 w-3"
+                              />
+                              Complete
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1.5 rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800"
+                              onClick={() => handlePendingClick(customer)}
+                            >
+                              <FontAwesomeIcon
+                                icon={faClock}
+                                className="h-3 w-3"
+                              />
+                              Pending
+                            </button>
+                          )}
+                        </td>
                         <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">
-                        <button
+                          <button
+                            onClick={() => handleEditCustomer(customer.id)}
+                            className="rounded-lg bg-green-50 p-2 text-primary transition hover:bg-primary hover:text-green-50"
+                          >
+                            <span className="text-xl">
+                              <FaRegEdit />
+                            </span>
+                          </button>
+                          {/* <button
                             onClick={() => handleEditCustomer(customer.id)}
                            className="rounded-lg bg-green-50 p-2 text-primary transition hover:bg-primary hover:text-green-50"
                                     >
@@ -565,7 +722,7 @@ const CustomersListTable = () => {
                                         <FaRegEdit />
                                       </span>
                        
-                          </button>
+                          </button> */}
                           <button
                             onClick={() => handleDeleteClick(customer.id)}
                             className="rounded-lg bg-red-50 p-2 text-red-600 transition hover:bg-red-600 hover:text-red-50"
@@ -574,7 +731,18 @@ const CustomersListTable = () => {
                               <FaRegTrashAlt />
                             </span>
                           </button>
-                          {/*  */}
+
+                          {/* Generate Authorization Link button for pending Enphase customers */}
+                          {customer.authorization_status ===
+                            "ENPHASE_AUTHORIZATION_PENDING" &&
+                            !customer.authorization_token && (
+                              <button
+                                onClick={() => generateAuthLink(customer.id)}
+                                className="rounded-lg bg-blue-50 p-2 text-blue-600 transition hover:bg-blue-600 hover:text-blue-50"
+                              >
+                                Generate Authorization Link
+                              </button>
+                            )}
                         </td>
                       </tr>
                     ))}
@@ -805,6 +973,7 @@ const CustomersListTable = () => {
           </div>
         </div>
       )}
+      {/* Removed Auth Modal as per edit hint */}
     </>
   );
 };
