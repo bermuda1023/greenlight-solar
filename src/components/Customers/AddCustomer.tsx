@@ -130,27 +130,35 @@ const AddCustomer = () => {
     }
 
     try {
-      // Get refresh token from Enphase API
+      // Get refresh token from Enphase API ONLY if authorization code is provided
       let refreshToken;
-      // try {
-      //   toast.info("Getting authorization from Enphase...");
-      //   refreshToken = await getEnphaseToken(formData.authorization_code);
-      //   console.log("Received refresh token:", refreshToken);
-      // } catch (tokenError) {
-      //   console.error("Error getting Enphase token:", tokenError);
-      //   setError(
-      //     tokenError instanceof Error
-      //       ? tokenError.message
-      //       : "Authorization failed",
-      //   );
-      //   toast.error(
-      //     "Failed to authorize with Enphase. The authorization code may be expired or invalid.",
-      //   );
-      //   setIsSubmitting(false);
-      //   return;
-      // }
+
+      if (formData.authorization_code) {
+        try {
+          console.log(
+            "Getting Enphase token with auth code:",
+            formData.authorization_code,
+          );
+          toast.info("Getting authorization from Enphase...");
+          refreshToken = await getEnphaseToken(formData.authorization_code);
+          console.log("Received refresh token:", refreshToken);
+        } catch (tokenError) {
+          console.error("Error getting Enphase token:", tokenError);
+          setError(
+            tokenError instanceof Error
+              ? tokenError.message
+              : "Authorization failed",
+          );
+          toast.error(
+            "Failed to authorize with Enphase. The authorization code may be expired or invalid.",
+          );
+          setIsSubmitting(false);
+          return;
+        }
+      }
 
       // Insert customer with refresh token
+      console.log("Inserting customer with refresh token:", refreshToken);
       const { error } = await supabase.from("customers").insert([
         {
           email: formData.email,
@@ -160,22 +168,23 @@ const AddCustomer = () => {
           installed_capacity: Number(formData.installed_capacity),
           scaling_factor: Number(formData.scaling_factor),
           price: Number(formData.price),
-          authorization_code: formData.authorization_code
-            ? formData.authorization_code
-            : null,
-          verification: !!formData.authorization_code, // <-- Set verification based on presence of code
-          // refresh_token: refreshToken ? refreshToken : null, // Save refresh token to database
+          authorization_code: formData.authorization_code || null,
+          verification: !!formData.authorization_code,
+          refresh_token: refreshToken || null,
         },
       ]);
 
       if (error) {
+        console.error("Supabase insert error:", error);
         throw error;
       }
 
+      console.log("Customer added successfully!");
       toast.success("Enphase customer added successfully!");
 
       // After successful insert in handleSimpleSubmit
       if (!formData.authorization_code) {
+        console.log("No auth code provided, generating verification link...");
         // Get the new customer ID (fetch by email, or if Supabase returns it, use that)
         const { data: customerData, error: fetchError } = await supabase
           .from("customers")
@@ -186,6 +195,7 @@ const AddCustomer = () => {
           .single();
 
         if (!fetchError && customerData?.id) {
+          console.log("Generating auth link for customer ID:", customerData.id);
           // Call the API to generate the link and send the email
           await fetch("/api/customers/generate-auth-link", {
             method: "POST",

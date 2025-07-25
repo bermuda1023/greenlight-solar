@@ -27,6 +27,7 @@ export default function CustomerVerifyPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data.valid && data.customerId) {
+          console.log("Retrieved customer ID from token:", data.customerId);
           setCustomerId(data.customerId);
           setError(null);
         } else {
@@ -36,6 +37,21 @@ export default function CustomerVerifyPage() {
       .catch(() => setError("Invalid or expired verification link."))
       .finally(() => setLoading(false));
   }, [token]);
+
+  // Listen for message from Enphase auth window
+  useEffect(() => {
+    function handleMessage(event: MessageEvent) {
+      // Check if the message contains the authorization code
+      if (event.data && event.data.code) {
+        setAuthCode(event.data.code);
+        setIsAuthWindowOpen(false);
+        setAuthWindow(null);
+      }
+    }
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
 
   const openEnphaseAuth = () => {
     const authUrl = `${ENPHASE_AUTH_URL}?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}`;
@@ -64,26 +80,73 @@ export default function CustomerVerifyPage() {
     if (!customerId) return;
     setSubmitting(true);
     console.log("Submitting verification:", { customerId, authCode, token });
-    const res = await fetch("/api/customers/complete-authorization.js", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ customerId, authCode, token }),
-    });
-    const data = await res.json();
-    setSubmitting(false);
-    console.log("API response:", data);
-    if (res.ok) {
-      setSuccess(true);
-      toast.success("Verification complete!");
-      console.log(
-        "Updating customer",
+
+    try {
+      // First get refresh token from Enphase API if auth code is provided
+      let refreshToken = null;
+
+      if (authCode) {
+        try {
+          const tokenResponse = await fetch("/api/enphase-token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code: authCode }),
+          });
+
+          const tokenData = await tokenResponse.json();
+
+          if (!tokenResponse.ok) {
+            throw new Error(tokenData.error || "Failed to get Enphase token");
+          }
+
+          refreshToken = tokenData.refresh_token;
+        } catch (tokenError) {
+          console.error("Error getting Enphase token:", tokenError);
+          toast.error(
+            "Failed to authorize with Enphase. The authorization code may be expired or invalid.",
+          );
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      // Now complete the authorization
+      console.log("About to make API call to complete-authorization.js");
+      console.log("Request payload:", {
         customerId,
-        "setting verification to true",
-      );
-      // Optionally, redirect after a delay
-      // setTimeout(() => router.replace('/'), 3000);
-    } else {
-      toast.error(data.error || "Failed to complete verification.");
+        authCode,
+        token,
+        refreshToken,
+      });
+
+      const apiUrl = "/api/customers/complete-authorization";
+      console.log("API URL:", apiUrl);
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId,
+          authCode,
+          token,
+          refreshToken,
+        }),
+      });
+
+      console.log("API response status:", res.status);
+      const data = await res.json();
+      console.log("API response data:", data);
+
+      if (res.ok) {
+        setSuccess(true);
+        toast.success("Verification complete!");
+      } else {
+        toast.error(data.error || "Failed to complete verification.");
+      }
+    } catch (error) {
+      console.error("Verification error:", error);
+      toast.error("An error occurred during verification.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -170,9 +233,9 @@ export default function CustomerVerifyPage() {
           </div>
           <div className="mb-4 text-sm text-gray-600">
             <ol className="list-decimal pl-4">
-              <li>Click the “Get Auth Code” button above</li>
+              <li>Click the "Get Auth Code" button above</li>
               <li>Log in with your Enphase credentials</li>
-              <li>Click “Allow Access” when prompted</li>
+              <li>Click "Allow Access" when prompted</li>
               <li>Copy the authorization code shown on the final page</li>
               <li>Paste the code in the input field above</li>
             </ol>

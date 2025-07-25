@@ -51,7 +51,7 @@ export default async function handler(req, res) {
       userEmail: customerEmail,
       subject,
       htmlContent,
-      attachment: "",// No attachment for verification
+      attachment: "", // No attachment for verification
     }),
   });
   const emailResult = await emailRes.json();

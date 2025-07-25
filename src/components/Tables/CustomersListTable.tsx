@@ -466,7 +466,10 @@ const CustomersListTable = () => {
       const res = await fetch("/api/customers/generate-auth-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customerId: customer.id }),
+        body: JSON.stringify({
+          customerId: customer.id,
+          customerEmail: customer.email,
+        }),
       });
       const data = await res.json();
       if (res.ok && data.link) {
