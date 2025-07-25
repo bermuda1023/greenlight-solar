@@ -1,10 +1,21 @@
 // src/pages/api/customers/generate-auth-link.js
 
 import { v4 as uuidv4 } from "uuid";
-import { supabase } from "@/utils/supabase/browserClient";
+// import { supabase } from "@/utils/supabase/browserClient";
+
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
+);
 
 export default async function handler(req, res) {
+  console.log("API route called with method:", req.method);
+  console.log("Request body:", req.body);
+
   if (req.method !== "POST") {
+    console.log("Method not allowed:", req.method);
     return res.status(405).json({ error: "Method not allowed" });
   }
   const { customerId, customerEmail } = req.body;
