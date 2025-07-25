@@ -16,10 +16,10 @@ export default async function handler(req, res) {
   console.log("API route called with method:", req.method);
   console.log("Request body:", req.body);
 
-  // if (req.method !== "POST") {
-  //   console.log("Method not allowed:", req.method);
-  //   return res.status(405).json({ error: "Method not allowed" });
-  // }
+  if (req.method !== "POST") {
+    console.log("Method not allowed:", req.method);
+    return res.status(405).json({ error: "Method not allowed" });
+  }
   const { customerId, customerEmail } = req.body;
   if (!customerId || !customerEmail) {
     return res

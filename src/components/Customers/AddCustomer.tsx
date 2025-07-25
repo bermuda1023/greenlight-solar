@@ -51,7 +51,7 @@ const AddCustomer = () => {
 
       // Create a serverless function call instead of direct API call
       // to avoid CORS issues
-      const response = await fetch("http://localhost:3000/api/enphase-token", {
+      const response = await fetch("process.env.NEXT_PUBLIC_BASE_URL", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
