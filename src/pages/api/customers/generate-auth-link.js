@@ -1,10 +1,12 @@
 // src/pages/api/customers/generate-auth-link.js
 
 import { v4 as uuidv4 } from "uuid";
-import { supabase } from "@/utils/supabase/browserClient";
+// Remove this import since we're creating our own client below
+// import { supabase } from "@/utils/supabase/browserClient";
 
-// import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
+// Create the Supabase client for server-side use
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
