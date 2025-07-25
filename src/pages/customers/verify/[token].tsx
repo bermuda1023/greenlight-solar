@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import { supabase } from "@/utils/supabase/browserClient";
 import { toast } from "react-toastify";
+import Image from "next/image";
 
 const ENPHASE_AUTH_URL = "https://api.enphaseenergy.com/oauth/authorize";
 const CLIENT_ID = "ba5228e4f843a94607e6cc245043bc54";
@@ -198,9 +199,11 @@ export default function CustomerVerifyPage() {
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
       <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-lg">
         <div className="mb-6 flex items-center justify-center">
-          <img
+          <Image
             src="/images/logo/logo.svg"
             alt="Greenlight Energy"
+            width={40}
+            height={40}
             className="h-10"
           />
         </div>
@@ -233,9 +236,9 @@ export default function CustomerVerifyPage() {
           </div>
           <div className="mb-4 text-sm text-gray-600">
             <ol className="list-decimal pl-4">
-              <li>Click the "Get Auth Code" button above</li>
+              <li>Click the &quot;Get Auth Code&quot; button above</li>
               <li>Log in with your Enphase credentials</li>
-              <li>Click "Allow Access" when prompted</li>
+              <li>Click &quot;Allow Access&quot; when prompted</li>
               <li>Copy the authorization code shown on the final page</li>
               <li>Paste the code in the input field above</li>
             </ol>
