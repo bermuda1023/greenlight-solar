@@ -62,7 +62,7 @@ const CustomersListTable = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage] = useState(1);
-  const [pageSize] = useState(10);
+  const [pageSize] = useState(200);
   const [totalCount, setTotalCount] = useState(0);
   const [showBillModal, setShowBillModal] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -189,6 +189,9 @@ const CustomersListTable = () => {
 
       const { data, error: fetchError } = await query;
       if (fetchError) throw fetchError;
+
+      // Add this log to see what data is being returned:
+      console.log("Customer data from database:", data);
 
       // Fetch the outstanding balance (current_balance) for each customer
       const customersWithBalance = await Promise.all(
@@ -667,7 +670,7 @@ const CustomersListTable = () => {
                           {customer.address}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.site_ID}
+                          {customer.site_ID }
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.solar_api_key}
