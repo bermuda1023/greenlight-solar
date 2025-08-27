@@ -23,7 +23,8 @@ npm run dev
 And if you're using **Yarn**, it's:
 
 ```
-yarn dev
+yarn 
+
 ```
 
 And voila! You're now ready to start developing. **Happy coding**!
