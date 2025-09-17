@@ -34,6 +34,8 @@ interface Parameters {
   tier1: number;
   tier2: number;
   tier3: number;
+  interest_rate?: number; // Monthly interest rate for overdue amounts
+  grace_period_days?: number; // Grace period before interest is applied
 }
 
 interface CustomerBalanceProp {
@@ -46,6 +48,13 @@ interface MonthlyBills {
   total_revenue: number;
   arrears: number;
   invoice_number: string;
+  payment_allocations?: PaymentAllocation[];
+}
+
+interface PaymentAllocation {
+  payment_id: string;
+  amount_allocated: number;
+  allocation_date: string;
 }
 
 interface CustomerData {
@@ -59,6 +68,33 @@ interface CustomerData {
   scaling_factor?: number;
   price?: number;
 }
+
+// Helper function to calculate interest on overdue amounts
+const calculateOverdueInterest = (
+  overdueAmount: number,
+  daysPastDue: number,
+  interestRate: number = 0.015, // Default 1.5% monthly interest
+  gracePeriodDays: number = 30, // Default 30-day grace period
+): number => {
+  if (overdueAmount <= 0 || daysPastDue <= gracePeriodDays) {
+    return 0; // No interest if amount is not overdue or within grace period
+  }
+
+  // Calculate months past due (after grace period)
+  const effectiveDaysPastDue = daysPastDue - gracePeriodDays;
+  const monthsPastDue = effectiveDaysPastDue / 30; // Approximate months
+
+  // Simple interest calculation: Principal × Rate × Time
+  const interest = overdueAmount * interestRate * monthsPastDue;
+
+  return parseFloat(interest.toFixed(2));
+};
+
+// Helper function to calculate days between two dates
+const calculateDaysBetween = (startDate: Date, endDate: Date): number => {
+  const timeDifference = endDate.getTime() - startDate.getTime();
+  return Math.ceil(timeDifference / (1000 * 3600 * 24));
+};
 
 const BillModal: React.FC<BillModalProps> = ({
   selectedCustomers,
@@ -90,6 +126,13 @@ const BillModal: React.FC<BillModalProps> = ({
       SelfConsumption?: number;
     };
   } | null>(null);
+
+  // State for manual overdue adjustments
+  const [overdueAdjustments, setOverdueAdjustments] = useState<{
+    [customerId: string]: number;
+  }>({});
+
+  const [showAdjustmentModal, setShowAdjustmentModal] = useState<string | null>(null);
 
   const fetchParameters = useCallback(async () => {
     try {
@@ -192,33 +235,69 @@ const BillModal: React.FC<BillModalProps> = ({
         }
 
         console.log(`Fetching energy data from: ${proxyUrl}`);
-        response = await fetch(proxyUrl);
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`);
+        try {
+          response = await fetch(proxyUrl);
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP error! Status: ${response.status}, Message: ${errorText}`);
+          }
+
+          const data = await response.json();
+
+          // Validate the response structure
+          if (!data || !data.energyDetails || !Array.isArray(data.energyDetails.meters)) {
+            throw new Error(`Invalid energy data structure for customer ${customer.id}: missing energyDetails or meters array`);
+          }
+
+          // Calculate energy sums for this specific customer
+          const customerEnergySums: { [key: string]: number } = {};
+          data.energyDetails.meters.forEach((meter: any) => {
+            if (!meter.type || !Array.isArray(meter.values)) {
+              console.warn(`Invalid meter data for customer ${customer.id}:`, meter);
+              return;
+            }
+
+            try {
+              customerEnergySums[meter.type] =
+                meter.values.reduce(
+                  (sum: number, value: any) => {
+                    const numValue = parseFloat(value?.value || 0);
+                    return sum + (isNaN(numValue) ? 0 : numValue);
+                  },
+                  0,
+                ) / 1000; // Convert to kWh
+            } catch (meterError) {
+              console.error(`Error processing meter ${meter.type} for customer ${customer.id}:`, meterError);
+              customerEnergySums[meter.type] = 0;
+            }
+          });
+
+          console.log(
+            `Computed Energy Sums for Customer ${customer.id}:`,
+            customerEnergySums,
+          );
+
+          return {
+            customerId: customer.id,
+            energySums: customerEnergySums,
+          };
+
+        } catch (fetchError) {
+          console.error(`Failed to fetch energy data for customer ${customer.id}:`, fetchError);
+
+          // Return default values to prevent complete failure
+          return {
+            customerId: customer.id,
+            energySums: {
+              Consumption: 500, // default fallback values
+              FeedIn: 50,
+              SelfConsumption: 0,
+              Production: 0,
+            },
+          };
         }
-
-        const data = await response.json();
-
-        // Calculate energy sums for this specific customer
-        const customerEnergySums: { [key: string]: number } = {};
-        data?.energyDetails?.meters?.forEach((meter: any) => {
-          customerEnergySums[meter.type] =
-            meter.values.reduce(
-              (sum: number, value: any) => sum + (value?.value || 0),
-              0,
-            ) / 1000; // Convert to kWh
-        });
-
-        console.log(
-          `Computed Energy Sums for Customer ${customer.id}:`,
-          customerEnergySums,
-        );
-
-        return {
-          customerId: customer.id,
-          energySums: customerEnergySums,
-        };
       });
 
       // Wait for all energy data to be fetched
@@ -272,10 +351,7 @@ const BillModal: React.FC<BillModalProps> = ({
           customerEnergySums,
         );
 
-        const consumptionValue =
-          typeof customerEnergySums?.Consumption === "number"
-            ? customerEnergySums.Consumption
-            : 500;
+        // Calculate solar consumption (self consumption + export) instead of total house consumption
         const exportValue =
           typeof customerEnergySums?.FeedIn === "number"
             ? customerEnergySums.FeedIn
@@ -284,45 +360,108 @@ const BillModal: React.FC<BillModalProps> = ({
           typeof customerEnergySums?.SelfConsumption === "number"
             ? customerEnergySums.SelfConsumption
             : 0;
-
-        const customerBalanceEntry = customerBalance.find(
-          (balance) => balance.customer_id === customerId,
-        );
-
         const productionValue =
           typeof customerEnergySums?.Production === "number"
             ? customerEnergySums.Production
             : 0;
 
+        // Solar consumption = self consumption + export (from solar, not total house usage)
+        const solarConsumptionValue = selfConsumptionValue + exportValue;
+
+        // Use solar consumption for billing (this is the energy that goes through the solar system)
+        const consumptionValue = solarConsumptionValue > 0 ? solarConsumptionValue :
+          (typeof customerEnergySums?.Consumption === "number" ? customerEnergySums.Consumption : 500);
+
+        const customerBalanceEntry = customerBalance.find(
+          (balance) => balance.customer_id === customerId,
+        );
+
         console.log(`Customer Energy Data - ID: ${customerId}`);
-        console.log("Consumption:🌹🌹🌹", consumptionValue);
+        console.log("Solar Consumption (Self + Export):", solarConsumptionValue);
+        console.log("Billing Consumption:", consumptionValue);
         console.log("FeedIn (Export):", exportValue);
-        console.log("Self Consumption 🤦‍♀️🤦‍♀️🤦‍♀️:", selfConsumptionValue);
-        console.log("Total Production 🍤🍤🍤🍤:", productionValue);
+        console.log("Self Consumption:", selfConsumptionValue);
+        console.log("Total Production:", productionValue);
 
-        const billResult = calculateBilling({
-          energyConsumed: consumptionValue,
-          energyExported: exportValue,
-          selfConsumption: selfConsumptionValue,
-          totalProduction: productionValue, // Add this line
+        let billResult;
+        try {
+          // Validate required parameters before billing calculation
+          if (!parameter) {
+            throw new Error(`Missing billing parameters for customer ${customer?.site_name || customerId}`);
+          }
 
-          startDate: new Date(startDate || ""),
-          endDate: new Date(endDate || ""),
-          fuelRate: parameter?.fuelRate,
-          basePrice: parameter?.basePrice,
-          feedInPrice: parameter?.feedInPrice,
-          belcodisc: parameter?.belcodisc,
-          ra_fee: parameter?.ra_fee,
-          export_rate: parameter?.export_rate,
-          tier1: parameter?.tier1,
-          tier2: parameter?.tier2,
-          tier3: parameter?.tier3,
-          scaling: customer?.scaling_factor,
-          price: customer?.price,
-          fixedFeeSaving: 54.37,
-        });
+          const requiredParams = ['fuelRate', 'basePrice', 'feedInPrice', 'belcodisc', 'ra_fee', 'export_rate', 'tier1', 'tier2', 'tier3'];
+          const missingParams = requiredParams.filter(param => typeof parameter[param] !== 'number');
+
+          if (missingParams.length > 0) {
+            throw new Error(`Missing required parameters for ${customer?.site_name || customerId}: ${missingParams.join(', ')}`);
+          }
+
+          // Validate energy values
+          if (consumptionValue < 0 || exportValue < 0 || selfConsumptionValue < 0 || productionValue < 0) {
+            throw new Error(`Invalid energy values for customer ${customer?.site_name || customerId}: negative values not allowed`);
+          }
+
+          // Validate dates
+          if (!startDate || !endDate) {
+            throw new Error(`Invalid billing period for customer ${customer?.site_name || customerId}: start and end dates required`);
+          }
+
+          const startDateObj = new Date(startDate);
+          const endDateObj = new Date(endDate);
+
+          if (isNaN(startDateObj.getTime()) || isNaN(endDateObj.getTime())) {
+            throw new Error(`Invalid date format for customer ${customer?.site_name || customerId}`);
+          }
+
+          if (startDateObj >= endDateObj) {
+            throw new Error(`Invalid billing period for customer ${customer?.site_name || customerId}: end date must be after start date`);
+          }
+
+          billResult = calculateBilling({
+            energyConsumed: consumptionValue,
+            energyExported: exportValue,
+            selfConsumption: selfConsumptionValue,
+            totalProduction: productionValue,
+            startDate: startDateObj,
+            endDate: endDateObj,
+            fuelRate: parameter.fuelRate,
+            basePrice: parameter.basePrice,
+            feedInPrice: parameter.feedInPrice,
+            belcodisc: parameter.belcodisc,
+            ra_fee: parameter.ra_fee,
+            export_rate: parameter.export_rate,
+            tier1: parameter.tier1,
+            tier2: parameter.tier2,
+            tier3: parameter.tier3,
+            scaling: customer?.scaling_factor || 1.0,
+            price: customer?.price || parameter.basePrice,
+            fixedFeeSaving: 54.37,
+          });
+
+          // Validate billing result
+          if (!billResult || typeof billResult.finalRevenue !== 'number' || isNaN(billResult.finalRevenue)) {
+            throw new Error(`Invalid billing calculation result for customer ${customer?.site_name || customerId}`);
+          }
+
+        } catch (billError) {
+          console.error(`Billing calculation error for customer ${customer?.site_name || customerId}:`, billError);
+
+          // Return a default bill result to prevent crashes
+          billResult = {
+            totalpts: consumptionValue,
+            numberOfDays: 30,
+            belcoPerKwh: 0,
+            belcoTotal: 0,
+            finalRevenue: 0,
+            belcoRevenue: 0,
+            greenlightRevenue: 0,
+            savings: 0,
+          };
+        }
+
         console.log(
-          `Billing Calculation Result for Customer  🍟🍟🍟🍔🍔 ${customerId}:`,
+          `Billing Calculation Result for Customer ${customerId}:`,
         );
         console.log("Final Revenue:", billResult.finalRevenue);
         console.log("Total PTS:", billResult.totalpts);
@@ -332,7 +471,7 @@ const BillModal: React.FC<BillModalProps> = ({
         console.log("Belco Revenue:", billResult.belcoRevenue);
         console.log("Savings:", billResult.savings);
 
-        const outstandingBalance = customerBalanceEntry?.current_balance || 0;
+        const outstandingBalance = (customerBalanceEntry?.current_balance || 0) + (overdueAdjustments[customerId] || 0);
 
         summary.totalRevenue += billResult.finalRevenue;
         summary.totalPts += consumptionValue || 0;
@@ -364,10 +503,7 @@ const BillModal: React.FC<BillModalProps> = ({
 
         const customerEnergySums = energySums?.[customerId] || {};
 
-        const consumptionValue =
-          typeof customerEnergySums?.Consumption === "number"
-            ? customerEnergySums.Consumption
-            : 500;
+        // Calculate solar consumption (self consumption + export) instead of total house consumption
         const exportValue =
           typeof customerEnergySums?.FeedIn === "number"
             ? customerEnergySums.FeedIn
@@ -376,21 +512,28 @@ const BillModal: React.FC<BillModalProps> = ({
           typeof customerEnergySums?.SelfConsumption === "number"
             ? customerEnergySums.SelfConsumption
             : 0;
-
-        const customerBalanceEntry = customerBalance.find(
-          (balance) => balance.customer_id === customerId,
-        );
-
         const productionValue =
           typeof customerEnergySums?.Production === "number"
             ? customerEnergySums.Production
             : 0;
 
+        // Solar consumption = self consumption + export (from solar, not total house usage)
+        const solarConsumptionValue = selfConsumptionValue + exportValue;
+
+        // Use solar consumption for billing (this is the energy that goes through the solar system)
+        const consumptionValue = solarConsumptionValue > 0 ? solarConsumptionValue :
+          (typeof customerEnergySums?.Consumption === "number" ? customerEnergySums.Consumption : 500);
+
+        const customerBalanceEntry = customerBalance.find(
+          (balance) => balance.customer_id === customerId,
+        );
+
         console.log(`Customer Energy Data - ID: ${customerId}`);
-        console.log("Consumption:🌹🌹🌹", consumptionValue);
+        console.log("Solar Consumption (Self + Export):", solarConsumptionValue);
+        console.log("Billing Consumption:", consumptionValue);
         console.log("FeedIn (Export):", exportValue);
-        console.log("Self Consumption 🤦‍♀️🤦‍♀️🤦‍♀️:", selfConsumptionValue);
-        console.log("Total Production 🍤🍤🍤🍤:", productionValue);
+        console.log("Self Consumption:", selfConsumptionValue);
+        console.log("Total Production:", productionValue);
 
         const billResult = calculateBilling({
           energyConsumed: consumptionValue,
@@ -414,7 +557,7 @@ const BillModal: React.FC<BillModalProps> = ({
           fixedFeeSaving: 54.37,
         });
 
-        const outstandingBalance = customerBalanceEntry?.current_balance || 0;
+        const outstandingBalance = (customerBalanceEntry?.current_balance || 0) + (overdueAdjustments[customerId] || 0);
 
         summary.totalRevenue += billResult.finalRevenue;
         summary.totalPts += consumptionValue || 0;
@@ -458,6 +601,95 @@ const BillModal: React.FC<BillModalProps> = ({
         "An error occurred while removing the bill. Please try again.",
       ); // Error toast for unexpected issues
       console.error("Error removing bill:", error);
+    }
+  };
+
+  // Apply manual adjustment to customer balance
+  const applyOverdueAdjustment = async (customerId: string, adjustmentAmount: number) => {
+    try {
+      console.log(`Applying overdue adjustment for customer ${customerId}: ${adjustmentAmount}`);
+
+      // First get the current balance
+      const { data: currentBalance, error: fetchError } = await supabase
+        .from("customer_balances")
+        .select("current_balance")
+        .eq("customer_id", customerId)
+        .single();
+
+      console.log("Fetch result:", { currentBalance, fetchError });
+
+      let newBalance = adjustmentAmount;
+
+      if (fetchError) {
+        // If customer balance record doesn't exist, create it
+        if (fetchError.code === 'PGRST116') {
+          console.log("Customer balance record not found, creating new one");
+
+          const { error: insertError } = await supabase
+            .from("customer_balances")
+            .insert({
+              customer_id: customerId,
+              current_balance: adjustmentAmount,
+              total_billed: 0,
+              total_paid: 0,
+            });
+
+          if (insertError) {
+            console.error("Insert error:", insertError);
+            throw insertError;
+          }
+
+          newBalance = adjustmentAmount;
+        } else {
+          console.error("Fetch error:", fetchError);
+          throw fetchError;
+        }
+      } else {
+        // Calculate new balance
+        newBalance = (currentBalance?.current_balance || 0) + adjustmentAmount;
+
+        // Update with the new balance
+        const { error: updateError } = await supabase
+          .from("customer_balances")
+          .update({
+            current_balance: newBalance,
+          })
+          .eq("customer_id", customerId);
+
+        if (updateError) {
+          console.error("Update error:", updateError);
+          throw updateError;
+        }
+      }
+
+      console.log(`Successfully updated balance to: ${newBalance}`);
+
+      // Update local state only after successful database update
+      setOverdueAdjustments((prev) => ({
+        ...prev,
+        [customerId]: (prev[customerId] || 0) + adjustmentAmount,
+      }));
+
+      setShowAdjustmentModal(null);
+      toast.success(`Overdue balance adjusted by $${adjustmentAmount.toFixed(2)}`);
+
+      // Refresh customer balance data
+      await fetchCustomerBalance();
+    } catch (error) {
+      console.error("Error applying overdue adjustment:", error);
+      console.error("Error type:", typeof error);
+      console.error("Error details:", JSON.stringify(error, null, 2));
+
+      let errorMessage = 'Unknown error';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (error && typeof error === 'object') {
+        errorMessage = JSON.stringify(error);
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+
+      toast.error(`Failed to apply overdue adjustment: ${errorMessage}`);
     }
   };
 
@@ -507,7 +739,34 @@ const BillModal: React.FC<BillModalProps> = ({
       // }
 
       const previousArrears = existingBills?.[0]?.arrears || 0;
-      const total_bill = Number(billData.total_revenue) + previousArrears;
+
+      // Calculate interest on overdue amounts if any previous arrears exist
+      let interestAmount = 0;
+      if (previousArrears > 0 && parameters[0]) {
+        // Find the oldest unpaid bill date to calculate days overdue
+        const { data: oldestBill, error: oldestBillError } = await supabase
+          .from("monthly_bills")
+          .select("billing_period_end, created_at")
+          .eq("site_name", billData.site_name)
+          .eq("status", "Pending")
+          .order("created_at", { ascending: true })
+          .limit(1);
+
+        if (!oldestBillError && oldestBill?.[0]) {
+          const oldestBillDate = new Date(oldestBill[0].created_at || oldestBill[0].billing_period_end);
+          const currentDate = new Date();
+          const daysPastDue = calculateDaysBetween(oldestBillDate, currentDate);
+
+          interestAmount = calculateOverdueInterest(
+            previousArrears,
+            daysPastDue,
+            parameters[0].interest_rate || 0.015, // Use parameter or default 1.5%
+            parameters[0].grace_period_days || 30 // Use parameter or default 30 days
+          );
+        }
+      }
+
+      const total_bill = Number(billData.total_revenue) + previousArrears + interestAmount;
 
       console.log("Saving Bill Data:", {
         ...billData,
@@ -515,6 +774,7 @@ const BillModal: React.FC<BillModalProps> = ({
         total_bill,
         pending_bill: total_bill,
         arrears: previousArrears,
+        interest_amount: interestAmount,
         savings: Number(billData.savings) || 0, // Ensure number value
         belco_revenue: Number(billData.belco_revenue) || 0, // Ensure number value
         greenlight_revenue: Number(billData.greenlight_revenue) || 0, // Ensure number value
@@ -529,7 +789,9 @@ const BillModal: React.FC<BillModalProps> = ({
             total_bill: total_bill,
             pending_bill: total_bill,
             arrears: previousArrears,
+            interest_amount: interestAmount,
             reconciliation_ids: [],
+            // payment_allocations: [], // Initialize empty payment allocations
             status: "Pending",
             savings: billData.savings,
             belco_revenue: billData.belco_revenue,
@@ -571,24 +833,27 @@ const BillModal: React.FC<BillModalProps> = ({
         if (!customer) return null;
 
         const customerEnergySums = energySums?.[customerId] || {};
-        const consumptionValue =
-          typeof customerEnergySums?.Consumption === "number"
-            ? customerEnergySums.Consumption
-            : 500;
+
+        // Calculate solar consumption (self consumption + export) instead of total house consumption
         const exportValue =
           typeof customerEnergySums?.FeedIn === "number"
             ? customerEnergySums.FeedIn
             : 50;
-
         const selfConsumptionValue =
           typeof customerEnergySums?.SelfConsumption === "number"
             ? customerEnergySums.SelfConsumption
             : 0;
-
         const productionValue =
           typeof customerEnergySums?.Production === "number"
             ? customerEnergySums.Production
             : 0;
+
+        // Solar consumption = self consumption + export (from solar, not total house usage)
+        const solarConsumptionValue = selfConsumptionValue + exportValue;
+
+        // Use solar consumption for billing (this is the energy that goes through the solar system)
+        const consumptionValue = solarConsumptionValue > 0 ? solarConsumptionValue :
+          (typeof customerEnergySums?.Consumption === "number" ? customerEnergySums.Consumption : 500);
 
         const billResult = calculateBilling({
           energyConsumed: consumptionValue,
@@ -738,8 +1003,34 @@ const BillModal: React.FC<BillModalProps> = ({
         (customerBalanceData?.current_balance || 0) -
         (billData?.total_revenue || 0);
 
-      // ✅ Compute `balanceDue`
-      const balanceDue = parseFloat(billData.total_revenue) + overdueBalance;
+      // ✅ Calculate interest on overdue amounts
+      let interestAmount = 0;
+      if (overdueBalance > 0 && parameters[0]) {
+        // Find the oldest unpaid bill date to calculate days overdue
+        const { data: oldestBill, error: oldestBillError } = await supabase
+          .from("monthly_bills")
+          .select("billing_period_end, created_at")
+          .eq("site_name", billData.site_name)
+          .eq("status", "Pending")
+          .order("created_at", { ascending: true })
+          .limit(1);
+
+        if (!oldestBillError && oldestBill?.[0]) {
+          const oldestBillDate = new Date(oldestBill[0].created_at || oldestBill[0].billing_period_end);
+          const currentDate = new Date();
+          const daysPastDue = calculateDaysBetween(oldestBillDate, currentDate);
+
+          interestAmount = calculateOverdueInterest(
+            overdueBalance,
+            daysPastDue,
+            parameters[0].interest_rate || 0.015, // Use parameter or default 1.5%
+            parameters[0].grace_period_days || 30 // Use parameter or default 30 days
+          );
+        }
+      }
+
+      // ✅ Compute `balanceDue` including interest
+      const balanceDue = parseFloat(billData.total_revenue) + overdueBalance + interestAmount;
 
       // toast.info("Generating invoice PDF...");
 
@@ -772,19 +1063,23 @@ const BillModal: React.FC<BillModalProps> = ({
 
       // Display the generated email message
 
-      // ✅ Generate Invoice HTML Template
+      // ✅ Calculate effective rate from the billing result
+      const effectiveRate = billData.total_revenue > 0 && billData.total_PTS > 0
+        ? (parseFloat(billData.total_revenue) / billData.total_PTS).toFixed(3)
+        : "0.000";
 
+      // ✅ Generate Invoice HTML Template
       const invoiceHTML = `
-  <div  
+  <div
     class="mx-auto h-[297mm] w-full max-w-[210mm] border border-gray-300 bg-white px-8 pb-12">
-    
+
     <!-- Header -->
     <header class="flex items-center justify-between py-16 mt-6">
-      <img 
-        src="/images/logo/logo.svg" 
+      <img
+        src="/images/logo/logo.svg"
         alt="Logo"
-        width="360" 
-        height="60" 
+        width="360"
+        height="60"
         class="max-w-full"
       />
     </header>
@@ -811,8 +1106,8 @@ const BillModal: React.FC<BillModalProps> = ({
             <td class="text-xs">${billData.address || "N/A"}</td>
             <td class="pr-4 text-sm font-semibold text-black">Invoice Number:</td>
             <td class="text-xs">${updatedBillData.invoice_number}</td>
-            <td></td>
-            <td></td>
+            <td class="pr-4 text-sm font-semibold text-black">Effective Rate:</td>
+            <td class="text-xs">$${effectiveRate}/kWh</td>
           </tr>
         </tbody>
       </table>
@@ -825,7 +1120,8 @@ const BillModal: React.FC<BillModalProps> = ({
           <th class="p-3 text-sm">Period Start</th>
           <th class="p-3 text-sm">Period End</th>
           <th class="p-3 text-sm">Description</th>
-          <th class="p-3 text-sm">Energy PTS</th>
+          <th class="p-3 text-sm">Solar Energy (kWh)</th>
+          <th class="p-3 text-sm">Effective Rate</th>
           <th class="p-3 text-sm">Total</th>
         </tr>
       </thead>
@@ -833,8 +1129,9 @@ const BillModal: React.FC<BillModalProps> = ({
         <tr>
           <td class="p-3 text-xs text-gray-600">${billData.billing_period_start}</td>
           <td class="p-3 text-xs text-gray-600">${billData.billing_period_end}</td>
-          <td class="p-3 text-xs text-gray-600">Energy Produced</td>
+          <td class="p-3 text-xs text-gray-600">Solar Energy Consumption</td>
           <td class="p-3 text-xs text-gray-600">${billData.total_PTS.toFixed(2)}</td>
+          <td class="p-3 text-xs text-gray-600">$${effectiveRate}/kWh</td>
           <td class="p-3 text-xs text-gray-600">$ ${billData.total_revenue}</td>
         </tr>
       </tbody>
@@ -848,15 +1145,21 @@ const BillModal: React.FC<BillModalProps> = ({
         <p>TOTAL PERIOD BALANCE</p>
         <span class="ml-20 w-20 text-black">$ ${billData.total_revenue}</span>
       </div>
-  
+
       <div class="flex w-full justify-end text-sm font-semibold text-gray-800">
         <p> OVERDUE BALANCE</p>
         <span class="ml-20 w-20 text-black">$ ${overdueBalance.toFixed(2)}</span>
       </div>
-  
+
+      ${interestAmount > 0 ? `
+      <div class="flex w-full justify-end text-sm font-semibold text-orange-600">
+        <p> INTEREST ON OVERDUE</p>
+        <span class="ml-20 w-20">$ ${interestAmount.toFixed(2)}</span>
+      </div>` : ''}
+
       <div class="flex w-full justify-end text-sm font-semibold text-red-600">
         <p> BALANCE DUE</p>
-        <span class="ml-20 w-20">$ ${balanceDue}</span>
+        <span class="ml-20 w-20">$ ${balanceDue.toFixed(2)}</span>
       </div>
     </section>
 
@@ -973,24 +1276,27 @@ const BillModal: React.FC<BillModalProps> = ({
         if (!customer) return null; // If no customer found, skip it
 
         const customerEnergySums = energySums?.[customerId] || {}; // Fetch energy sums for the customer
-        const consumptionValue =
-          typeof customerEnergySums?.Consumption === "number"
-            ? customerEnergySums.Consumption
-            : 500;
+
+        // Calculate solar consumption (self consumption + export) instead of total house consumption
         const exportValue =
           typeof customerEnergySums?.FeedIn === "number"
             ? customerEnergySums.FeedIn
             : 50;
-
         const selfConsumptionValue =
           typeof customerEnergySums?.SelfConsumption === "number"
             ? customerEnergySums.SelfConsumption
             : 0;
-
         const productionValue =
           typeof customerEnergySums?.Production === "number"
             ? customerEnergySums.Production
             : 0;
+
+        // Solar consumption = self consumption + export (from solar, not total house usage)
+        const solarConsumptionValue = selfConsumptionValue + exportValue;
+
+        // Use solar consumption for billing (this is the energy that goes through the solar system)
+        const consumptionValue = solarConsumptionValue > 0 ? solarConsumptionValue :
+          (typeof customerEnergySums?.Consumption === "number" ? customerEnergySums.Consumption : 500);
 
         // Calculate the bill for this customer
         const billResult = calculateBilling({
@@ -1198,7 +1504,6 @@ const BillModal: React.FC<BillModalProps> = ({
                 // Get the current_balance or default to 0
 
                 const customerEnergySums = energySums?.[customerId] || {};
-                const consumptionValue = customerEnergySums?.Consumption || 500;
                 const exportValue = customerEnergySums?.FeedIn || 50;
                 const productionValue = customerEnergySums?.Production || 0;
                 const selfConsumptionValue =
@@ -1206,8 +1511,16 @@ const BillModal: React.FC<BillModalProps> = ({
                     ? customerEnergySums.SelfConsumption
                     : 0;
 
+                // Solar consumption = self consumption + export (from solar, not total house usage)
+                const solarConsumptionValue = selfConsumptionValue + exportValue;
+
+                // Use solar consumption for billing (this is the energy that goes through the solar system)
+                const consumptionValue = solarConsumptionValue > 0 ? solarConsumptionValue :
+                  (customerEnergySums?.Consumption || 500);
+
                 console.log(`Customer Energy Data - ID: ${customerId}`);
-                console.log("Consumption:🌹🌹🌹", consumptionValue);
+                console.log("Solar Consumption (Self + Export):", solarConsumptionValue);
+                console.log("Billing Consumption:", consumptionValue);
                 console.log("FeedIn (Export):", exportValue);
                 console.log("Self Consumption 🤦‍♀️🤦‍♀️🤦‍♀️:", selfConsumptionValue);
                 console.log("Total Production 🍤🍤🍤🍤:", productionValue);
@@ -1309,6 +1622,13 @@ const BillModal: React.FC<BillModalProps> = ({
                         <p>
                           <strong>Outstanding:</strong> $
                           {outstandingBalance.toFixed(2)}
+                          <button
+                            onClick={() => setShowAdjustmentModal(customerId)}
+                            className="ml-2 rounded bg-orange-200 px-2 py-1 text-xs text-orange-800 hover:bg-orange-300"
+                            title="Adjust overdue amount"
+                          >
+                            Adjust
+                          </button>
                         </p>
                         <p>
                           <strong>Greenlight Revenue:</strong> ${" "}
@@ -1351,6 +1671,47 @@ const BillModal: React.FC<BillModalProps> = ({
           )}
         </div>
       </div>
+
+      {/* Manual Overdue Adjustment Modal */}
+      {showAdjustmentModal && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50">
+          <div className="w-96 rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="mb-4 text-lg font-semibold">Adjust Overdue Amount</h3>
+            <p className="mb-4 text-sm text-gray-600">
+              Enter adjustment amount (positive to increase, negative to decrease):
+            </p>
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Enter amount (e.g., -50.00 or +25.00)"
+              className="mb-4 w-full rounded border border-gray-300 px-3 py-2"
+              id="adjustment-input"
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowAdjustmentModal(null)}
+                className="rounded bg-gray-200 px-4 py-2 text-gray-800 hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const input = document.getElementById('adjustment-input') as HTMLInputElement;
+                  const amount = parseFloat(input?.value || '0');
+                  if (!isNaN(amount) && amount !== 0 && showAdjustmentModal) {
+                    applyOverdueAdjustment(showAdjustmentModal, amount);
+                  } else {
+                    toast.error('Please enter a valid adjustment amount');
+                  }
+                }}
+                className="rounded bg-orange-500 px-4 py-2 text-white hover:bg-orange-600"
+              >
+                Apply Adjustment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Dialog>
   );
 };

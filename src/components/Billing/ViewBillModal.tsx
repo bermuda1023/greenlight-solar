@@ -97,6 +97,11 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
     (customerBalance?.current_balance || 0) - (bill.total_revenue || 0);
   const balanceDue = (bill.total_revenue || 0) + overdueBalance;
 
+  // Calculate effective rate
+  const effectiveRate = bill.total_revenue > 0 && bill.total_PTS > 0
+    ? (bill.total_revenue / bill.total_PTS).toFixed(3)
+    : "0.000";
+
   const generatePDF = async () => {
     if (invoiceRef.current) {
       const options = {
@@ -178,8 +183,10 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                     Invoice Number:
                   </td>
                   <td className="text-xs">{bill.invoice_number}</td>
-                  <td></td>
-                  <td></td>
+                  <td className="pr-4 text-sm font-semibold text-black">
+                    Effective Rate:
+                  </td>
+                  <td className="text-xs">${effectiveRate}/kWh</td>
                 </tr>
               </tbody>
             </table>
@@ -192,8 +199,8 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                 <th className="p-3 text-sm">Period Start</th>
                 <th className="p-3 text-sm">Period End</th>
                 <th className="p-3 text-sm">Description</th>
-                <th className="p-3 text-sm">Energy PTS</th>
-                
+                <th className="p-3 text-sm">Solar Energy (kWh)</th>
+                <th className="p-3 text-sm">Effective Rate</th>
                 <th className="p-3 text-sm">Total</th>
               </tr>
             </thead>
@@ -205,11 +212,11 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                 <td className="p-3 text-xs text-gray-600">
                   {bill.billing_period_end}
                 </td>
-                <td className="p-3 text-xs text-gray-600">Energy Produced</td>
-                <td className="p-3 text-xs text-gray-600">{bill.total_PTS}</td>
-               
+                <td className="p-3 text-xs text-gray-600">Solar Energy Consumption</td>
+                <td className="p-3 text-xs text-gray-600">{bill.total_PTS.toFixed(2)}</td>
+                <td className="p-3 text-xs text-gray-600">${effectiveRate}/kWh</td>
                 <td className="p-3 text-xs text-gray-600">
-                  ${bill.total_revenue.toFixed(2)}
+                  $ {bill.total_revenue.toFixed(2)}
                 </td>
               </tr>
             </tbody>
