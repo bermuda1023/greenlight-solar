@@ -390,8 +390,8 @@ const BillModal: React.FC<BillModalProps> = ({
             throw new Error(`Missing billing parameters for customer ${customer?.site_name || customerId}`);
           }
 
-          const requiredParams = ['fuelRate', 'basePrice', 'feedInPrice', 'belcodisc', 'ra_fee', 'export_rate', 'tier1', 'tier2', 'tier3'];
-          const missingParams = requiredParams.filter(param => typeof parameter[param] !== 'number');
+          const requiredParams = ['fuelRate', 'basePrice', 'feedInPrice', 'belcodisc', 'ra_fee', 'export_rate', 'tier1', 'tier2', 'tier3'] as const;
+          const missingParams = requiredParams.filter(param => typeof parameter[param as keyof Parameters] !== 'number');
 
           if (missingParams.length > 0) {
             throw new Error(`Missing required parameters for ${customer?.site_name || customerId}: ${missingParams.join(', ')}`);

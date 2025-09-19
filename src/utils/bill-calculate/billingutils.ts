@@ -47,22 +47,22 @@ export const calculateBilling = (inputs: {
     throw new Error("Invalid date range: End date must be after start date.");
   }
 
-  const scalledenergyConsumed = energyConsumed * scaling;
-  const scalledSelfConsumed = selfConsumption * scaling;
+  const scaledEnergyConsumed = energyConsumed * scaling;
+  const scaledSelfConsumed = selfConsumption * scaling;
 
-  const dayRateKwH = Math.round(scalledenergyConsumed / numberOfDays);
-  const totalpts = scalledenergyConsumed + energyExported;
+  const dayRateKwH = scaledEnergyConsumed / numberOfDays;
+  const totalpts = scaledEnergyConsumed + energyExported;
 
   // **Belco Calculation**
   let belcoTotal = 0;
-  if (scalledenergyConsumed) {
-    belcoTotal += Math.min(scalledenergyConsumed,250) * tier1;
+  if (scaledEnergyConsumed > 0) {
+    belcoTotal += Math.min(scaledEnergyConsumed, 250) * tier1;
     belcoTotal +=
-      Math.max(Math.min(scalledenergyConsumed - 250, 450), 0) * tier2;
-    belcoTotal += Math.max(scalledenergyConsumed - 700, 0) * tier3;
+      Math.max(Math.min(scaledEnergyConsumed - 250, 450), 0) * tier2;
+    belcoTotal += Math.max(scaledEnergyConsumed - 700, 0) * tier3;
   }
 
-  // **Facility Charges**
+  // **Facility Charges** - Based on daily average
   if (dayRateKwH > 0 && dayRateKwH <= 10) belcoTotal += 21.33;
   else if (dayRateKwH > 10 && dayRateKwH <= 15) belcoTotal += 32.0;
   else if (dayRateKwH > 15 && dayRateKwH <= 25) belcoTotal += 42.61;
@@ -70,40 +70,42 @@ export const calculateBilling = (inputs: {
   else if (dayRateKwH > 50) belcoTotal += 101.33;
 
   // **Additional Fees**
-  belcoTotal += ra_fee * scalledenergyConsumed;
-  belcoTotal += scalledenergyConsumed * fuelRate;
+  belcoTotal += ra_fee * scaledEnergyConsumed;
+  belcoTotal += scaledEnergyConsumed * fuelRate;
+
+  // **Export Credit** - Subtract export credits from Belco bill
   belcoTotal -= export_rate * energyExported;
 
-  const belcoPerKwhh = belcoTotal / scalledenergyConsumed;
+  const belcoPerKwh = scaledEnergyConsumed > 0 ? belcoTotal / scaledEnergyConsumed : 0;
 
-  // **Updated Revenue Calculation (using scalledSelfConsumed in the condition only)**
+  // **Revenue Calculation**
   let consumptionRevenue;
-  if (belcoPerKwhh * belcodisc < basePrice) {
-    // Case 1: (Belco Total * belcodisc) is less than Base Price
-    consumptionRevenue =
-      basePrice * scalledSelfConsumed + energyExported * export_rate; // Used scaled self-consumption
+  const effectiveBelcoRate = belcoPerKwh * belcodisc;
+
+  if (effectiveBelcoRate < basePrice) {
+    // Case 1: Effective Belco rate is less than Base Price
+    consumptionRevenue = basePrice * scaledSelfConsumed;
   } else {
-    // Case 2: (Belco Total * belcodisc) is greater than Base Price
-    consumptionRevenue = belcoPerKwhh * belcodisc * scalledSelfConsumed; // Used scaled self-consumption
+    // Case 2: Effective Belco rate is greater than or equal to Base Price
+    consumptionRevenue = effectiveBelcoRate * scaledSelfConsumed;
   }
 
   const exportRevenue = feedInPrice * energyExported;
   const totalRevenue = consumptionRevenue + exportRevenue;
 
-  // **Energy Rate Calculation remains unchanged**
-  const belcoPerKwh = scalledenergyConsumed * belcoPerKwhh;
+  // **Calculate what customer would pay Belco (without export credit)**
+  const belcoRevenue = scaledEnergyConsumed * belcoPerKwh;
 
-  // **Savings Calculation remains unchanged**
-  const belcoRevenue = scalledenergyConsumed * belcoPerKwhh;
-  const greenlightRevenue =
-    (scalledSelfConsumed * totalRevenue) / totalProduction;
-  const savings =
-    belcoRevenue - greenlightRevenue + fixedFeeSaving - belcoTotal;
+  // **GreenLight Revenue (what GreenLight gets from customer)**
+  const greenlightRevenue = (scaledSelfConsumed * totalRevenue) / totalProduction;
+
+  // **Savings Calculation**
+  const savings = belcoRevenue - greenlightRevenue + fixedFeeSaving;
 
   return {
     totalpts,
     numberOfDays,
-    belcoPerKwh,
+    belcoPerKwh: parseFloat(belcoPerKwh.toFixed(4)),
     belcoTotal: parseFloat(belcoTotal.toFixed(2)),
     finalRevenue: parseFloat(totalRevenue.toFixed(2)),
     belcoRevenue: parseFloat(belcoRevenue.toFixed(2)),
