@@ -365,20 +365,16 @@ const BillModal: React.FC<BillModalProps> = ({
             ? customerEnergySums.Production
             : 0;
 
-        // Solar consumption = self consumption + export (from solar, not total house usage)
-        const solarConsumptionValue = selfConsumptionValue + exportValue;
-
-        // Use solar consumption for billing (this is the energy that goes through the solar system)
-        const consumptionValue = solarConsumptionValue > 0 ? solarConsumptionValue :
-          (typeof customerEnergySums?.Consumption === "number" ? customerEnergySums.Consumption : 500);
+        // Use total consumption from the API (not just solar consumption)
+        const consumptionValue = typeof customerEnergySums?.Consumption === "number" ?
+          customerEnergySums.Consumption : 500;
 
         const customerBalanceEntry = customerBalance.find(
           (balance) => balance.customer_id === customerId,
         );
 
         console.log(`Customer Energy Data - ID: ${customerId}`);
-        console.log("Solar Consumption (Self + Export):", solarConsumptionValue);
-        console.log("Billing Consumption:", consumptionValue);
+        console.log("Total Consumption:", consumptionValue);
         console.log("FeedIn (Export):", exportValue);
         console.log("Self Consumption:", selfConsumptionValue);
         console.log("Total Production:", productionValue);
@@ -517,20 +513,17 @@ const BillModal: React.FC<BillModalProps> = ({
             ? customerEnergySums.Production
             : 0;
 
-        // Solar consumption = self consumption + export (from solar, not total house usage)
-        const solarConsumptionValue = selfConsumptionValue + exportValue;
-
-        // Use solar consumption for billing (this is the energy that goes through the solar system)
-        const consumptionValue = solarConsumptionValue > 0 ? solarConsumptionValue :
-          (typeof customerEnergySums?.Consumption === "number" ? customerEnergySums.Consumption : 500);
+        // Use total consumption from the API (not just solar consumption)
+        // This matches the C# implementation which uses item.consumption
+        const consumptionValue = typeof customerEnergySums?.Consumption === "number" ?
+          customerEnergySums.Consumption : 500;
 
         const customerBalanceEntry = customerBalance.find(
           (balance) => balance.customer_id === customerId,
         );
 
         console.log(`Customer Energy Data - ID: ${customerId}`);
-        console.log("Solar Consumption (Self + Export):", solarConsumptionValue);
-        console.log("Billing Consumption:", consumptionValue);
+        console.log("Total Consumption:", consumptionValue);
         console.log("FeedIn (Export):", exportValue);
         console.log("Self Consumption:", selfConsumptionValue);
         console.log("Total Production:", productionValue);
@@ -848,12 +841,10 @@ const BillModal: React.FC<BillModalProps> = ({
             ? customerEnergySums.Production
             : 0;
 
-        // Solar consumption = self consumption + export (from solar, not total house usage)
-        const solarConsumptionValue = selfConsumptionValue + exportValue;
-
-        // Use solar consumption for billing (this is the energy that goes through the solar system)
-        const consumptionValue = solarConsumptionValue > 0 ? solarConsumptionValue :
-          (typeof customerEnergySums?.Consumption === "number" ? customerEnergySums.Consumption : 500);
+        // Use total consumption from the API (not just solar consumption)
+        // This matches the C# implementation which uses item.consumption
+        const consumptionValue = typeof customerEnergySums?.Consumption === "number" ?
+          customerEnergySums.Consumption : 500;
 
         const billResult = calculateBilling({
           energyConsumed: consumptionValue,
@@ -1291,12 +1282,10 @@ const BillModal: React.FC<BillModalProps> = ({
             ? customerEnergySums.Production
             : 0;
 
-        // Solar consumption = self consumption + export (from solar, not total house usage)
-        const solarConsumptionValue = selfConsumptionValue + exportValue;
-
-        // Use solar consumption for billing (this is the energy that goes through the solar system)
-        const consumptionValue = solarConsumptionValue > 0 ? solarConsumptionValue :
-          (typeof customerEnergySums?.Consumption === "number" ? customerEnergySums.Consumption : 500);
+        // Use total consumption from the API (not just solar consumption)
+        // This matches the C# implementation which uses item.consumption
+        const consumptionValue = typeof customerEnergySums?.Consumption === "number" ?
+          customerEnergySums.Consumption : 500;
 
         // Calculate the bill for this customer
         const billResult = calculateBilling({
@@ -1511,19 +1500,15 @@ const BillModal: React.FC<BillModalProps> = ({
                     ? customerEnergySums.SelfConsumption
                     : 0;
 
-                // Solar consumption = self consumption + export (from solar, not total house usage)
-                const solarConsumptionValue = selfConsumptionValue + exportValue;
-
-                // Use solar consumption for billing (this is the energy that goes through the solar system)
-                const consumptionValue = solarConsumptionValue > 0 ? solarConsumptionValue :
-                  (customerEnergySums?.Consumption || 500);
+                // Use total consumption from the API (not just solar consumption)
+                // This matches the C# implementation which uses item.consumption
+                const consumptionValue = customerEnergySums?.Consumption || 500;
 
                 console.log(`Customer Energy Data - ID: ${customerId}`);
-                console.log("Solar Consumption (Self + Export):", solarConsumptionValue);
-                console.log("Billing Consumption:", consumptionValue);
+                console.log("Total Consumption:", consumptionValue);
                 console.log("FeedIn (Export):", exportValue);
-                console.log("Self Consumption 🤦‍♀️🤦‍♀️🤦‍♀️:", selfConsumptionValue);
-                console.log("Total Production 🍤🍤🍤🍤:", productionValue);
+                console.log("Self Consumption:", selfConsumptionValue);
+                console.log("Total Production:", productionValue);
 
                 const billResult = calculateBilling({
                   energyConsumed: consumptionValue,
