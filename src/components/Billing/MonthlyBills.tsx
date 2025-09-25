@@ -46,6 +46,15 @@ interface Transaction {
   created_at: string;
   bill_id: string;
 }
+
+interface Parameters {
+  id: string;
+  fuelRate: number;
+  feedInPrice: number;
+  basePrice: number;
+  message: string;
+}
+
 const BillingScreen = () => {
   const [bills, setBills] = useState<Bill[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -224,9 +233,35 @@ const BillingScreen = () => {
   };
 
   const handleOpenBillModal = (bill: Bill) => {
-    setSelectedBill(bill);
+    setSelectedBill({
+    ...bill,
+    energy_rate: parameters?.[0]?.basePrice ?? bill.energy_rate, // fallback to original if undefined
+  });
+    // setSelectedBill(bill);
     setOpenBillModal(true);
   };
+
+
+  const fetchParameters = useCallback(async () => {
+      try {
+        const { data, error: fetchError } = await supabase
+          .from("parameters")
+          .select("*");
+        if (fetchError) throw fetchError;
+        console.log("Fetched parameters:", data);
+        setParameters(data || []);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Error fetching parameters",
+        );
+      }
+    }, []);
+
+    const [parameters, setParameters] = useState<Parameters[]>([]);
+
+    useEffect(() => {
+        fetchParameters();
+      }, [fetchParameters]);
 
   return (
     <>
