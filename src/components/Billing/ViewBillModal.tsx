@@ -52,6 +52,16 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
   const [customerBalance, setCustomerBalance] =
     useState<CustomerBalanceProp | null>(null);
 
+    useEffect(() => {
+    console.log("Bill Data From Model",bill);
+    console.log("Production fields in bill:", {
+      production_kwh: bill.production_kwh,
+      self_consumption_kwh: bill.self_consumption_kwh,
+      export_kwh: bill.export_kwh,
+      production_kwh_type: typeof bill.production_kwh
+    });
+  }, [bill]);
+
   const [error, setError] = useState<string | null>(null);
 
   const fetchParameters = useCallback(async () => {
@@ -101,6 +111,11 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
   const effectiveRate = bill.total_revenue > 0 && bill.total_PTS > 0
     ? (bill.total_revenue / bill.total_PTS).toFixed(3)
     : "0.000";
+
+  // Calculate production value from bill data
+  const productionValue = typeof bill.production_kwh === "number" 
+    ? bill.production_kwh 
+    : 0;
 
   const generatePDF = async () => {
     if (invoiceRef.current) {
@@ -184,9 +199,9 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                   </td>
                   <td className="text-xs">{bill.invoice_number}</td>
                   <td className="pr-4 text-sm font-semibold text-black">
-                    Effective Rate:
+                    Total / Effective Rate:
                   </td>
-                  <td className="text-xs">${effectiveRate}/kWh</td>
+                  <td className="text-xs">{bill.energy_rate}c</td>
                 </tr>
               </tbody>
             </table>
@@ -200,7 +215,8 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                 <th className="p-3 text-sm">Period End</th>
                 <th className="p-3 text-sm">Description</th>
                 <th className="p-3 text-sm">Solar Energy (kWh)</th>
-                <th className="p-3 text-sm">Effective Rate</th>
+                <th className="p-3 text-sm">Production (kWh)</th>
+                <th className="p-3 text-sm">Total / Effective Rate</th>
                 <th className="p-3 text-sm">Total</th>
               </tr>
             </thead>
@@ -214,7 +230,10 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                 </td>
                 <td className="p-3 text-xs text-gray-600">Solar Energy Consumption</td>
                 <td className="p-3 text-xs text-gray-600">{bill.total_PTS.toFixed(2)}</td>
-                <td className="p-3 text-xs text-gray-600">${effectiveRate}/kWh</td>
+                <td className="p-3 text-xs text-gray-600">
+                  {productionValue > 0 ? productionValue.toFixed(2) : 'N/A'}
+                </td>
+                <td className="p-3 text-xs text-gray-600">{bill.energy_rate}c</td>
                 <td className="p-3 text-xs text-gray-600">
                   $ {bill.total_revenue.toFixed(2)}
                 </td>
