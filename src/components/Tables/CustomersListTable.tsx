@@ -351,6 +351,7 @@ const CustomersListTable = () => {
         address: formData.address,
         site_name: formData.site_name,
         solar_api_key: formData.solar_api_key,
+        authorization_code: formData.authorization_code,
         installation_date: formData.installation_date,
         installed_capacity: formData.installed_capacity
           ? Number(formData.installed_capacity)
@@ -601,7 +602,7 @@ const CustomersListTable = () => {
             </div>
 
             {/* Customer Type Filter Buttons */}
-            <div className="mb-6 flex flex-wrap gap-3">
+            {/* <div className="mb-6 flex flex-wrap gap-3">
               <button
                 onClick={() => setCustomerType("all")}
                 className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
@@ -632,7 +633,7 @@ const CustomersListTable = () => {
               >
                 Enphase Customers ({customers.filter(c => getCustomerType(c) === "enphase").length})
               </button>
-            </div>
+            </div> */}
 
             {/* Loading and Error States */}
             {loading && (
@@ -973,7 +974,17 @@ const CustomersListTable = () => {
                 </div>
               </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className={`mt-4 grid grid-cols-1 gap-4 ${
+                // check if Site ID should be visible
+                (() => {
+                  const currentCustomer = customers.find(c => c.id === customerIdToEdit);
+                  const isEnphaseCustomer = currentCustomer
+                    ? getCustomerType(currentCustomer) === "enphase"
+                    : false;
+                  return isEnphaseCustomer ? "grid-cols-1" : "md:grid-cols-2 grid-cols-1";
+                })()
+              }`}
+              >
                 <div>
                   <label className="mb-2 block text-sm font-medium text-gray-700">
                     Installed Capacity
@@ -986,20 +997,30 @@ const CustomersListTable = () => {
                     className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
                   />
                 </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
-                    Site ID
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.site_ID}
-                    onChange={handleChange}
-                    name="site_ID"
-                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
-                  />
-                </div>
+                {(() => {
+                const currentCustomer = customers.find(c => c.id === customerIdToEdit);
+                const isEnphaseCustomer = currentCustomer ? getCustomerType(currentCustomer) === "enphase" : false;
+                
+                return (
+                  <>
+                    {!isEnphaseCustomer && (
+                      <div className="mt-4">
+                        <label className="mb-2 block text-sm font-medium text-gray-700">
+                          Site ID
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.site_ID}
+                          onChange={handleChange}
+                          name="site_ID"
+                          className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                        />
+                      </div>
+                    )}
+                  </>
+                );
+                })()}
               </div>
-
               <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-sm font-medium text-gray-700">
