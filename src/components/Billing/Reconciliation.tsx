@@ -118,13 +118,11 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
   onReconcile,
   monthlyBills,
 }) => {
-  const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
-  const [selectedMonthlyBill, setSelectedMonthlyBill] =
-    useState<MonthlyBill | null>(null);
-  const [existingPayments, setExistingPayments] = useState<number>(0);
+  const [selectedBills, setSelectedBills] = useState<Map<string, { bill: MonthlyBill; allocatedAmount: number; existingPayments: number }>>(new Map());
+  const [remainingAmount, setRemainingAmount] = useState<number>(bill.amount);
 
   useEffect(() => {
-    // Fetch existing payments for the selected bill
+    // Fetch existing payments for all selected bills
     const fetchExistingPayments = async (billId: string) => {
       const { data, error } = await supabase
         .from("reconciliation")
@@ -137,18 +135,107 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
           (sum, record) => sum + (record.paid_amount || 0),
           0,
         );
-        setExistingPayments(totalPaid);
+        return totalPaid;
       }
+      return 0;
     };
 
-    if (selectedBillId) {
-      fetchExistingPayments(selectedBillId);
-    }
-  }, [selectedBillId]);
+    // Update existing payments for all selected bills
+    const updateExistingPayments = async () => {
+      const updatedSelectedBills = new Map(selectedBills);
+      const billEntries = Array.from(selectedBills.entries());
+      for (const [billId, billData] of billEntries) {
+        const existingPayments = await fetchExistingPayments(billId);
+        updatedSelectedBills.set(billId, {
+          ...billData,
+          existingPayments
+        });
+      }
+      setSelectedBills(updatedSelectedBills);
+    };
 
-  const handleBillSelection = (monthlyBill: MonthlyBill) => {
-    setSelectedBillId(monthlyBill.id);
-    setSelectedMonthlyBill(monthlyBill);
+    if (selectedBills.size > 0) {
+      updateExistingPayments();
+    }
+  }, [selectedBills.size]); // Only run when bills are added/removed
+
+  const handleBillSelection = (monthlyBill: MonthlyBill, isSelected: boolean) => {
+    const updatedSelectedBills = new Map(selectedBills);
+    
+    if (isSelected) {
+      // Check if remaining amount is 0 and prevent new selections
+      if (remainingAmount <= 0) {
+        toast.error("You have already allocated the full transaction amount. Please remove allocation from existing bills first.");
+        return;
+      }
+
+      // Add bill to selection with initial allocated amount of 0
+      updatedSelectedBills.set(monthlyBill.id, {
+        bill: monthlyBill,
+        allocatedAmount: 0,
+        existingPayments: 0
+      });
+    } else {
+      // Remove bill from selection and update remaining amount
+      const billData = selectedBills.get(monthlyBill.id);
+      if (billData) {
+        setRemainingAmount(prev => prev + billData.allocatedAmount);
+      }
+      updatedSelectedBills.delete(monthlyBill.id);
+    }
+    
+    setSelectedBills(updatedSelectedBills);
+  };
+
+  const handleAllocationChange = (billId: string, newAmount: number) => {
+    const updatedSelectedBills = new Map(selectedBills);
+    const billData = selectedBills.get(billId);
+    
+    if (billData) {
+      const oldAmount = billData.allocatedAmount;
+      const difference = newAmount - oldAmount;
+      
+      // Check if we have enough remaining amount
+      if (difference <= remainingAmount) {
+        updatedSelectedBills.set(billId, {
+          ...billData,
+          allocatedAmount: newAmount
+        });
+        setSelectedBills(updatedSelectedBills);
+        setRemainingAmount(prev => prev - difference);
+      }
+    }
+  };
+
+  const autoDistributePayment = () => {
+    if (selectedBills.size === 0) return;
+    
+    let remainingToDistribute = bill.amount;
+    const updatedSelectedBills = new Map(selectedBills);
+    
+    // Sort bills by pending amount (smallest first for fair distribution)
+    const sortedBills = Array.from(selectedBills.entries()).sort(([, a], [, b]) => {
+      const pendingA = calculatePendingAmount(a.bill, a.existingPayments);
+      const pendingB = calculatePendingAmount(b.bill, b.existingPayments);
+      return pendingA - pendingB;
+    });
+    
+    for (const [billId, billData] of sortedBills) {
+      if (remainingToDistribute <= 0) break;
+      
+      const pendingAmount = calculatePendingAmount(billData.bill, billData.existingPayments);
+      const allocateAmount = Math.min(pendingAmount, remainingToDistribute);
+      
+      updatedSelectedBills.set(billId, {
+        ...billData,
+        allocatedAmount: allocateAmount
+      });
+      
+      remainingToDistribute -= allocateAmount;
+    }
+    
+    setSelectedBills(updatedSelectedBills);
+    setRemainingAmount(remainingToDistribute);
   };
 
   const calculatePendingAmount = (
@@ -161,26 +248,40 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
 
   const handleReconcile = async () => {
     try {
-      if (selectedBillId && selectedMonthlyBill) {
-        const currentPendingAmount = calculatePendingAmount(
-          selectedMonthlyBill,
-          existingPayments
-        );
-        const newPendingAmount = Math.max(0, currentPendingAmount - bill.amount);
-  
-        await onReconcile(bill.id, bill.amount, selectedBillId, newPendingAmount);
-  
-        
-        localStorage.setItem("selectedBillId", selectedBillId);
-  
-        // Keep the modal open and update the selected bill data
-        setSelectedBillId(selectedBillId);
-        // fetchMonthlyBills(selectedBillId);
-  
-        toast.success("Transaction Matched successfully.");
-      } else {
-        toast.warn("Please select a valid bill and monthly bill for reconciliation.");
+      if (selectedBills.size === 0) {
+        toast.warn("Please select at least one bill for reconciliation.");
+        return;
       }
+
+      const totalAllocated = Array.from(selectedBills.values()).reduce(
+        (sum, billData) => sum + billData.allocatedAmount, 0
+      );
+
+      if (totalAllocated !== bill.amount) {
+        toast.warn(`Total allocated amount ($${totalAllocated.toFixed(2)}) must equal transaction amount ($${bill.amount.toFixed(2)})`);
+        return;
+      }
+
+      // Process each selected bill
+      const billEntries = Array.from(selectedBills.entries());
+      for (const [billId, billData] of billEntries) {
+        if (billData.allocatedAmount > 0) {
+          const currentPendingAmount = calculatePendingAmount(
+            billData.bill,
+            billData.existingPayments
+          );
+          const newPendingAmount = Math.max(0, currentPendingAmount - billData.allocatedAmount);
+          
+          await onReconcile(bill.id, billData.allocatedAmount, billId, newPendingAmount);
+        }
+      }
+
+      // Store the last selected bill ID for reference
+      const lastBillId = Array.from(selectedBills.keys())[0];
+      localStorage.setItem("selectedBillId", lastBillId);
+
+      toast.success(`Transaction distributed across ${selectedBills.size} bill(s) successfully.`);
+      onClose(); // Close modal after successful reconciliation
     } catch (error) {
       console.error("Error during reconciliation:", error);
       toast.error("Failed to complete Transaction. Please try again.");
@@ -204,52 +305,66 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
         <h2 className="mb-4 text-lg font-semibold">Reconcile Transaction</h2>
 
         <div className="mb-4">
-          <p>
-            <strong>Transaction Amount:</strong> ${bill.amount.toFixed(2)}
-          </p>
-          {selectedMonthlyBill && (
-            <>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
               <p>
-                <strong>Bill Total:</strong> $
-                {selectedMonthlyBill.total_revenue.toFixed(2)}
+                <strong>Transaction Amount:</strong> ${bill.amount.toFixed(2)}
               </p>
               <p>
-                <strong>Previous Arrears:</strong> $
-                {selectedMonthlyBill.arrears?.toFixed(2) || "0.00"}
+                <strong>Remaining to Allocate:</strong> 
+                <span className={remainingAmount > 0 ? "text-red-600" : "text-green-600"}>
+                  ${remainingAmount.toFixed(2)}
+                </span>
               </p>
-              <p>
-                <strong>Total Amount Due:</strong> $
-                {(
-                  selectedMonthlyBill.total_revenue +
-                  selectedMonthlyBill.arrears
-                ).toFixed(2)}
-              </p>
-              <p>
-                <strong>Already Paid:</strong> ${existingPayments.toFixed(2)}
-              </p>
-              <p>
-                <strong>Current Pending:</strong> $
-                {calculatePendingAmount(
-                  selectedMonthlyBill,
-                  existingPayments,
-                ).toFixed(2)}
-              </p>
-              <p>
-                <strong>New Pending After This Payment:</strong> $
-                {Math.max(
-                  0,
-                  calculatePendingAmount(
-                    selectedMonthlyBill,
-                    existingPayments + bill.amount,
-                  ),
-                ).toFixed(2)}
-              </p>
-            </>
-          )}
+            </div>
+            <div className="text-right">
+              <button
+                onClick={autoDistributePayment}
+                disabled={selectedBills.size === 0}
+                className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:bg-gray-400"
+              >
+                Auto Distribute
+              </button>
+            </div>
+          </div>
         </div>
 
+        {/* Selected Bills Allocation Section */}
+        {selectedBills.size > 0 && (
+          <div className="mb-4">
+            <h3 className="mb-2 font-semibold">Payment Allocation</h3>
+            <div className="max-h-40 overflow-y-auto rounded border">
+              {Array.from(selectedBills.entries()).map(([billId, billData]) => {
+                const pendingAmount = calculatePendingAmount(billData.bill, billData.existingPayments);
+                return (
+                  <div key={billId} className="flex items-center justify-between border-b p-3 last:border-b-0">
+                    <div className="flex-1">
+                      <p className="font-medium">{billData.bill.site_name}</p>
+                      <p className="text-sm text-gray-600">
+                        Pending: ${pendingAmount.toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max={Math.min(pendingAmount, remainingAmount + billData.allocatedAmount)}
+                        step="0.01"
+                        value={billData.allocatedAmount}
+                        onChange={(e) => handleAllocationChange(billId, parseFloat(e.target.value) || 0)}
+                        className="w-24 rounded border px-2 py-1 text-right"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="mb-4">
-          <h3 className="mb-2 font-semibold">Available Bills</h3>
+          <h3 className="mb-2 font-semibold">Available Bills For me </h3>
           <div className="max-h-60 overflow-y-auto">
             <table className="w-full">
               <thead className="sticky top-0 bg-gray-50">
@@ -265,32 +380,27 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
                 {monthlyBills
                   .filter((monthlyBill) => monthlyBill.status !== "Matched") // Exclude only fully matched bills
                   .map((monthlyBill) => {
-                    const totalDue =
-                      monthlyBill.total_revenue + monthlyBill.arrears;
-                    const pendingAmount = calculatePendingAmount(
-                      monthlyBill,
-                      existingPayments,
-                    );
+                    const totalDue = monthlyBill.total_revenue + monthlyBill.arrears;
+                    const billData = selectedBills.get(monthlyBill.id);
+                    const existingPayments = billData?.existingPayments || 0;
+                    const pendingAmount = calculatePendingAmount(monthlyBill, existingPayments);
+                    const isSelected = selectedBills.has(monthlyBill.id);
 
                     return (
-                      <tr key={monthlyBill.id} className="hover:bg-gray-50">
+                      <tr key={monthlyBill.id} className={`hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''}`}>
                         <td className="px-4 py-2">
                           <input
-                            type="radio"
-                            name="selectedBill"
-                            onChange={() => handleBillSelection(monthlyBill)}
-                            checked={selectedBillId === monthlyBill.id}
+                            type="checkbox"
+                            onChange={(e) => handleBillSelection(monthlyBill, e.target.checked)}
+                            checked={isSelected}
+                            disabled={!isSelected && remainingAmount <= 0}
+                            className={!isSelected && remainingAmount <= 0 ? "cursor-not-allowed opacity-50" : "cursor-pointer"}
                           />
                         </td>
                         <td className="px-4 py-2">{monthlyBill.site_name}</td>
                         <td className="px-4 py-2">
-                          {new Date(
-                            monthlyBill.billing_period_start,
-                          ).toLocaleDateString()}{" "}
-                          -
-                          {new Date(
-                            monthlyBill.billing_period_end,
-                          ).toLocaleDateString()}
+                          {new Date(monthlyBill.billing_period_start).toLocaleDateString()}{" "}
+                          - {new Date(monthlyBill.billing_period_end).toLocaleDateString()}
                         </td>
                         <td className="px-4 py-2">${totalDue.toFixed(2)}</td>
                         <td className="px-4 py-2">
@@ -313,10 +423,14 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
           </button>
           <button
             onClick={handleReconcile}
-            className="rounded bg-primary px-4 py-2 text-white hover:bg-green-400"
-            disabled={!selectedBillId}
+            className={`rounded px-4 py-2 text-white ${
+              selectedBills.size > 0 && remainingAmount === 0
+                ? "bg-primary hover:bg-green-400"
+                : "bg-gray-400 cursor-not-allowed"
+            }`}
+            disabled={selectedBills.size === 0 || remainingAmount !== 0}
           >
-            Match
+            Match ({selectedBills.size} bill{selectedBills.size !== 1 ? 's' : ''})
           </button>
         </div>
       </div>
