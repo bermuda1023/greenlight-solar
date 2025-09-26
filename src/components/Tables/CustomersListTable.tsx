@@ -71,6 +71,11 @@ const CustomersListTable = () => {
   
   // New state for customer type filtering
   const [customerType, setCustomerType] = useState<"all" | "solar" | "enphase">("all");
+  
+  // Enphase auth state
+  const [isAuthWindowOpen, setIsAuthWindowOpen] = useState(false);
+  const [authWindow, setAuthWindow] = useState<Window | null>(null);
+  const [newAuthCode, setNewAuthCode] = useState("");
 
   const [formData, setFormData] = useState({
     email: "",
@@ -84,6 +89,11 @@ const CustomersListTable = () => {
     price: "",
     site_ID: "",
   });
+
+  // Enphase constants
+  const ENPHASE_AUTH_URL = "https://api.enphaseenergy.com/oauth/authorize";
+  const CLIENT_ID = "ba5228e4f843a94607e6cc245043bc54";
+  const REDIRECT_URI = "https://api.enphaseenergy.com/oauth/redirect_uri";
 
   // State for managing the customer ID for deletion
   const [customerIdToDelete, setCustomerIdToDelete] = useState<string | null>(
@@ -102,6 +112,44 @@ const CustomersListTable = () => {
     if (customerType === "all") return true;
     return getCustomerType(customer) === customerType;
   });
+
+  // Function to open Enphase auth window
+  const openEnphaseAuth = () => {
+    const authUrl = `${ENPHASE_AUTH_URL}?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}`;
+    const width = 600;
+    const height = 700;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+
+    const authWindowRef = window.open(
+      authUrl,
+      "EnphaseAuth",
+      `width=${width},height=${height},left=${left},top=${top}`,
+    );
+
+    setAuthWindow(authWindowRef);
+    setIsAuthWindowOpen(true);
+
+    // Check if window was closed
+    const checkWindow = setInterval(() => {
+      if (authWindowRef?.closed) {
+        clearInterval(checkWindow);
+        setIsAuthWindowOpen(false);
+        setAuthWindow(null);
+      }
+    }, 500);
+  };
+
+  // Handle new auth code input
+  const handleNewAuthCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newCode = e.target.value;
+    setNewAuthCode(newCode);
+    // Update both fields when new code is entered
+    setFormData(prev => ({
+      ...prev,
+      authorization_code: newCode
+    }));
+  };
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
   ) => {
@@ -386,7 +434,11 @@ const CustomersListTable = () => {
     setDeleteModalOpen(false);
   };
   const handleCloseEdit = () => {
-    // Close the modal without doing anything
+    // Reset auth states when closing modal
+    setNewAuthCode("");
+    setIsAuthWindowOpen(false);
+    setAuthWindow(null);
+    // Close the modal
     setEditModalOpen(false);
   };
 
@@ -415,6 +467,11 @@ const CustomersListTable = () => {
         site_ID: customer.site_ID ? customer.site_ID.toString() : "",
       });
 
+      // Reset new auth code state
+      setNewAuthCode("");
+      setIsAuthWindowOpen(false);
+      setAuthWindow(null);
+
       setCustomerIdToEdit(customerId);
       setEditModalOpen(true);
     }
@@ -441,45 +498,6 @@ const CustomersListTable = () => {
     }
   };
 
-  // Add these states at the top of your component
-  // const [showAuthModal, setShowAuthModal] = useState(false);
-  // const [authModalCustomer, setAuthModalCustomer] = useState<Customer | null>(
-  //   null,
-  // );
-  // const [authCode, setAuthCode] = useState("");
-  // const [isAuthWindowOpen, setIsAuthWindowOpen] = useState(false);
-  // const [authWindow, setAuthWindow] = useState<Window | null>(null);
-
-  // Function to open Enphase Auth window (copy from AddCustomer)
-  const ENPHASE_AUTH_URL = "https://api.enphaseenergy.com/oauth/authorize";
-  const CLIENT_ID = "ba5228e4f843a94607e6cc245043bc54";
-  const REDIRECT_URI = "https://api.enphaseenergy.com/oauth/redirect_uri";
-
-  const openEnphaseAuth = () => {
-    const authUrl = `${ENPHASE_AUTH_URL}?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}`;
-    const width = 600;
-    const height = 700;
-    const left = window.screenX + (window.outerWidth - width) / 2;
-    const top = window.screenY + (window.outerHeight - height) / 2;
-
-    const authWindowRef = window.open(
-      authUrl,
-      "EnphaseAuth",
-      `width=${width},height=${height},left=${left},top=${top}`,
-    );
-
-    // setAuthWindow(authWindowRef); // This state is no longer needed
-    // setIsAuthWindowOpen(true); // This state is no longer needed
-
-    // Check if window was closed
-    const checkWindow = setInterval(() => {
-      if (authWindowRef?.closed) {
-        clearInterval(checkWindow);
-        // setIsAuthWindowOpen(false); // This state is no longer needed
-        // setAuthWindow(null); // This state is no longer needed
-      }
-    }, 500);
-  };
 
   // Handler for clicking Pending badge
   const handlePendingClick = async (customer: Customer) => {
@@ -743,22 +761,30 @@ const CustomersListTable = () => {
                         </td>
                         {customerType === "all" && (
                           <>
-                            <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                              {customer.solar_api_key || 'N/A'}
+                            <td className="px-6 py-4 text-sm dark:text-white max-w-[120px]">
+                              <div className="truncate" title={customer.solar_api_key ?? 'N/A'}>
+                                {customer.solar_api_key ? `${customer.solar_api_key.substring(0, 12)}...` : 'N/A'}
+                              </div>
                             </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                              {customer.authorization_code || 'N/A'}
+                            <td className="px-6 py-4 text-sm dark:text-white max-w-[120px]">
+                              <div className="truncate" title={customer.authorization_code ?? 'N/A'}>
+                                {customer.authorization_code ? `${customer.authorization_code.substring(0, 12)}...` : 'N/A'}
+                              </div>
                             </td>
                           </>
                         )}
                         {customerType === "solar" && (
-                          <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                            {customer.solar_api_key}
+                          <td className="px-6 py-4 text-sm dark:text-white max-w-[150px]">
+                            <div className="truncate" title={customer.solar_api_key ?? undefined}>
+                              {customer.solar_api_key ? `${customer.solar_api_key.substring(0, 15)}...` : ''}
+                            </div>
                           </td>
                         )}
                         {customerType === "enphase" && (
-                          <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                            {customer.authorization_code}
+                          <td className="px-6 py-4 text-sm dark:text-white max-w-[150px]">
+                            <div className="truncate" title={customer.authorization_code ?? undefined}>
+                              {customer.authorization_code ? `${customer.authorization_code.substring(0, 15)}...` : ''}
+                            </div>
                           </td>
                         )}
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
@@ -1072,23 +1098,69 @@ const CustomersListTable = () => {
                     
                     {isEnphaseCustomer && (
                       <div className="mt-4">
-                        <label className="mb-2 block text-sm font-medium text-gray-700">
-                          Authorization Code
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.authorization_code}
-                          onChange={handleChange}
-                          name="authorization_code"
-                          className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
-                        />
+                        {/* Authorization Code Section in Grid Layout */}
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                          {/* Previous Authorization Code */}
+                          <div>
+                            <label className="mb-2 block text-sm font-medium text-gray-700">
+                              Previous Authorization Code
+                            </label>
+                            <input
+                              type="text"
+                              value={currentCustomer?.authorization_code || ""}
+                              readOnly
+                              className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-600"
+                              placeholder="No previous code"
+                            />
+                          </div>
+
+                          {/* New Authorization Code */}
+                          <div>
+                            <label className="mb-2 block text-sm font-medium text-gray-700">
+                              New Authorization Code
+                            </label>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                name="new_authorization_code"
+                                value={newAuthCode}
+                                onChange={handleNewAuthCodeChange}
+                                placeholder="Enter New Code"
+                                className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-green-500 focus:ring-green-500"
+                                disabled={isSubmitting}
+                              />
+                              <button
+                                type="button"
+                                onClick={openEnphaseAuth}
+                                disabled={isAuthWindowOpen || isSubmitting}
+                                className="flex-shrink-0 rounded-md bg-primary px-3 py-2 text-md text-white transition hover:bg-opacity-90 disabled:bg-opacity-50"
+                              >
+                                {isAuthWindowOpen ? "Opening..." : "Get Code"}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Compact Instructions */}
+                        {/* <details className="mt-1">
+                          <summary className="cursor-pointer text-sm font-medium text-gray-600 hover:text-gray-800">
+                            📋 How to get authorization code
+                          </summary>
+                          <div className="mt-1 rounded-md bg-gray-50 p-2 text-xs text-gray-600">
+                            <ol className="list-decimal space-y-1 pl-4">
+                              <li>Click "Get Code" → Login with Enphase credentials</li>
+                              <li>Click "Allow Access" → Copy the authorization code</li>
+                              <li>Paste the code in the "New Authorization Code" field</li>
+                            </ol>
+                          </div>
+                        </details> */}
                       </div>
                     )}
                   </>
                 );
               })()}
 
-              <div className="mt-6 flex justify-between">
+              <div className="mt-3 flex justify-between">
                 <button
                   type="button"
                   onClick={handleCloseEdit}
