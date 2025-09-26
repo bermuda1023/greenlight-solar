@@ -68,12 +68,16 @@ const CustomersListTable = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [EditModalOpen, setEditModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // New state for customer type filtering
+  const [customerType, setCustomerType] = useState<"all" | "solar" | "enphase">("all");
 
   const [formData, setFormData] = useState({
     email: "",
     address: "",
     site_name: "",
     solar_api_key: "",
+    authorization_code: "",
     installation_date: "",
     installed_capacity: "",
     scaling_factor: "",
@@ -86,6 +90,18 @@ const CustomersListTable = () => {
     null,
   );
   const [customerIdToEdit, setCustomerIdToEdit] = useState<string | null>(null);
+
+  // Helper function to determine customer type
+  const getCustomerType = (customer: Customer): "solar" | "enphase" => {
+    // Enphase customers have authorization_code, Solar API customers have solar_api_key
+    return customer.authorization_code ? "enphase" : "solar";
+  };
+
+  // Filter customers based on selected type
+  const filteredCustomers = customers.filter(customer => {
+    if (customerType === "all") return true;
+    return getCustomerType(customer) === customerType;
+  });
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
   ) => {
@@ -335,6 +351,7 @@ const CustomersListTable = () => {
         address: formData.address,
         site_name: formData.site_name,
         solar_api_key: formData.solar_api_key,
+        authorization_code: formData.authorization_code,
         installation_date: formData.installation_date,
         installed_capacity: formData.installed_capacity
           ? Number(formData.installed_capacity)
@@ -386,6 +403,7 @@ const CustomersListTable = () => {
         address: customer.address || "",
         site_name: customer.site_name || "",
         solar_api_key: customer.solar_api_key || "",
+        authorization_code: customer.authorization_code || "",
         installation_date: customer.installation_date || "",
         installed_capacity: customer.installed_capacity
           ? customer.installed_capacity.toString()
@@ -583,6 +601,40 @@ const CustomersListTable = () => {
               </div>
             </div>
 
+            {/* Customer Type Filter Buttons */}
+            {/* <div className="mb-6 flex flex-wrap gap-3">
+              <button
+                onClick={() => setCustomerType("all")}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                  customerType === "all"
+                    ? "bg-primary text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                }`}
+              >
+                All Customers ({customers.length})
+              </button>
+              <button
+                onClick={() => setCustomerType("solar")}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                  customerType === "solar"
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                }`}
+              >
+                Solar API Customers ({customers.filter(c => getCustomerType(c) === "solar").length})
+              </button>
+              <button
+                onClick={() => setCustomerType("enphase")}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                  customerType === "enphase"
+                    ? "bg-green-600 text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                }`}
+              >
+                Enphase Customers ({customers.filter(c => getCustomerType(c) === "enphase").length})
+              </button>
+            </div> */}
+
             {/* Loading and Error States */}
             {loading && (
               <div className="py-4 text-center">
@@ -625,9 +677,26 @@ const CustomersListTable = () => {
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Site ID
                       </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Solar API Key
-                      </th>
+                      {customerType === "all" && (
+                        <>
+                          <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                            Solar API Key
+                          </th>
+                          <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                            Authorization Code
+                          </th>
+                        </>
+                      )}
+                      {customerType === "solar" && (
+                        <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                          Solar API Key
+                        </th>
+                      )}
+                      {customerType === "enphase" && (
+                        <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                          Authorization Code
+                        </th>
+                      )}
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Installation Date
                       </th>
@@ -647,7 +716,7 @@ const CustomersListTable = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {customers.map((customer) => (
+                    {filteredCustomers.map((customer) => (
                       <tr
                         key={customer.id}
                         className="border-b border-stroke dark:border-dark-3"
@@ -672,9 +741,26 @@ const CustomersListTable = () => {
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.site_ID }
                         </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.solar_api_key}
-                        </td>
+                        {customerType === "all" && (
+                          <>
+                            <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
+                              {customer.solar_api_key || 'N/A'}
+                            </td>
+                            <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
+                              {customer.authorization_code || 'N/A'}
+                            </td>
+                          </>
+                        )}
+                        {customerType === "solar" && (
+                          <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
+                            {customer.solar_api_key}
+                          </td>
+                        )}
+                        {customerType === "enphase" && (
+                          <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
+                            {customer.authorization_code}
+                          </td>
+                        )}
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.installation_date}
                         </td>
@@ -888,7 +974,17 @@ const CustomersListTable = () => {
                 </div>
               </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className={`mt-4 grid grid-cols-1 gap-4 ${
+                // check if Site ID should be visible
+                (() => {
+                  const currentCustomer = customers.find(c => c.id === customerIdToEdit);
+                  const isEnphaseCustomer = currentCustomer
+                    ? getCustomerType(currentCustomer) === "enphase"
+                    : false;
+                  return isEnphaseCustomer ? "grid-cols-1" : "md:grid-cols-2 grid-cols-1";
+                })()
+              }`}
+              >
                 <div>
                   <label className="mb-2 block text-sm font-medium text-gray-700">
                     Installed Capacity
@@ -901,20 +997,30 @@ const CustomersListTable = () => {
                     className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
                   />
                 </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
-                    Site ID
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.site_ID}
-                    onChange={handleChange}
-                    name="site_ID"
-                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
-                  />
-                </div>
+                {(() => {
+                const currentCustomer = customers.find(c => c.id === customerIdToEdit);
+                const isEnphaseCustomer = currentCustomer ? getCustomerType(currentCustomer) === "enphase" : false;
+                
+                return (
+                  <>
+                    {!isEnphaseCustomer && (
+                      <div className="mt-4">
+                        <label className="mb-2 block text-sm font-medium text-gray-700">
+                          Site ID
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.site_ID}
+                          onChange={handleChange}
+                          name="site_ID"
+                          className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                        />
+                      </div>
+                    )}
+                  </>
+                );
+                })()}
               </div>
-
               <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-sm font-medium text-gray-700">
@@ -942,18 +1048,45 @@ const CustomersListTable = () => {
                 </div>
               </div>
 
-              <div className="mt-4">
-                <label className="mb-2 block text-sm font-medium text-gray-700">
-                  Solar API Key
-                </label>
-                <input
-                  type="text"
-                  value={formData.solar_api_key}
-                  onChange={handleChange}
-                  name="solar_api_key"
-                  className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
-                />
-              </div>
+              {/* Conditional API Key / Authorization Code fields */}
+              {(() => {
+                const currentCustomer = customers.find(c => c.id === customerIdToEdit);
+                const isEnphaseCustomer = currentCustomer ? getCustomerType(currentCustomer) === "enphase" : false;
+                
+                return (
+                  <>
+                    {!isEnphaseCustomer && (
+                      <div className="mt-4">
+                        <label className="mb-2 block text-sm font-medium text-gray-700">
+                          Solar API Key
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.solar_api_key}
+                          onChange={handleChange}
+                          name="solar_api_key"
+                          className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                        />
+                      </div>
+                    )}
+                    
+                    {isEnphaseCustomer && (
+                      <div className="mt-4">
+                        <label className="mb-2 block text-sm font-medium text-gray-700">
+                          Authorization Code
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.authorization_code}
+                          onChange={handleChange}
+                          name="authorization_code"
+                          className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                        />
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               <div className="mt-6 flex justify-between">
                 <button
