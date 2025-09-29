@@ -19,6 +19,7 @@ interface Parameters {
   tier3: number;
   message: string;
   emailmsg: string;
+  interest_rate:string;
 }
 
 const BillParams = () => {
@@ -40,6 +41,7 @@ const BillParams = () => {
     tier3: "",
     message: "",
     emailmsg: "",
+    interest_rate: "",
   });
 
   const toggleBillForm = () => setShowBillForm(!showBillForm);
@@ -81,6 +83,8 @@ const BillParams = () => {
           ra_fee: fetchedParameters.ra_fee || prevFormData?.ra_fee || "",
           export_rate:
             fetchedParameters.export_rate || prevFormData?.export_rate || "",
+          interest_rate:
+            fetchedParameters.interest_rate || prevFormData?.interest_rate || "",  
           tier1: fetchedParameters.tier1 || prevFormData?.tier1 || "",
           tier2: fetchedParameters.tier2 || prevFormData?.tier2 || "",
           tier3: fetchedParameters.tier3 || prevFormData?.tier3 || "",
@@ -126,6 +130,7 @@ const BillParams = () => {
       !formData.belcodisc ||
       !formData.ra_fee ||
       !formData.export_rate ||
+      !formData.interest_rate ||
       !formData.tier1 ||
       !formData.tier2 ||
       !formData.tier3 ||
@@ -161,6 +166,7 @@ const BillParams = () => {
             tier3: formData.tier3,
             message: formData.message,
             emailmsg: formData.emailmsg,
+            interest_rate:formData.interest_rate,
           })
           .eq("id", existingRecord.id);
 
@@ -183,6 +189,7 @@ const BillParams = () => {
               tier3: formData.tier3,
               message: formData.message,
               emailmsg: formData.emailmsg,
+              interest_rate: formData.interest_rate,
             },
           ]);
 
@@ -203,6 +210,7 @@ const BillParams = () => {
         tier3: "",
         message: "",
         emailmsg: "",
+        interest_rate:"",
       });
       setShowBillForm(false);
       setShowMessageForm(false);
@@ -331,6 +339,21 @@ const BillParams = () => {
                           </p>
                         </div>
                       </div>
+
+                    </div>
+
+                    <div className="w-full sm:w-1/2">
+                        <label className="mb-3 block font-medium text-dark">
+                          Interest Rate
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2">
+                            <FaDollarSign className="text-gray-500" />
+                          </span>
+                          <p className="w-full rounded-lg bg-primary/[.07] py-3 pl-12 pr-4 text-dark">
+                            {parameter.interest_rate || "Set Interest Rate"}
+                          </p>
+                        </div>
                     </div>
                   </div>
                 ))}
@@ -458,7 +481,26 @@ const BillParams = () => {
                           />
                         </div>
                       </div>
+                      
                     </div>
+
+                    <div className="w-full sm:w-1/2">
+                        <label className="mb-3 block font-medium text-dark">
+                          Interest Rate
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2">
+                            <FaDollarSign className="text-gray-500" />
+                          </span>
+                          <input
+                            name="interest_rate"
+                            className="w-full rounded-lg border border-stroke py-3 pl-12 pr-4 text-dark focus:border-primary"
+                            value={formData.interest_rate}
+                            onChange={handleChange}
+                            placeholder="Set Interest Rate"
+                          />
+                        </div>
+                      </div>
 
                     <div className="flex justify-end gap-4">
                       <button
