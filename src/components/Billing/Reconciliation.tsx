@@ -194,15 +194,18 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
     if (billData) {
       const oldAmount = billData.allocatedAmount;
       const difference = newAmount - oldAmount;
+      const originalBillAmount = billData.bill.total_revenue;
       
-      // Check if we have enough remaining amount
-      if (difference <= remainingAmount) {
+      // Check if new amount doesn't exceed original bill amount and we have enough remaining amount
+      if (newAmount <= originalBillAmount && difference <= remainingAmount) {
         updatedSelectedBills.set(billId, {
           ...billData,
           allocatedAmount: newAmount
         });
         setSelectedBills(updatedSelectedBills);
         setRemainingAmount(prev => prev - difference);
+      } else if (newAmount > originalBillAmount) {
+        toast.error(`Allocation amount cannot exceed the original bill amount of $${originalBillAmount.toFixed(2)}`);
       }
     }
   };
@@ -224,7 +227,8 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
       if (remainingToDistribute <= 0) break;
       
       const pendingAmount = calculatePendingAmount(billData.bill, billData.existingPayments);
-      const allocateAmount = Math.min(pendingAmount, remainingToDistribute);
+      const originalBillAmount = billData.bill.total_revenue;
+      const allocateAmount = Math.min(pendingAmount, remainingToDistribute, originalBillAmount);
       
       updatedSelectedBills.set(billId, {
         ...billData,
@@ -349,7 +353,7 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
                       <input
                         type="number"
                         min="0"
-                        max={Math.min(pendingAmount, remainingAmount + billData.allocatedAmount)}
+                        max={Math.min(billData.bill.total_revenue, remainingAmount + billData.allocatedAmount)}
                         step="0.01"
                         value={billData.allocatedAmount}
                         onChange={(e) => handleAllocationChange(billId, parseFloat(e.target.value) || 0)}
