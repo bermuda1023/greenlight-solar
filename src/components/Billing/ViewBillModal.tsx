@@ -214,7 +214,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                 <th className="p-3 text-sm">Period Start</th>
                 <th className="p-3 text-sm">Period End</th>
                 <th className="p-3 text-sm">Description</th>
-                <th className="p-3 text-sm">Solar Energy (kWh)</th>
+                {/* <th className="p-3 text-sm">Solar Energy (kWh)</th> */}
                 <th className="p-3 text-sm">Production (kWh)</th>
                 <th className="p-3 text-sm">Effective Rate</th>
                 <th className="p-3 text-sm">Total</th>
@@ -229,7 +229,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                   {bill.billing_period_end}
                 </td>
                 <td className="p-3 text-xs text-gray-600">Solar Energy Consumption</td>
-                <td className="p-3 text-xs text-gray-600">{bill.total_PTS.toFixed(2)}</td>
+                {/* <td className="p-3 text-xs text-gray-600">{bill.total_PTS.toFixed(2)}</td> */}
                 <td className="p-3 text-xs text-gray-600">
                   {(bill.total_revenue/bill.energy_rate).toFixed(2)}
                 </td>
