@@ -19,7 +19,7 @@ interface Parameters {
   tier3: number;
   message: string;
   emailmsg: string;
-  interest_rate:string;
+  interest_rate: string;
 }
 
 const BillParams = () => {
@@ -84,7 +84,7 @@ const BillParams = () => {
           export_rate:
             fetchedParameters.export_rate || prevFormData?.export_rate || "",
           interest_rate:
-            fetchedParameters.interest_rate || prevFormData?.interest_rate || "",  
+            fetchedParameters.interest_rate || prevFormData?.interest_rate || "0",  
           tier1: fetchedParameters.tier1 || prevFormData?.tier1 || "",
           tier2: fetchedParameters.tier2 || prevFormData?.tier2 || "",
           tier3: fetchedParameters.tier3 || prevFormData?.tier3 || "",
@@ -130,7 +130,6 @@ const BillParams = () => {
       !formData.belcodisc ||
       !formData.ra_fee ||
       !formData.export_rate ||
-      !formData.interest_rate ||
       !formData.tier1 ||
       !formData.tier2 ||
       !formData.tier3 ||
@@ -166,7 +165,7 @@ const BillParams = () => {
             tier3: formData.tier3,
             message: formData.message,
             emailmsg: formData.emailmsg,
-            interest_rate:formData.interest_rate,
+            interest_rate:formData.interest_rate || 0,
           })
           .eq("id", existingRecord.id);
 
@@ -189,7 +188,7 @@ const BillParams = () => {
               tier3: formData.tier3,
               message: formData.message,
               emailmsg: formData.emailmsg,
-              interest_rate: formData.interest_rate,
+              interest_rate: formData.interest_rate || 0,
             },
           ]);
 
@@ -351,7 +350,7 @@ const BillParams = () => {
                             <FaDollarSign className="text-gray-500" />
                           </span>
                           <p className="w-full rounded-lg bg-primary/[.07] py-3 pl-12 pr-4 text-dark">
-                            {parameter.interest_rate || "Set Interest Rate"}
+                            {parameter.interest_rate || 0}
                           </p>
                         </div>
                     </div>
