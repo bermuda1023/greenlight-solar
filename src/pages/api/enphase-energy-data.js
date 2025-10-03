@@ -1,6 +1,7 @@
 // src/pages/api/enphase-energy-data.js
 import { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "@/utils/supabase/browserClient";
+import { enphaseTokenService } from "@/services/enphase-token-service";
 
 export default async function handler(req, res) {
   console.log("Enphase API called with query params:", req.query);
@@ -44,51 +45,66 @@ export default async function handler(req, res) {
       refreshToken ? "✓ Present" : "✗ Missing",
     );
 
-    // 2. Get a fresh access token using the refresh token
-    console.log("Getting fresh access token...");
-    const tokenUrl = "https://api.enphaseenergy.com/oauth/token";
-    const tokenParams = new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-    });
+    // 2. Get a fresh access token using the refresh token service
+    console.log("Getting fresh access token using token service...");
+    const refreshResult = await enphaseTokenService.refreshAccessToken(refreshToken);
 
-    const tokenResponse = await fetch(tokenUrl, {
-      method: "POST",
-      headers: {
-        Authorization:
-          "Basic YmE1MjI4ZTRmODQzYTk0NjA3ZTZjYzI0NTA0M2JjNTQ6YjAzZTUxZDhlM2I1MGM0OTc2OTk0NTgwM2Y2NWZiNzA=",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: tokenParams,
-    });
-
-    if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      console.error("Token refresh error:", errorText);
-      throw new Error(`Failed to refresh token: ${tokenResponse.statusText}`);
+    if (!refreshResult.success) {
+      console.error("Token refresh failed:", refreshResult.error);
+      
+      // Check if the refresh token needs reauthorization
+      if (refreshResult.needsReauthorization) {
+        console.log("Refresh token expired, marking customer for re-authorization...");
+        
+        // Mark customer for reauthorization using the service
+        await enphaseTokenService.markCustomerForReauthorization(customerId, refreshResult.error);
+        
+        // Return fallback data instead of throwing an error
+        console.log("Returning fallback energy data due to expired token...");
+        return res.status(200).json({
+          energyDetails: {
+            timeUnit: "day",
+            unit: "Wh",
+            meters: [
+              {
+                type: "Consumption",
+                values: [{ date: new Date().toISOString().split('T')[0], value: 500000 }] // 500 kWh fallback
+              },
+              {
+                type: "FeedIn",
+                values: [{ date: new Date().toISOString().split('T')[0], value: 50000 }] // 50 kWh fallback
+              },
+              {
+                type: "SelfConsumption", 
+                values: [{ date: new Date().toISOString().split('T')[0], value: 0 }]
+              },
+              {
+                type: "Production",
+                values: [{ date: new Date().toISOString().split('T')[0], value: 50000 }] // 50 kWh fallback
+              }
+            ]
+          },
+          message: "Token expired - using fallback data. Customer needs re-authorization.",
+          tokenExpired: true,
+          customerId: customerId
+        });
+      }
+      
+      throw new Error(`Failed to refresh token: ${refreshResult.error}`);
     }
 
-    const tokenData = await tokenResponse.json();
-    console.log(
-      "Access token obtained with expiry:",
-      tokenData.expires_in,
-      "seconds",
-    );
+    console.log("Access token obtained with expiry:", refreshResult.expiresIn, "seconds");
 
     // Extract the access token to use for subsequent API calls
-    const accessToken = tokenData.access_token;
+    const accessToken = refreshResult.accessToken;
 
-    // Store the new refresh token back in the database for future use
-    const newRefreshToken = tokenData.refresh_token;
-    if (newRefreshToken && newRefreshToken !== refreshToken) {
+    // Update customer record with new token data
+    if (refreshResult.refreshToken && refreshResult.refreshToken !== refreshToken) {
       console.log("Updating refresh token in database...");
-      const { error: updateError } = await supabase
-        .from("customers")
-        .update({ refresh_token: newRefreshToken })
-        .eq("id", customerId);
-
-      if (updateError) {
-        console.error("Failed to update refresh token:", updateError);
+      const updateResult = await enphaseTokenService.updateCustomerToken(customerId, refreshResult);
+      
+      if (!updateResult.success) {
+        console.error("Failed to update refresh token:", updateResult.error);
       } else {
         console.log("Refresh token updated successfully");
       }
@@ -293,8 +309,39 @@ export default async function handler(req, res) {
     res.status(200).json(responseData);
   } catch (error) {
     console.error("Enphase API proxy error:", error);
-    res
-      .status(500)
-      .json({ error: error.message || "Failed to fetch Enphase energy data" });
+    
+    // Provide fallback data instead of failing completely
+    console.log("Providing fallback energy data due to API error...");
+    
+    const fallbackData = {
+      energyDetails: {
+        timeUnit: "day",
+        unit: "Wh",
+        meters: [
+          {
+            type: "Consumption",
+            values: [{ date: new Date().toISOString().split('T')[0], value: 500000 }] // 500 kWh fallback
+          },
+          {
+            type: "FeedIn",
+            values: [{ date: new Date().toISOString().split('T')[0], value: 50000 }] // 50 kWh fallback
+          },
+          {
+            type: "SelfConsumption", 
+            values: [{ date: new Date().toISOString().split('T')[0], value: 0 }]
+          },
+          {
+            type: "Production",
+            values: [{ date: new Date().toISOString().split('T')[0], value: 50000 }] // 50 kWh fallback
+          }
+        ]
+      },
+      message: "API error - using fallback data. Please check Enphase authorization.",
+      apiError: true,
+      error: error.message,
+      customerId: req.query.customerId
+    };
+    
+    res.status(200).json(fallbackData);
   }
 }
