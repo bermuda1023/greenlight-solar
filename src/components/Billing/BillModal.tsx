@@ -246,6 +246,15 @@ const BillModal: React.FC<BillModalProps> = ({
 
           const data = await response.json();
 
+          // Check for token expiration or API errors
+          if (data.tokenExpired) {
+            console.warn(`Enphase token expired for customer ${customer.id}:`, data.message);
+            toast.warn(`Enphase authorization expired for ${customer.site_name || customer.id}. Please re-authorize this customer.`);
+          } else if (data.apiError) {
+            console.warn(`Enphase API error for customer ${customer.id}:`, data.message);
+            toast.warn(`Enphase API issue for ${customer.site_name || customer.id}.`);
+          }
+
           // Validate the response structure
           if (!data || !data.energyDetails || !Array.isArray(data.energyDetails.meters)) {
             throw new Error(`Invalid energy data structure for customer ${customer.id}: missing energyDetails or meters array`);
