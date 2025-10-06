@@ -300,11 +300,11 @@ const TokenRefreshModal: React.FC<TokenRefreshModalProps> = ({
                 <strong>Instructions:</strong>
               </p>
               <ol className="mt-1 list-decimal list-inside text-xs text-blue-700 space-y-1">
-                <li>Click "Open Enphase Authorization"</li>
-                <li>Log in with customer's Enphase credentials</li>
-                <li>Click "Allow Access" when prompted</li>
+                <li>Click &quot;Open Enphase Authorization&quot;</li>
+                <li>Log in with the customer&apos;s Enphase credentials</li>
+                <li>Click &quot;Allow Access&quot; when prompted</li>
                 <li>Copy the authorization code from the final page</li>
-                <li>Paste it above and click "Update Authorization"</li>
+                <li>Paste it above and click &quot;Update Authorization&quot;</li>
               </ol>
             </div>
           </div>
