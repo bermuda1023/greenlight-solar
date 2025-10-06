@@ -19,7 +19,7 @@ const ReauthorizationGuide: React.FC<ReauthorizationGuideProps> = ({
   onClose,
 }) => {
   return (
-    <div className="fixed inset-0 z-999 flex items-center justify-center bg-black bg-opacity-50">
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black bg-opacity-50">
       <div className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center">
@@ -42,7 +42,7 @@ const ReauthorizationGuide: React.FC<ReauthorizationGuideProps> = ({
           </p>
           <p className="mt-1 text-sm text-orange-700">
             The Enphase refresh token has completely expired and cannot be renewed automatically. 
-            A new authorization code is required from the customer's Enphase account.
+            A new authorization code is required from the customer&apos;s Enphase account.
           </p>
         </div>
 
@@ -55,7 +55,7 @@ const ReauthorizationGuide: React.FC<ReauthorizationGuideProps> = ({
             <ul className="space-y-1 text-sm text-blue-800">
               <li>• Enphase refresh tokens expire after a certain period (usually 1 year)</li>
               <li>• The customer may have revoked access to their Enphase account</li>
-              <li>• There may have been changes to the customer's Enphase account</li>
+              <li>• There may have been changes to the customer&apos;s Enphase account</li>
             </ul>
           </div>
 
@@ -73,8 +73,8 @@ const ReauthorizationGuide: React.FC<ReauthorizationGuideProps> = ({
                 <div>
                   <p className="text-sm font-medium text-green-900">Click the Token Refresh Button</p>
                   <p className="text-xs text-green-700">
-                    In the customer list, click the blue refresh icon next to the customer's name, 
-                    or click the red "Expired - Re-authorize" badge.
+                    In the customer list, click the blue refresh icon next to the customer&apos;s name, 
+                    or click the red &quot;Expired - Re-authorize&quot; badge.
                   </p>
                 </div>
               </div>
@@ -84,9 +84,9 @@ const ReauthorizationGuide: React.FC<ReauthorizationGuideProps> = ({
                   2
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-green-900">Choose "Manual Auth" Method</p>
+                  <p className="text-sm font-medium text-green-900">Choose &quot;Manual Auth&quot; Method</p>
                   <p className="text-xs text-green-700">
-                    In the popup modal, select the "Manual Auth" tab since auto-refresh won't work for expired tokens.
+                    In the popup modal, select the &quot;Manual Auth&quot; tab since auto-refresh won&apos;t work for expired tokens.
                   </p>
                 </div>
               </div>
@@ -98,7 +98,7 @@ const ReauthorizationGuide: React.FC<ReauthorizationGuideProps> = ({
                 <div>
                   <p className="text-sm font-medium text-green-900">Open Enphase Authorization</p>
                   <p className="text-xs text-green-700">
-                    Click "Open Enphase Authorization" to open the Enphase login page in a new window.
+                    Click &quot;Open Enphase Authorization&quot; to open the Enphase login page in a new window.
                   </p>
                 </div>
               </div>
@@ -111,7 +111,7 @@ const ReauthorizationGuide: React.FC<ReauthorizationGuideProps> = ({
                   <p className="text-sm font-medium text-green-900">Customer Login Required</p>
                   <p className="text-xs text-green-700">
                     <strong>Important:</strong> The customer must log in with their own Enphase credentials. 
-                    You'll need to contact them or have them present during this process.
+                    You&apos;ll need to contact them or have them present during this process.
                   </p>
                 </div>
               </div>
@@ -123,7 +123,7 @@ const ReauthorizationGuide: React.FC<ReauthorizationGuideProps> = ({
                 <div>
                   <p className="text-sm font-medium text-green-900">Grant Permission</p>
                   <p className="text-xs text-green-700">
-                    After login, the customer should click "Allow Access" to grant permission to your application.
+                    After login, the customer should click &quot;Allow Access&quot; to grant permission to your application.
                   </p>
                 </div>
               </div>
@@ -135,7 +135,7 @@ const ReauthorizationGuide: React.FC<ReauthorizationGuideProps> = ({
                 <div>
                   <p className="text-sm font-medium text-green-900">Copy Authorization Code</p>
                   <p className="text-xs text-green-700">
-                    Copy the authorization code from the final page and paste it into the "Authorization Code" field.
+                    Copy the authorization code from the final page and paste it into the &quot;Authorization Code&quot; field.
                   </p>
                 </div>
               </div>
@@ -147,7 +147,7 @@ const ReauthorizationGuide: React.FC<ReauthorizationGuideProps> = ({
                 <div>
                   <p className="text-sm font-medium text-green-900">Update Authorization</p>
                   <p className="text-xs text-green-700">
-                    Click "Update Authorization" to save the new token. The customer's status will be updated automatically.
+                    Click &quot;Update Authorization&quot; to save the new token. The customer&apos;s status will be updated automatically.
                   </p>
                 </div>
               </div>
