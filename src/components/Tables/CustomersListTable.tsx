@@ -20,6 +20,7 @@ import { TbReceipt } from "react-icons/tb";
 import flatpickr from "flatpickr";
 import { supabase } from "@/utils/supabase/browserClient";
 import BillModal from "../Billing/BillModal";
+import TokenRefreshModal from "../Enphase/TokenRefreshModal";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useRef } from "react";
@@ -76,6 +77,8 @@ const CustomersListTable = () => {
   const [isAuthWindowOpen, setIsAuthWindowOpen] = useState(false);
   const [authWindow, setAuthWindow] = useState<Window | null>(null);
   const [newAuthCode, setNewAuthCode] = useState("");
+  const [showTokenRefreshModal, setShowTokenRefreshModal] = useState(false);
+  const [selectedCustomerForRefresh, setSelectedCustomerForRefresh] = useState<Customer | null>(null);
 
   const [formData, setFormData] = useState({
     email: "",
@@ -499,8 +502,16 @@ const CustomersListTable = () => {
   };
 
 
-  // Handler for clicking Pending badge
+  // Handler for clicking Pending badge or expired token
   const handlePendingClick = async (customer: Customer) => {
+    // Check if this is an Enphase customer with expired token
+    if (customer.authorization_code && customer.authorization_status === "ENPHASE_AUTHORIZATION_EXPIRED") {
+      setSelectedCustomerForRefresh(customer);
+      setShowTokenRefreshModal(true);
+      return;
+    }
+
+    // Original logic for generating auth links
     try {
       const res = await fetch("/api/customers/generate-auth-link", {
         method: "POST",
@@ -521,6 +532,76 @@ const CustomersListTable = () => {
       }
     } catch (err) {
       toast.error("Failed to generate verification link.");
+    }
+  };
+
+  // Handler for successful token refresh
+  const handleTokenRefreshSuccess = () => {
+    fetchCustomers(); // Refresh the customer list
+    toast.success("Token refreshed successfully!");
+  };
+
+  // Handler for bulk token refresh
+  const handleBulkTokenRefresh = async () => {
+    if (selectedCustomers.length === 0) {
+      toast.error("Please select customers to refresh tokens for.");
+      return;
+    }
+
+    // Filter to only Enphase customers (those with authorization_code)
+    const enphaseCustomers = customers.filter(
+      customer => selectedCustomers.includes(customer.id) && customer.authorization_code
+    );
+
+    if (enphaseCustomers.length === 0) {
+      toast.error("No Enphase customers selected. Token refresh is only available for Enphase customers.");
+      return;
+    }
+
+    const toastId = toast.info(`Refreshing tokens for ${enphaseCustomers.length} Enphase customers...`);
+
+    try {
+      const response = await fetch("/api/enphase/bulk-refresh", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          customerIds: enphaseCustomers.map(c => c.id),
+          action: "refresh"
+        }),
+      });
+
+      const data = await response.json();
+      toast.dismiss(toastId);
+
+      if (response.ok && data.success) {
+        const { summary } = data;
+        
+        if (summary.successful > 0) {
+          toast.success(`Successfully refreshed ${summary.successful} tokens`);
+        }
+        
+        if (summary.failed > 0) {
+          toast.warn(`${summary.failed} tokens failed to refresh`);
+        }
+        
+        if (summary.needsReauthorization > 0) {
+          toast.error(
+            `${summary.needsReauthorization} customers need manual reauthorization. Click the red "Expired" badges or blue refresh icons to fix them.`,
+            { autoClose: 8000 }
+          );
+        }
+
+        // Refresh customer list to show updated statuses
+        fetchCustomers();
+      } else {
+        toast.error(`Bulk refresh failed: ${data.details || data.error}`);
+      }
+    } catch (error) {
+      toast.dismiss(toastId);
+      console.error("Error in bulk token refresh:", error);
+      toast.error("Failed to refresh tokens. Please try again.");
     }
   };
 
@@ -572,6 +653,13 @@ const CustomersListTable = () => {
               value={endDate ?? ""}
             />
           </div>
+          {/* <button
+            onClick={handleBulkTokenRefresh}
+            className="hover:bg-blue-700 flex items-center gap-2 whitespace-nowrap rounded-md bg-blue-600 px-4 py-3 text-white"
+            title="Refresh Enphase tokens for selected customers"
+          >
+            <FontAwesomeIcon icon={faCheckCircle} /> Refresh Tokens
+          </button> */}
           <button
             onClick={handleGenerateBill}
             className="hover:bg-dark-1 flex items-center gap-2 whitespace-nowrap rounded-md bg-dark-2 px-4 py-3 text-white"
@@ -801,7 +889,19 @@ const CustomersListTable = () => {
                         {/* Action button */}
 
                         <td className="whitespace-nowrap px-6 py-4 text-sm">
-                          {customer.verification ? (
+                          {customer.authorization_status === "ENPHASE_AUTHORIZATION_EXPIRED" ? (
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1.5 rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-800"
+                              onClick={() => handlePendingClick(customer)}
+                            >
+                              <FontAwesomeIcon
+                                icon={faTimesCircle}
+                                className="h-3 w-3"
+                              />
+                              Expired - Re-authorize
+                            </button>
+                          ) : customer.verification ? (
                             <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800">
                               <FontAwesomeIcon
                                 icon={faCircleCheck}
@@ -832,6 +932,7 @@ const CustomersListTable = () => {
                               <FaRegEdit />
                             </span>
                           </button>
+                          
                           {/* <button
                             onClick={() => handleEditCustomer(customer.id)}
                            className="rounded-lg bg-green-50 p-2 text-primary transition hover:bg-primary hover:text-green-50"
@@ -849,6 +950,26 @@ const CustomersListTable = () => {
                               <FaRegTrashAlt />
                             </span>
                           </button>
+
+                          {/* Token Refresh Button for Enphase customers */}
+                          {customer.authorization_code && (
+                            <button
+                              onClick={() => {
+                                setSelectedCustomerForRefresh(customer);
+                                setShowTokenRefreshModal(true);
+                              }}
+                              className={`rounded-lg p-2 transition ${
+                                customer.authorization_status === "ENPHASE_AUTHORIZATION_EXPIRED"
+                                  ? "bg-red-50 text-red-600 hover:bg-red-600 hover:text-red-50"
+                                  : "bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-blue-50"
+                              }`}
+                              title="Refresh Enphase Token"
+                            >
+                              <span className="text-xl">
+                                <FontAwesomeIcon icon={faCheckCircle} />
+                              </span>
+                            </button>
+                          )}
 
                           {/* Generate Authorization Link button for pending Enphase customers */}
                           {customer.authorization_status ===
@@ -1183,6 +1304,18 @@ const CustomersListTable = () => {
             </form>
           </div>
         </div>
+      )}
+      
+      {/* Token Refresh Modal */}
+      {showTokenRefreshModal && selectedCustomerForRefresh && (
+        <TokenRefreshModal
+          customer={selectedCustomerForRefresh}
+          onClose={() => {
+            setShowTokenRefreshModal(false);
+            setSelectedCustomerForRefresh(null);
+          }}
+          onSuccess={handleTokenRefreshSuccess}
+        />
       )}
       {/* Removed Auth Modal as per edit hint */}
     </>
