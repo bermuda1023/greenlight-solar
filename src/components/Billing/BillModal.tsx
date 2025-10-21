@@ -133,6 +133,11 @@ const BillModal: React.FC<BillModalProps> = ({
   }>({});
 
   const [showAdjustmentModal, setShowAdjustmentModal] = useState<string | null>(null);
+  // ADDED: classification + UI state
+  const [activeTab, setActiveTab] = useState<"success" | "failed">("success");
+  const [successfulBills, setSuccessfulBills] = useState<any[]>([]);
+  const [failedBills, setFailedBills] = useState<any[]>([]);
+
 
   const fetchParameters = useCallback(async () => {
     try {
@@ -332,6 +337,91 @@ const BillModal: React.FC<BillModalProps> = ({
       setLoading(false);
     }
   }, [startDate, endDate, customerData]);
+
+  // classify bills once energySums + parameters are ready
+const classifyBills = useCallback(() => {
+  if (!energySums || !parameters?.length) return;
+
+  const parameter = parameters[0];
+  const newSuccess: any[] = [];
+  const newFailed: any[] = [];
+
+  selectedBills.forEach((customerId) => {
+    const customer = customers.find((c) => c.id === customerId);
+    if (!customer) return;
+
+    const sums = energySums?.[customerId];
+    if (!sums) {
+      newFailed.push({ customerId, customer, reason: "API Error / No Data" });
+      return;
+    }
+
+    const production = sums.Production ?? 0;
+    const consumption = sums.Consumption ?? 0;
+    const exportVal = sums.FeedIn ?? 0;
+    const selfCons = sums.SelfConsumption ?? 0;
+
+    if (production === 0) {
+      newFailed.push({ customerId, customer, reason: "Zero Production" });
+      return;
+    }
+
+    const billResult = calculateBilling({
+      energyConsumed: consumption,
+      energyExported: exportVal,
+      selfConsumption: selfCons,
+      totalProduction: production,
+      startDate: new Date(startDate || ""),
+      endDate: new Date(endDate || ""),
+      fuelRate: parameter?.fuelRate,
+      basePrice: parameter?.basePrice,
+      feedInPrice: parameter?.feedInPrice,
+      belcodisc: parameter?.belcodisc,
+      ra_fee: parameter?.ra_fee,
+      export_rate: parameter?.export_rate,
+      tier1: parameter?.tier1,
+      tier2: parameter?.tier2,
+      tier3: parameter?.tier3,
+      scaling: customer?.scaling_factor,
+      price: customer?.price,
+      fixedFeeSaving: 54.37,
+    });
+
+    if (
+      !billResult ||
+      [billResult.finalRevenue, billResult.belcoPerKwh].some(
+        (v) => !isFinite(v)
+      )
+    ) {
+      newFailed.push({
+        customerId,
+        customer,
+        reason: "Invalid Billing Data",
+      });
+      return;
+    }
+
+    const balEntry = customerBalance.find(
+      (b) => b.customer_id === customerId
+    );
+    const outstanding = balEntry?.current_balance ?? 0;
+
+    newSuccess.push({
+      customerId,
+      customer,
+      billResult,
+      outstanding,
+    });
+  });
+
+  setSuccessfulBills(newSuccess);
+  setFailedBills(newFailed);
+}, [energySums, parameters, selectedBills, customers, customerBalance, startDate, endDate]);
+
+// auto-classify whenever inputs change
+useEffect(() => {
+  classifyBills();
+}, [classifyBills]);
 
   useEffect(() => {
     fetchParameters();
@@ -585,26 +675,19 @@ const BillModal: React.FC<BillModalProps> = ({
 
   // const summary = calculateSummary();
 
-  const handleRemoveBill = (customerId: string) => {
-    try {
-      // Check if the customerId exists in the selectedBills array
-      if (!selectedBills.includes(customerId)) {
-        toast.error("Customer ID not found in the selected bills."); // Error toast if not found
-        return;
-      }
+// Type-safe fix for mixed string/number customer IDs
+const handleRemoveBill = (customerId: number | string) => {
+  setSelectedBills((prev) =>
+    prev.filter((id) => String(id) !== String(customerId))
+  );
+  setSuccessfulBills((prev) =>
+    prev.filter((b) => String(b.customerId) !== String(customerId))
+  );
+  setFailedBills((prev) =>
+    prev.filter((b) => String(b.customerId) !== String(customerId))
+  );
+};
 
-      // Remove the customerId from selectedBills
-      setSelectedBills((prev) => prev.filter((id) => id !== customerId));
-
-      // Show success toast after removal
-      toast.success("Customer bill removed successfully!");
-    } catch (error) {
-      toast.error(
-        "An error occurred while removing the bill. Please try again.",
-      ); // Error toast for unexpected issues
-      console.error("Error removing bill:", error);
-    }
-  };
 
   // Apply manual adjustment to customer balance
   const applyOverdueAdjustment = async (customerId: string, adjustmentAmount: number) => {
@@ -1404,6 +1487,26 @@ const BillModal: React.FC<BillModalProps> = ({
           <h2 className="mb-6 text-center text-2xl font-bold">
             Billing Summary
           </h2>
+                        {/* ADDED: tab switcher */}
+              <div className="mb-4 flex justify-center gap-4">
+                <button
+                  onClick={() => setActiveTab("success")}
+                  className={`rounded px-4 py-2 ${
+                    activeTab === "success" ? "bg-green-600 text-white" : "bg-gray-200"
+                  }`}
+                >
+                  Successful ({successfulBills.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab("failed")}
+                  className={`rounded px-4 py-2 ${
+                    activeTab === "failed" ? "bg-red-600 text-white" : "bg-gray-200"
+                  }`}
+                >
+                  Failed ({failedBills.length})
+                </button>
+              </div>
+
 
           {error ? (
             <p className="text-red-500">{error}</p>
@@ -1487,180 +1590,168 @@ const BillModal: React.FC<BillModalProps> = ({
                 )}
               </div>
 
-              {selectedBills.map((customerId) => {
-                const customer = customers.find((c) => c.id === customerId);
-                if (!customer) return null;
-
-                const parameter = parameters[0];
-                const bill = bills[0];
-
-                // Find the balance for the current customer from the fetched list
-                const customerBalanceEntry = customerBalance.find(
-                  (balance) => balance.customer_id === customerId,
-                );
-
-                // Get the current_balance or default to 0
-
-                const customerEnergySums = energySums?.[customerId] || {};
-                const exportValue = customerEnergySums?.FeedIn || 50;
-                const productionValue = customerEnergySums?.Production || 0;
-                const selfConsumptionValue =
-                  typeof customerEnergySums?.SelfConsumption === "number"
-                    ? customerEnergySums.SelfConsumption
-                    : 0;
-
-                // Use total consumption from the API (not just solar consumption)
-                // This matches the C# implementation which uses item.consumption
-                const consumptionValue = customerEnergySums?.Consumption || 500;
-
-                console.log(`Customer Energy Data - ID: ${customerId}`);
-                console.log("Total Consumption:", consumptionValue);
-                console.log("FeedIn (Export):", exportValue);
-                console.log("Self Consumption:", selfConsumptionValue);
-                console.log("Total Production:", productionValue);
-
-                const billResult = calculateBilling({
-                  energyConsumed: consumptionValue,
-                  energyExported: exportValue,
-                  selfConsumption: selfConsumptionValue,
-                  totalProduction: productionValue, // Add this line
-
-                  startDate: new Date(startDate || ""),
-                  endDate: new Date(endDate || ""),
-                  fuelRate: parameter?.fuelRate,
-                  basePrice: parameter?.basePrice,
-                  feedInPrice: parameter?.feedInPrice,
-                  belcodisc: parameter?.belcodisc,
-                  ra_fee: parameter?.ra_fee,
-                  export_rate: parameter?.export_rate,
-                  tier1: parameter?.tier1,
-                  tier2: parameter?.tier2,
-                  tier3: parameter?.tier3,
-                  scaling: customer?.scaling_factor,
-                  price: customer?.price,
-                  fixedFeeSaving: 54.37,
-                });
-
-                const outstandingBalance =
-                  customerBalanceEntry?.current_balance || 0;
-                // -(billResult?.finalRevenue || 0);
-                return (
-                  <div
-                    key={customerId}
-                    className="mb-8 rounded-lg border border-gray-200 bg-gray-50 p-4"
-                  >
-                    {/* top section */}
-                    <div className="relative flex flex-col pr-0 pt-0">
-                      {/* Name and cross button            */}
-                      <div className="mb-1">
-                        <div className="flex w-full justify-between">
-                          <h3 className="text-lg font-semibold text-gray-700">
-                            {customer?.site_name}
-                          </h3>
-                          <button
-                            className="  rounded bg-red-200 px-2 py-1 text-red-800 hover:bg-red-300"
-                            onClick={() => handleRemoveBill(customerId)}
-                          >
-                            <FontAwesomeIcon icon={faTimes} />{" "}
-                          </button>
+                {/* UPDATED: render conditional on activeTab */}
+                {activeTab === "success" ? (
+                  <>
+                    {/* Billing Summary based on successfulBills */}
+                    <div className="mb-6 rounded-lg border border-dashed border-gray-300 bg-green-50 p-6">
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between border-b border-gray-300 pb-2">
+                          <span className="font-medium text-gray-700">Total Revenue:</span>
+                          <span className="font-semibold text-gray-900">
+                            $
+                            {successfulBills
+                              .reduce((a, b) => a + (b.billResult?.finalRevenue || 0), 0)
+                              .toFixed(2)}
+                          </span>
                         </div>
-                      </div>
-
-                      {/* email and billing */}
-                      <div className="mb-4 flex justify-between border-b-2 border-dashed pb-2">
-                        <p className="text-sm text-gray-500">
-                          <strong className="text-base text-gray-dark">
-                            Email:
-                          </strong>{" "}
-                          {customer?.email || "N/A"} <br />
-                          <strong className="text-base text-gray-dark">
-                            Address:
-                          </strong>{" "}
-                          {customer?.address || "N/A"}
-                        </p>
-                        <div className="flex flex-col items-end">
-                          <strong className="text-base text-gray-dark">
-                            Billing Period:
-                          </strong>
-                          <span className="text-sm text-gray-6">
-                            {startDate} to {endDate}
+                        <div className="flex justify-between border-b border-gray-300 pb-2">
+                          <span className="font-medium text-gray-700">Total Belco Revenue:</span>
+                          <span className="font-semibold text-gray-900">
+                            $
+                            {successfulBills
+                              .reduce((a, b) => a + (b.billResult?.belcoRevenue || 0), 0)
+                              .toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between border-b border-gray-300 pb-2">
+                          <span className="font-medium text-gray-700">
+                            Total Greenlight Revenue:
+                          </span>
+                          <span className="font-semibold text-gray-900">
+                            $
+                            {successfulBills
+                              .reduce((a, b) => a + (b.billResult?.greenlightRevenue || 0), 0)
+                              .toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between border-b border-gray-300 pb-2">
+                          <span className="font-medium text-gray-700">Total Savings:</span>
+                          <span className="font-semibold text-gray-900">
+                            $
+                            {successfulBills
+                              .reduce((a, b) => a + (b.billResult?.savings || 0), 0)
+                              .toFixed(2)}
                           </span>
                         </div>
                       </div>
+                      <div className="mt-4 text-center text-xs text-gray-600">
+                        All amounts are based on the selected billing period.
+                      </div>
                     </div>
 
-                    {/* Invoice Section */}
-                    <div className="mb-4 grid grid-cols-2 gap-4 text-sm text-gray-600">
-                      <div>
-                        <p>
-                          <strong>Total Consumed PTS:</strong>{" "}
-                          {consumptionValue.toFixed(2)}
-                        </p>
-                        <p>
-                          <strong>FeedIn:</strong> {exportValue.toFixed(2)} kWh
-                        </p>
-                        <p>
-                          <strong>Energy Rate:</strong> ${" "}
-                          {billResult.belcoPerKwh.toFixed(2)}/kWh
-                        </p>
-                        <p>
-                          <strong>Belco Revenue:</strong> ${" "}
-                          {billResult.belcoRevenue.toFixed(2)}
-                        </p>
-                      </div>
-                      <div>
-                        <p>
-                          <strong>Total:</strong> ${" "}
-                          {billResult.finalRevenue.toFixed(2)}
-                        </p>
-                        <p>
-                          <strong>Outstanding:</strong> $
-                          {outstandingBalance.toFixed(2)}
+                    {/* Successful bills list */}
+                    {successfulBills.map(({ customerId, customer, billResult, outstanding }) => (
+                      <div
+                        key={customerId}
+                        className="mb-8 rounded-lg border border-gray-200 bg-gray-50 p-4"
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="text-lg font-semibold">{customer?.site_name}</h3>
                           <button
-                            onClick={() => setShowAdjustmentModal(customerId)}
-                            className="ml-2 rounded bg-orange-200 px-2 py-1 text-xs text-orange-800 hover:bg-orange-300"
-                            title="Adjust overdue amount"
+                            className="rounded bg-red-200 px-2 py-1 text-red-800 hover:bg-red-300"
+                            onClick={() => handleRemoveBill(customerId)}
                           >
-                            Adjust
+                            <FontAwesomeIcon icon={faTimes} />
                           </button>
-                        </p>
-                        <p>
-                          <strong>Greenlight Revenue:</strong> ${" "}
-                          {billResult.greenlightRevenue.toFixed(2)}
-                        </p>
-                        <p>
-                          <strong>Savings:</strong> ${" "}
-                          {billResult.savings.toFixed(2)}
-                        </p>
-                        {/* <p>
-                          <strong>Description:</strong> sample description
-                        </p> */}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                        </div>
 
-              <div className="mt-6 flex justify-end gap-4">
-                <button
-                  onClick={onClose}
-                  className="rounded bg-gray-3 px-4 py-2 text-dark-2 hover:bg-gray-4"
-                >
-                  Close
-                </button>
-                <button
-                  onClick={() => handlePostAndEmailAllBills()}
-                  className="rounded bg-green-200 px-4 py-2 text-gray-800 hover:bg-green-300"
-                >
-                  Post and Email
-                </button>
-                <button
-                  onClick={handlePostAllBills}
-                  className="rounded bg-dark-2 px-4 py-2 font-medium text-white hover:bg-dark"
-                >
-                  Post Bills
-                </button>
-              </div>
+                        <div className="text-sm text-gray-600 grid grid-cols-2 gap-4">
+                          <div>
+                            <p>
+                              <strong>Energy Rate:</strong> ${billResult.belcoPerKwh.toFixed(2)}
+                            </p>
+                            <p>
+                              <strong>Belco Revenue:</strong> ${billResult.belcoRevenue.toFixed(2)}
+                            </p>
+                            <p>
+                              <strong>Greenlight Revenue:</strong> $
+                              {billResult.greenlightRevenue.toFixed(2)}
+                            </p>
+                          </div>
+                          <div>
+                            <p>
+                              <strong>Total:</strong> ${billResult.finalRevenue.toFixed(2)}
+                            </p>
+                            <p>
+                              <strong>Outstanding:</strong> ${outstanding.toFixed(2)}
+                            </p>
+                            <p>
+                              <strong>Savings:</strong> ${billResult.savings.toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Footer actions */}
+                    <div className="mt-6 flex justify-end gap-4">
+                      <button
+                        onClick={onClose}
+                        className="rounded bg-gray-3 px-4 py-2 text-dark-2 hover:bg-gray-4"
+                      >
+                        Close
+                      </button>
+                      <button
+                        onClick={() => handlePostAndEmailAllBills()}
+                        className="rounded bg-green-200 px-4 py-2 text-gray-800 hover:bg-green-300"
+                        disabled={successfulBills.length === 0}
+                      >
+                        Post and Email
+                      </button>
+                      <button
+                        onClick={handlePostAllBills}
+                        className="rounded bg-dark-2 px-4 py-2 font-medium text-white hover:bg-dark"
+                        disabled={successfulBills.length === 0}
+                      >
+                        Post Bills
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  // Failed tab
+                  <div className="space-y-4">
+                    {failedBills.length === 0 ? (
+                      <p className="text-center text-gray-600">No failed bills.</p>
+                    ) : (
+                      failedBills.map(({ customerId, customer, reason }) => (
+                        <div
+                          key={customerId}
+                          className="rounded border border-red-300 bg-red-50 p-4"
+                        >
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="font-semibold text-red-800">
+                                {customer?.site_name}
+                              </h4>
+                              <p className="text-sm text-gray-700">
+                                <strong>Reason:</strong> {reason}
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => classifyBills()} // simple retry; can improve
+                                className="rounded bg-blue-200 px-3 py-1 text-blue-800 hover:bg-blue-300 text-xs"
+                              >
+                                Retry
+                              </button>
+                              <button
+                                onClick={() =>
+                                  setFailedBills((prev) =>
+                                    prev.filter((b) => b.customerId !== customerId)
+                                  )
+                                }
+                                className="rounded bg-gray-200 px-3 py-1 text-gray-800 hover:bg-gray-300 text-xs"
+                              >
+                                Dismiss
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
             </>
           )}
         </div>
