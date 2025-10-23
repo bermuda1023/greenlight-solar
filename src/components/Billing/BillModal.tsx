@@ -1135,13 +1135,13 @@ const handleRemoveBill = (customerId: number | string) => {
          <p style="color: black;">Your latest invoice for the month of ${monthYear} has been generated, and the total amount due is $${billData.total_revenue}. Please take a moment to review your bill and proceed with payment at your earliest convenience.</p>
          <p style="color: black;">If you have any questions or need assistance, feel free to reach out to our support team. We're here to help!</p>
          <p style="color: black;">Thank you for being a valued customer.</p>
-         <p style="color: black;">Best regards,<br>Green Light Energy</p>`
+         <p style="color: black;">Best regards,<br>Greenlight Energy <br>billing@greenlightenergy.bm <br>Phone: 1 (441) 705 3033</p>`
           : `<p style="color: black;">Dear ${billData?.site_name},</p>
          <p style="color: black;">We hope this message finds you well!</p>
          <p style="color: black;">Your latest invoice for the month of ${monthYear} has been generated, and the total amount due is $${billData.total_revenue}. Please take a moment to review your bill and proceed with payment at your earliest convenience.</p>
          <p style="color: black;">If you have any questions or need assistance, feel free to reach out to our support team. We're here to help!</p>
          <p style="color: black;">Thank you for being a valued customer.</p>
-         <p style="color: black;">Best regards,<br>Green Light Energy</p>`;
+         <p style="color: black;">Best regards,<br>Greenlight Energy <br>billing@greenlightenergy.bm <br>Phone: 1 (441) 705 3033</p>`;
       console.log(Emailmessage);
 
       // Display the generated email message
