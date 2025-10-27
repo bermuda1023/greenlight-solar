@@ -707,19 +707,80 @@ const ReconciliationTest = () => {
   };
 
   const handleDelete = async (transactionId: string) => {
+    console.log("Delete button clicked for transaction:", transactionId);
+
     try {
-      const { error } = await supabase
-        .from("reconciliation")
+      // Fetch the transaction first to verify it's unmatched
+      const { data: transaction, error: fetchError } = await supabase
+        .from("transactions")
+        .select("status, description, amount, bill_id")
+        .eq("id", transactionId)
+        .single();
+
+      console.log("Fetched transaction:", transaction);
+      console.log("Fetch error:", fetchError);
+
+      if (fetchError) {
+        console.error("Error fetching transaction:", fetchError);
+        toast.error(`Failed to fetch transaction: ${fetchError.message || 'Unknown error'}`);
+        return;
+      }
+
+      if (!transaction) {
+        toast.error("Transaction not found");
+        return;
+      }
+
+      // Safety check: only allow deletion of unmatched transactions
+      if (transaction.status !== "Unmatched") {
+        console.log(`Transaction status is ${transaction.status}, not Unmatched`);
+        toast.error(
+          `Cannot delete a ${transaction.status.toLowerCase()} transaction. Please undo it first.`
+        );
+        return;
+      }
+
+      // Additional safety check: verify bill_id is null
+      if (transaction.bill_id) {
+        console.log("Transaction has bill_id:", transaction.bill_id);
+        toast.error("This transaction is linked to a bill. Please undo it first.");
+        return;
+      }
+
+      // Show confirmation dialog
+      const confirmed = window.confirm(
+        `Are you sure you want to delete this transaction?\n\nDescription: ${transaction.description}\nAmount: $${transaction.amount.toFixed(2)}\n\nThis action cannot be undone.`
+      );
+
+      console.log("User confirmed deletion:", confirmed);
+
+      if (!confirmed) {
+        console.log("User canceled deletion");
+        return;
+      }
+
+      // Delete the transaction
+      console.log("Attempting to delete transaction from database...");
+      const { error: deleteError } = await supabase
+        .from("transactions")
         .delete()
         .eq("id", transactionId);
 
-      if (error) throw error;
+      console.log("Delete error:", deleteError);
 
+      if (deleteError) {
+        console.error("Error deleting transaction:", deleteError);
+        toast.error(`Failed to delete transaction: ${deleteError.message || 'Database error'}`);
+        return;
+      }
+
+      console.log("Transaction deleted successfully, refreshing data...");
       await fetchData();
       toast.success("Transaction deleted successfully.");
     } catch (error) {
-      console.error("Error deleting transaction:", error);
-      toast.error("Error deleting transaction. Please try again.");
+      console.error("Unexpected error deleting transaction:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      toast.error(`Error deleting transaction: ${errorMessage}`);
     }
   };
 
