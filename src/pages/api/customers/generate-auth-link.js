@@ -53,7 +53,7 @@ export default async function handler(req, res) {
     <p><a href="${link}">${link}</a></p>
     <p>This link will expire in  1 year.</p>
     <p>If you did not request this, please ignore this email.</p>
-    <p>Best regards,<br/>Greenlight Energy Team</p>
+    <p>Best regards,<br>Greenlight Energy Team<br>billing@greenlightenergy.bm <br>Phone: 1 (441) 705 3033</p>
   `;
 
   // Call the sendmail API

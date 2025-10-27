@@ -97,6 +97,10 @@ const menuGroups = [
             label: "Reconciliation",
             route: "/dashboard/billing/reconciliation",
           },
+            {
+            label: "Custom Email",
+            route: "/dashboard/billing/email",
+          },
         ],
       },
       {
