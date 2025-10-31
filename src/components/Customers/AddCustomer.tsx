@@ -18,6 +18,7 @@ const AddCustomer = () => {
     installed_capacity: "",
     scaling_factor: "",
     price: "",
+    belco_rate: "",
     site_ID: "",
     authorization_code: "",
   });
@@ -168,6 +169,7 @@ const AddCustomer = () => {
           installed_capacity: Number(formData.installed_capacity),
           scaling_factor: Number(formData.scaling_factor),
           price: Number(formData.price),
+          belco_rate: formData.belco_rate ? Number(formData.belco_rate) : null,
           authorization_code: formData.authorization_code || null,
           verification: !!formData.authorization_code,
           refresh_token: refreshToken || null,
@@ -217,6 +219,7 @@ const AddCustomer = () => {
         installed_capacity: "",
         scaling_factor: "",
         price: "",
+        belco_rate: "",
         site_ID: "",
         authorization_code: "",
       });
@@ -266,6 +269,7 @@ const AddCustomer = () => {
           installed_capacity: Number(formData.installed_capacity),
           scaling_factor: Number(formData.scaling_factor),
           price: Number(formData.price),
+          belco_rate: formData.belco_rate ? Number(formData.belco_rate) : null,
           site_ID: Number(formData.site_ID),
           verification: true,
         },
@@ -286,6 +290,7 @@ const AddCustomer = () => {
         installed_capacity: "",
         scaling_factor: "",
         price: "",
+        belco_rate: "",
         site_ID: "",
         authorization_code: "",
       });
@@ -527,6 +532,21 @@ const AddCustomer = () => {
               </div>
             </div>
 
+            <div className="mb-4.5">
+              <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
+                Belco Rate
+              </label>
+              <input
+                type="text"
+                name="belco_rate"
+                value={formData.belco_rate}
+                onChange={handleChange}
+                placeholder="Enter Belco Rate"
+                className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
+                disabled={isSubmitting}
+              />
+            </div>
+
             <button
               type="submit"
               className="flex w-full justify-center rounded-[7px] bg-primary p-[13px] font-medium text-white hover:bg-opacity-90"
@@ -687,6 +707,21 @@ const AddCustomer = () => {
                   disabled={isSubmitting}
                 />
               </div>
+            </div>
+
+            <div className="mb-4.5">
+              <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
+                Belco Rate
+              </label>
+              <input
+                type="text"
+                name="belco_rate"
+                value={formData.belco_rate}
+                onChange={handleChange}
+                placeholder="Enter Belco Rate"
+                className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
+                disabled={isSubmitting}
+              />
             </div>
 
             <button
