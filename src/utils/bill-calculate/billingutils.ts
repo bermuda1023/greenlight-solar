@@ -9,7 +9,7 @@ export const calculateBilling = (inputs: {
   export_rate: number;
   price: number;       //Customer rate
   belcoRate: number;
-    scaling: number;
+  scaling: number;
 }) => {
   const {
     energyConsumed, 

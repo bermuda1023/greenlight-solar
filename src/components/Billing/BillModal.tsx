@@ -123,6 +123,16 @@ const BillModal: React.FC<BillModalProps> = ({
   }>({});
 
   const [showAdjustmentModal, setShowAdjustmentModal] = useState<string | null>(null);
+
+  // State for interest amounts (editable by user)
+  const [interestAmounts, setInterestAmounts] = useState<{
+    [customerId: string]: number;
+  }>({});
+
+  // State for interest rates per customer (editable by user in percentage)
+  const [customerInterestRates, setCustomerInterestRates] = useState<{
+    [customerId: string]: number;
+  }>({});
   // ADDED: classification + UI state
   const [activeTab, setActiveTab] = useState<"success" | "failed">("success");
   const [successfulBills, setSuccessfulBills] = useState<any[]>([]);
@@ -154,10 +164,10 @@ const BillModal: React.FC<BillModalProps> = ({
         .in("customer_id", selectedCustomers);
       if (fetchError) throw fetchError;
       setCustomerBalance(data || []);
-      console.log(data);
+      console.log("Customer Balances:", data);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Error fetching parameters",
+        err instanceof Error ? err.message : "Error fetching customer balances",
       );
     }
   }, [selectedCustomers]);
@@ -471,13 +481,23 @@ const BillModal: React.FC<BillModalProps> = ({
     }
   }, [startDate, endDate, customerData]);
 
+  // Calculate interest for overdue balance
+  const calculateInterest = useCallback((overdueBalance: number): number => {
+    if (!parameters || parameters.length === 0) return 0;
+    const interestRate = parameters[0]?.interest_rate || 0;
+    return overdueBalance * interestRate;
+  }, [parameters]);
+
   // classify bills once energySums + parameters are ready
 const classifyBills = useCallback(() => {
   if (!energySums || !parameters?.length) return;
 
   const parameter = parameters[0];
+  const defaultInterestRatePercent = (parameter?.interest_rate || 0) * 100; // Convert 0.05 to 5
   const newSuccess: any[] = [];
   const newFailed: any[] = [];
+  const newInterestAmounts: { [customerId: string]: number } = {};
+  const newCustomerInterestRates: { [customerId: string]: number } = {};
 
   selectedBills.forEach((customerId) => {
     const customer = customers.find((c) => c.id === customerId);
@@ -629,23 +649,49 @@ const classifyBills = useCallback(() => {
     );
     const outstanding = balEntry?.current_balance ?? 0;
 
+    // Use existing interest rate if already set, otherwise use default from parameters
+    if (!(customerId in customerInterestRates)) {
+      newCustomerInterestRates[customerId] = defaultInterestRatePercent;
+    } else {
+      newCustomerInterestRates[customerId] = customerInterestRates[customerId];
+    }
+
+    // Calculate interest using customer-specific rate percentage
+    const customerRatePercent = newCustomerInterestRates[customerId];
+    const customerRateDecimal = customerRatePercent / 100;
+    const calculatedInterest = outstanding * customerRateDecimal;
+
+    // Use existing interest amount if already set, otherwise use calculated
+    if (!(customerId in interestAmounts)) {
+      newInterestAmounts[customerId] = calculatedInterest;
+    } else {
+      newInterestAmounts[customerId] = interestAmounts[customerId];
+    }
+
     newSuccess.push({
       customerId,
       customer,
       billResult,
       outstanding,
+      interest: newInterestAmounts[customerId],
+      interestRatePercent: newCustomerInterestRates[customerId],
       energy: { consumption, production, feedIn: exportVal, selfConsumption: selfCons }
     });
   });
 
   setSuccessfulBills(newSuccess);
   setFailedBills(newFailed);
-}, [energySums, energyDataErrors, parameters, selectedBills, customers, customerBalance, startDate, endDate]);
+  setInterestAmounts(newInterestAmounts);
+  setCustomerInterestRates(newCustomerInterestRates);
+}, [energySums, energyDataErrors, parameters, selectedBills, customers, customerBalance, startDate, endDate, calculateInterest, interestAmounts, customerInterestRates]);
 
-// auto-classify whenever inputs change
+// auto-classify only when energy data changes, not when interest values change
 useEffect(() => {
-  classifyBills();
-}, [classifyBills]);
+  if (energySums && parameters?.length) {
+    classifyBills();
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [energySums, parameters, energyDataErrors, selectedBills, customers, customerBalance, startDate, endDate]);
 
   useEffect(() => {
     fetchParameters();
@@ -671,6 +717,52 @@ const handleRemoveBill = (customerId: number | string) => {
   );
   setFailedBills((prev) =>
     prev.filter((b) => String(b.customerId) !== String(customerId))
+  );
+};
+
+// Handle interest rate percentage change
+const handleInterestRateChange = (customerId: string, newRatePercent: number) => {
+  // Find the bill first to get outstanding balance
+  const bill = successfulBills.find((b) => b.customerId === customerId);
+  if (!bill) return;
+
+  const rateDecimal = newRatePercent / 100;
+  const newInterest = bill.outstanding * rateDecimal;
+
+  // Update all states in batch
+  setCustomerInterestRates((prev) => ({
+    ...prev,
+    [customerId]: newRatePercent,
+  }));
+
+  setInterestAmounts((prev) => ({
+    ...prev,
+    [customerId]: newInterest,
+  }));
+
+  setSuccessfulBills((prev) =>
+    prev.map((b) =>
+      b.customerId === customerId
+        ? { ...b, interest: newInterest, interestRatePercent: newRatePercent }
+        : b
+    )
+  );
+};
+
+// Handle interest amount change
+const handleInterestChange = (customerId: string, newInterest: number) => {
+  setInterestAmounts((prev) => ({
+    ...prev,
+    [customerId]: newInterest,
+  }));
+
+  // Update the successful bills array with new interest
+  setSuccessfulBills((prev) =>
+    prev.map((bill) =>
+      bill.customerId === customerId
+        ? { ...bill, interest: newInterest }
+        : bill
+    )
   );
 };
 
@@ -721,14 +813,16 @@ const handlePostBill = async (billData: any) => {
 
       const previousArrears = existingBills?.[0]?.arrears || 0;
 
-      const total_bill = Number(billData.total_revenue) + previousArrears;
+      const interestAmount = Number(billData.interest) || 0;
+      const total_bill = Number(billData.total_revenue) + (billData.arrears || previousArrears) + interestAmount;
 
       console.log("Saving Bill Data:", {
         ...billData,
         invoice_number: invoiceNumber,
         total_bill,
         pending_bill: total_bill,
-        arrears: previousArrears,
+        arrears: billData.arrears || previousArrears,
+        interest: interestAmount,
         savings: Number(billData.savings) || 0, // Ensure number value
         belco_revenue: Number(billData.belco_revenue) || 0, // Ensure number value
         greenlight_revenue: Number(billData.greenlight_revenue) || 0, // Ensure number value
@@ -742,7 +836,8 @@ const handlePostBill = async (billData: any) => {
             invoice_number: invoiceNumber,
             total_bill: total_bill,
             pending_bill: total_bill,
-            arrears: previousArrears,
+            arrears: billData.arrears || previousArrears,
+            interest: interestAmount,
             reconciliation_ids: [],
             // payment_allocations: [], // Initialize empty payment allocations
             status: "Pending",
@@ -783,12 +878,12 @@ const handlePostAllBills = async () => {
     // Only process successful bills
     const billsToProcess = successfulBills
       .map((bill) => {
-        const { customer, billResult, energy } = bill;
+        const { customer, billResult, energy, outstanding, interest } = bill;
         if (!customer) return null;
 
-        const previousArrears = customer.previousArrears || 0;
+        const interestAmount = interest || 0;
         const totalBillAmount =
-          Number(billResult.finalRevenue) + previousArrears;
+          Number(billResult.finalRevenue) + outstanding + interestAmount;
 
         return {
           customer_id: customer.id,
@@ -802,7 +897,8 @@ const handlePostAllBills = async () => {
           total_revenue: billResult.finalRevenue.toFixed(2),
           total_PTS: energy.production || 0,
           status: "Pending",
-          arrears: previousArrears,
+          arrears: outstanding,
+          interest: interestAmount.toFixed(2),
           total_bill: totalBillAmount,
           savings: billResult.savings.toFixed(2),
           belco_revenue: billResult.belcoRevenue.toFixed(2),
@@ -1132,8 +1228,10 @@ const handlePostAndEmailAllBills = async () => {
     // Only process successful bills
     const billsToProcess = successfulBills
       .map((bill) => {
-        const { customer, billResult, energy } = bill;
+        const { customer, billResult, energy, outstanding, interest } = bill;
         if (!customer) return null;
+
+        const interestAmount = interest || 0;
 
         return {
           customer_id: customer.id,
@@ -1147,6 +1245,8 @@ const handlePostAndEmailAllBills = async () => {
           total_PTS: energy.production || 0,
           status: "Pending",
           total_revenue: billResult.finalRevenue.toFixed(2),
+          arrears: outstanding,
+          interest: interestAmount.toFixed(2),
           savings: billResult.savings.toFixed(2),
           belco_revenue: billResult.belcoRevenue.toFixed(2),
           greenlight_revenue: billResult.greenlightRevenue.toFixed(2),
@@ -1242,7 +1342,7 @@ return (
                   <p className="text-center text-gray-500 py-8">No successful bills found</p>
                 ) : (
                   successfulBills.map((bill) => {
-                    const { customerId, customer, billResult, outstanding, energy } = bill;
+                    const { customerId, customer, billResult, outstanding, interest, interestRatePercent, energy } = bill;
 
                     return (
                       <div
@@ -1309,12 +1409,101 @@ return (
                         </div>
 
                         {/* Final Revenue */}
-                        <div className="bg-gradient-to-r from-green-100 to-blue-100 p-4 rounded-lg border-2 border-green-400 mb-2">
+                        <div className="bg-gradient-to-r from-green-100 to-blue-100 p-4 rounded-lg border-2 border-green-400 mb-3">
                           <div className="flex justify-between items-center">
                             <h4 className="text-lg font-bold text-gray-800">Final Revenue:</h4>
                             <span className="text-2xl font-bold text-green-700">
                               ${billResult.finalRevenue.toFixed(2)}
                             </span>
+                          </div>
+                        </div>
+
+                        {/* Overdue Balance Section */}
+                        <div className="bg-orange-50 p-3 rounded mb-2 border-l-4 border-orange-400">
+                          <div className="flex justify-between items-center">
+                            <h4 className="font-semibold text-gray-700">Overdue Balance:</h4>
+                            <span className="text-lg font-bold text-orange-600">
+                              ${outstanding.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Interest on Overdue Balance (Editable Rate & Amount) */}
+                        {outstanding > 0 && (
+                          <div className="bg-yellow-50 p-4 rounded mb-2 border-l-4 border-yellow-400">
+                            <h4 className="font-semibold text-gray-700 mb-3">Interest on Overdue</h4>
+
+                            {/* Interest Rate Input */}
+                            <div className="flex justify-between items-center mb-3">
+                              <label className="text-sm text-gray-600 font-medium">Interest Rate:</label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  max="100"
+                                  value={interestRatePercent || 0}
+                                  onChange={(e) => {
+                                    const value = parseFloat(e.target.value);
+                                    if (!isNaN(value)) {
+                                      handleInterestRateChange(customerId, value);
+                                    }
+                                  }}
+                                  className="w-20 px-2 py-1.5 text-right border border-yellow-400 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 font-semibold text-yellow-700"
+                                />
+                                <span className="text-sm text-gray-600 font-medium">%</span>
+                              </div>
+                            </div>
+
+                            {/* Interest Amount */}
+                            <div className="flex justify-between items-center pt-3 border-t border-yellow-200">
+                              <span className="text-sm text-gray-600 font-medium">Interest Amount:</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-500">$</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={interest || 0}
+                                  onChange={(e) => {
+                                    const value = parseFloat(e.target.value);
+                                    if (!isNaN(value)) {
+                                      handleInterestChange(customerId, value);
+                                    }
+                                  }}
+                                  className="w-24 px-2 py-1 text-right border border-yellow-400 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 font-bold text-yellow-700"
+                                />
+                              </div>
+                            </div>
+
+                            <p className="text-xs text-gray-500 italic mt-2">
+                              * Change the rate to auto-recalculate, or edit the amount manually
+                            </p>
+
+                            {/* Button to waive interest */}
+                            <button
+                              onClick={() => {
+                                handleInterestRateChange(customerId, 0);
+                              }}
+                              className="mt-3 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded text-sm font-medium transition"
+                            >
+                              Waive Interest (Set to $0)
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Total Amount Due */}
+                        <div className="bg-gradient-to-r from-red-100 to-orange-100 p-4 rounded-lg border-2 border-red-400">
+                          <div className="flex justify-between items-center">
+                            <h4 className="text-lg font-bold text-gray-800">Total Amount Due:</h4>
+                            <span className="text-2xl font-bold text-red-700">
+                              ${(billResult.finalRevenue + outstanding + (interest || 0)).toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="mt-2 text-xs text-gray-600">
+                            <p>Current Period: ${billResult.finalRevenue.toFixed(2)}</p>
+                            <p>Overdue: ${outstanding.toFixed(2)}</p>
+                            {outstanding > 0 && <p>Interest: ${(interest || 0).toFixed(2)}</p>}
                           </div>
                         </div>
                       </div>

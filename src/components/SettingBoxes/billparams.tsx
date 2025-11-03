@@ -43,9 +43,13 @@ const BillParams = () => {
         const fetchedParameters = data[0];
 
         setFormData({
-          belcodisc: fetchedParameters.belcodisc || "",
+          belcodisc: fetchedParameters.belcodisc
+            ? (parseFloat(fetchedParameters.belcodisc) * 100).toString()
+            : "",
           export_rate: fetchedParameters.export_rate || "",
-          interest_rate: fetchedParameters.interest_rate || "0",
+          interest_rate: fetchedParameters.interest_rate
+            ? (parseFloat(fetchedParameters.interest_rate) * 100).toString()
+            : "0",
         });
       }
 
@@ -102,9 +106,13 @@ const BillParams = () => {
         const { error: updateError } = await supabase
           .from("parameters")
           .update({
-            belcodisc: formData.belcodisc,
+            belcodisc: formData.belcodisc
+              ? (parseFloat(formData.belcodisc) / 100).toString()
+              : "0",
             export_rate: formData.export_rate,
-            interest_rate: formData.interest_rate || 0,
+            interest_rate: formData.interest_rate
+              ? (parseFloat(formData.interest_rate) / 100).toString()
+              : "0",
           })
           .eq("id", existingRecord.id);
 
@@ -116,9 +124,13 @@ const BillParams = () => {
           .from("parameters")
           .insert([
             {
-              belcodisc: formData.belcodisc,
+              belcodisc: formData.belcodisc
+                ? (parseFloat(formData.belcodisc) / 100).toString()
+                : "0",
               export_rate: formData.export_rate,
-              interest_rate: formData.interest_rate || 0,
+              interest_rate: formData.interest_rate
+                ? (parseFloat(formData.interest_rate) / 100).toString()
+                : "0",
             },
           ]);
 
@@ -173,14 +185,16 @@ const BillParams = () => {
                       <div className="mb-5.5 flex flex-col gap-5.5 sm:flex-row">
                         <div className="w-full sm:w-1/3">
                           <label className="mb-3 block font-medium text-dark">
-                            Belco Discount
+                            Belco Discount (OFF)
                           </label>
                           <div className="relative">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2">
-                              <FaDollarSign className="text-gray-500" />
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                              %
                             </span>
                             <p className="w-full rounded-lg bg-primary/[.07] py-3 pl-12 pr-4 text-dark">
-                              {parameter.belcodisc || "Set Belco Discount"}
+                              {parameter.belcodisc
+                                ? `${(parseFloat(String(parameter.belcodisc)) * 100).toFixed(1)}`
+                                : "Set Belco Discount"}
                             </p>
                           </div>
                         </div>
@@ -204,11 +218,13 @@ const BillParams = () => {
                             Interest Rate
                           </label>
                           <div className="relative">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2">
-                              <FaDollarSign className="text-gray-500" />
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                              %
                             </span>
                             <p className="w-full rounded-lg bg-primary/[.07] py-3 pl-12 pr-4 text-dark">
-                              {parameter.interest_rate || 0}
+                              {parameter.interest_rate
+                                ? (parseFloat(parameter.interest_rate) * 100).toFixed(1)
+                                : "0"}
                             </p>
                           </div>
                         </div>
@@ -235,22 +251,27 @@ const BillParams = () => {
                     <div className="mb-5.5 flex flex-col gap-5.5 sm:flex-row">
                       <div className="w-full sm:w-1/3">
                         <label className="mb-3 block font-medium text-dark">
-                          Belco Discount
+                          Belco Discount OFF (%)
                         </label>
                         <div className="relative">
-                          <span className="absolute left-4 top-1/2 -translate-y-1/2">
-                            <FaDollarSign className="text-gray-500" />
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                            %
                           </span>
                           <input
                             name="belcodisc"
                             type="number"
-                            step="0.01"
+                            step="0.1"
+                            min="0"
+                            max="100"
                             className="w-full rounded-lg border border-stroke py-3 pl-12 pr-4 text-dark focus:border-primary"
                             value={formData.belcodisc}
                             onChange={handleChange}
-                            placeholder="Set Belco Discount"
+                            placeholder="e.g., 25 for 25%"
                           />
                         </div>
+                        <p className="mt-1 text-xs text-gray-500">
+                          Enter as percentage (e.g., 25 for 25%)
+                        </p>
                       </div>
 
                       <div className="w-full sm:w-1/3">
@@ -275,22 +296,27 @@ const BillParams = () => {
 
                       <div className="w-full sm:w-1/3">
                         <label className="mb-3 block font-medium text-dark">
-                          Interest Rate
+                          Interest Rate (%)
                         </label>
                         <div className="relative">
-                          <span className="absolute left-4 top-1/2 -translate-y-1/2">
-                            <FaDollarSign className="text-gray-500" />
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+                            %
                           </span>
                           <input
                             name="interest_rate"
                             type="number"
-                            step="0.01"
+                            step="0.1"
+                            min="0"
+                            max="100"
                             className="w-full rounded-lg border border-stroke py-3 pl-12 pr-4 text-dark focus:border-primary"
                             value={formData.interest_rate}
                             onChange={handleChange}
-                            placeholder="Set Interest Rate"
+                            placeholder="e.g., 5 for 5%"
                           />
                         </div>
+                        <p className="mt-1 text-xs text-gray-500">
+                          Enter as percentage (e.g., 5 for 5%)
+                        </p>
                       </div>
                     </div>
 
