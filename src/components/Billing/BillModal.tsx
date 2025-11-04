@@ -1,9 +1,6 @@
 "use client";
 import html2pdf from "html2pdf.js";
-import { useMemo } from "react";
-
-import React, { useCallback, useEffect, useState } from "react";
-import { Dialog } from "@/components/ui/Dialog";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import { calculateBilling } from "@/utils/bill-calculate/billingutils";
 import { supabase } from "@/utils/supabase/browserClient";
 import { format } from "date-fns";
@@ -23,19 +20,11 @@ interface BillModalProps {
 
 interface Parameters {
   id: string;
-  fuelRate: number;
-  feedInPrice: number;
-  basePrice: number;
+  interest_rate: number;
   belcodisc: number;
-  ra_fee: number;
   export_rate: number;
-  message: string;
-  emailmsg: string;
-  tier1: number;
-  tier2: number;
-  tier3: number;
-  interest_rate?: number; // Monthly interest rate for overdue amounts
-  grace_period_days?: number; // Grace period before interest is applied
+  message?: string;
+  emailmsg?: string;
 }
 
 interface CustomerBalanceProp {
@@ -67,34 +56,30 @@ interface CustomerData {
   address?: string; // Ensure this is defined
   scaling_factor?: number;
   price?: number;
+  belco_rate?: number; // Belco rate from database
 }
 
-// Helper function to calculate interest on overdue amounts
-const calculateOverdueInterest = (
-  overdueAmount: number,
-  daysPastDue: number,
-  interestRate: number = 0.015, // Default 1.5% monthly interest
-  gracePeriodDays: number = 30, // Default 30-day grace period
-): number => {
-  if (overdueAmount <= 0 || daysPastDue <= gracePeriodDays) {
-    return 0; // No interest if amount is not overdue or within grace period
-  }
+// Enhanced error tracking interface
+interface EnergyDataError {
+  customerId: string;
+  errorType: 'API_ERROR' | 'ZERO_PRODUCTION' | 'NO_DATA' | 'INVALID_RESPONSE' | 'TOKEN_EXPIRED' | 'NETWORK_ERROR';
+  errorMessage: string;
+  httpStatus?: number;
+  timestamp: string;
+  needsReauthorization?: boolean;
+}
 
-  // Calculate months past due (after grace period)
-  const effectiveDaysPastDue = daysPastDue - gracePeriodDays;
-  const monthsPastDue = effectiveDaysPastDue / 30; // Approximate months
-
-  // Simple interest calculation: Principal × Rate × Time
-  const interest = overdueAmount * interestRate * monthsPastDue;
-
-  return parseFloat(interest.toFixed(2));
-};
-
-// Helper function to calculate days between two dates
-const calculateDaysBetween = (startDate: Date, endDate: Date): number => {
-  const timeDifference = endDate.getTime() - startDate.getTime();
-  return Math.ceil(timeDifference / (1000 * 3600 * 24));
-};
+interface EnergyDataResult {
+  customerId: string;
+  energySums?: {
+    Consumption: number;
+    FeedIn: number;
+    Production: number;
+    SelfConsumption: number;
+  };
+  error?: EnergyDataError;
+  hasError: boolean;
+}
 
 const BillModal: React.FC<BillModalProps> = ({
   selectedCustomers,
@@ -127,16 +112,34 @@ const BillModal: React.FC<BillModalProps> = ({
     };
   } | null>(null);
 
+  // Track energy data errors for better error handling
+  const [energyDataErrors, setEnergyDataErrors] = useState<{
+    [customerId: string]: EnergyDataError;
+  }>({});
+
   // State for manual overdue adjustments
   const [overdueAdjustments, setOverdueAdjustments] = useState<{
     [customerId: string]: number;
   }>({});
 
   const [showAdjustmentModal, setShowAdjustmentModal] = useState<string | null>(null);
+
+  // State for interest amounts (editable by user)
+  const [interestAmounts, setInterestAmounts] = useState<{
+    [customerId: string]: number;
+  }>({});
+
+  // State for interest rates per customer (editable by user in percentage)
+  const [customerInterestRates, setCustomerInterestRates] = useState<{
+    [customerId: string]: number;
+  }>({});
   // ADDED: classification + UI state
   const [activeTab, setActiveTab] = useState<"success" | "failed">("success");
   const [successfulBills, setSuccessfulBills] = useState<any[]>([]);
   const [failedBills, setFailedBills] = useState<any[]>([]);
+
+  // Track if we've shown the summary toast to avoid duplicates
+  const hasShownSummaryToast = useRef(false);
 
 
   const fetchParameters = useCallback(async () => {
@@ -161,10 +164,10 @@ const BillModal: React.FC<BillModalProps> = ({
         .in("customer_id", selectedCustomers);
       if (fetchError) throw fetchError;
       setCustomerBalance(data || []);
-      console.log(data);
+      console.log("Customer Balances:", data);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Error fetching parameters",
+        err instanceof Error ? err.message : "Error fetching customer balances",
       );
     }
   }, [selectedCustomers]);
@@ -215,8 +218,10 @@ const BillModal: React.FC<BillModalProps> = ({
     const formattedEndDate = format(new Date(endDate), "yyyy-MM-dd HH:mm:ss");
 
     try {
+      const errors: { [customerId: string]: EnergyDataError } = {};
+
       // Fetch energy data for each customer individually
-      const energyDataPromises = customerData.map(async (customer) => {
+      const energyDataPromises = customerData.map(async (customer): Promise<EnergyDataResult> => {
         let proxyUrl;
         let response;
 
@@ -246,27 +251,93 @@ const BillModal: React.FC<BillModalProps> = ({
 
           if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`HTTP error! Status: ${response.status}, Message: ${errorText}`);
+            const error: EnergyDataError = {
+              customerId: customer.id,
+              errorType: 'API_ERROR',
+              errorMessage: `HTTP ${response.status}: ${errorText}`,
+              httpStatus: response.status,
+              timestamp: new Date().toISOString(),
+            };
+            errors[customer.id] = error;
+
+            return {
+              customerId: customer.id,
+              hasError: true,
+              error,
+            };
           }
 
           const data = await response.json();
 
-          // Check for token expiration or API errors
+          // Check for token expiration
           if (data.tokenExpired) {
             console.warn(`Enphase token expired for customer ${customer.id}:`, data.message);
-            toast.warn(`Enphase authorization expired for ${customer.site_name || customer.id}. Please re-authorize this customer.`);
-          } else if (data.apiError) {
+
+            const error: EnergyDataError = {
+              customerId: customer.id,
+              errorType: 'TOKEN_EXPIRED',
+              errorMessage: data.message || 'Enphase authorization expired',
+              timestamp: new Date().toISOString(),
+              needsReauthorization: true,
+            };
+            errors[customer.id] = error;
+
+            return {
+              customerId: customer.id,
+              hasError: true,
+              error,
+            };
+          }
+
+          // Check for API errors
+          if (data.apiError) {
             console.warn(`Enphase API error for customer ${customer.id}:`, data.message);
-            toast.warn(`Enphase API issue for ${customer.site_name || customer.id}.`);
+
+            const error: EnergyDataError = {
+              customerId: customer.id,
+              errorType: 'API_ERROR',
+              errorMessage: data.message || data.error || 'Enphase API issue',
+              timestamp: new Date().toISOString(),
+            };
+            errors[customer.id] = error;
+
+            return {
+              customerId: customer.id,
+              hasError: true,
+              error,
+            };
           }
 
           // Validate the response structure
           if (!data || !data.energyDetails || !Array.isArray(data.energyDetails.meters)) {
-            throw new Error(`Invalid energy data structure for customer ${customer.id}: missing energyDetails or meters array`);
+            const error: EnergyDataError = {
+              customerId: customer.id,
+              errorType: 'INVALID_RESPONSE',
+              errorMessage: 'Invalid energy data structure: missing energyDetails or meters array',
+              timestamp: new Date().toISOString(),
+            };
+            errors[customer.id] = error;
+
+            return {
+              customerId: customer.id,
+              hasError: true,
+              error,
+            };
           }
 
           // Calculate energy sums for this specific customer
-          const customerEnergySums: { [key: string]: number } = {};
+          const customerEnergySums: {
+            Consumption: number;
+            FeedIn: number;
+            Production: number;
+            SelfConsumption: number;
+          } = {
+            Consumption: 0,
+            FeedIn: 0,
+            Production: 0,
+            SelfConsumption: 0,
+          };
+
           data.energyDetails.meters.forEach((meter: any) => {
             if (!meter.type || !Array.isArray(meter.values)) {
               console.warn(`Invalid meter data for customer ${customer.id}:`, meter);
@@ -274,19 +345,33 @@ const BillModal: React.FC<BillModalProps> = ({
             }
 
             try {
-              customerEnergySums[meter.type] =
-                meter.values.reduce(
-                  (sum: number, value: any) => {
-                    const numValue = parseFloat(value?.value || 0);
-                    return sum + (isNaN(numValue) ? 0 : numValue);
-                  },
-                  0,
-                ) / 1000; // Convert to kWh
+              const meterValue = meter.values.reduce(
+                (sum: number, value: any) => {
+                  const numValue = parseFloat(value?.value || 0);
+                  return sum + (isNaN(numValue) ? 0 : numValue);
+                },
+                0,
+              ) / 1000; // Convert to kWh
+
+              if (meter.type === 'Consumption') customerEnergySums.Consumption = meterValue;
+              else if (meter.type === 'FeedIn') customerEnergySums.FeedIn = meterValue;
+              else if (meter.type === 'Production') customerEnergySums.Production = meterValue;
+              else if (meter.type === 'SelfConsumption') customerEnergySums.SelfConsumption = meterValue;
             } catch (meterError) {
               console.error(`Error processing meter ${meter.type} for customer ${customer.id}:`, meterError);
-              customerEnergySums[meter.type] = 0;
             }
           });
+
+          // Check for zero production
+          if (customerEnergySums.Production === 0) {
+            const error: EnergyDataError = {
+              customerId: customer.id,
+              errorType: 'ZERO_PRODUCTION',
+              errorMessage: 'No solar production data detected for this billing period',
+              timestamp: new Date().toISOString(),
+            };
+            errors[customer.id] = error;
+          }
 
           console.log(
             `Computed Energy Sums for Customer ${customer.id}:`,
@@ -296,20 +381,24 @@ const BillModal: React.FC<BillModalProps> = ({
           return {
             customerId: customer.id,
             energySums: customerEnergySums,
+            hasError: false,
           };
 
         } catch (fetchError) {
           console.error(`Failed to fetch energy data for customer ${customer.id}:`, fetchError);
 
-          // Return default values to prevent complete failure
+          const error: EnergyDataError = {
+            customerId: customer.id,
+            errorType: 'NETWORK_ERROR',
+            errorMessage: fetchError instanceof Error ? fetchError.message : 'Unknown network error',
+            timestamp: new Date().toISOString(),
+          };
+          errors[customer.id] = error;
+
           return {
             customerId: customer.id,
-            energySums: {
-              Consumption: 500, // default fallback values
-              FeedIn: 50,
-              SelfConsumption: 0,
-              Production: 0,
-            },
+            hasError: true,
+            error,
           };
         }
       });
@@ -323,11 +412,65 @@ const BillModal: React.FC<BillModalProps> = ({
       } = {};
 
       energyDataResults.forEach((result) => {
-        individualCustomerEnergySums[result.customerId] = result.energySums;
+        if (result.energySums) {
+          individualCustomerEnergySums[result.customerId] = result.energySums;
+        }
       });
 
-      // Set the energy sums for individual customers
+      // Set the energy sums and errors
       setEnergySums(individualCustomerEnergySums);
+      setEnergyDataErrors(errors);
+
+      // Show summary toast for errors only once
+      if (!hasShownSummaryToast.current && Object.keys(errors).length > 0) {
+        const tokenExpiredErrors = Object.values(errors).filter(e => e.errorType === 'TOKEN_EXPIRED');
+        const apiErrors = Object.values(errors).filter(e => e.errorType === 'API_ERROR');
+        const otherErrors = Object.values(errors).filter(e =>
+          e.errorType !== 'TOKEN_EXPIRED' && e.errorType !== 'API_ERROR'
+        );
+
+        const messages: string[] = [];
+
+        // Helper function to get customer names
+        const getCustomerNames = (errorList: EnergyDataError[]) => {
+          return errorList.map(error => {
+            const customer = customerData.find(c => c.id === error.customerId);
+            return customer?.site_name || customer?.email || error.customerId;
+          });
+        };
+
+        if (tokenExpiredErrors.length > 0) {
+          const names = getCustomerNames(tokenExpiredErrors);
+          if (names.length <= 2) {
+            messages.push(`${names.join(', ')} need${names.length === 1 ? 's' : ''} re-authorization`);
+          } else {
+            messages.push(`${names.slice(0, 2).join(', ')} and ${names.length - 2} other${names.length - 2 > 1 ? 's' : ''} need re-authorization`);
+          }
+        }
+
+        if (apiErrors.length > 0) {
+          const names = getCustomerNames(apiErrors);
+          if (names.length <= 2) {
+            messages.push(`API error for ${names.join(', ')}`);
+          } else {
+            messages.push(`API errors for ${names.slice(0, 2).join(', ')} and ${names.length - 2} other${names.length - 2 > 1 ? 's' : ''}`);
+          }
+        }
+
+        if (otherErrors.length > 0) {
+          const names = getCustomerNames(otherErrors);
+          if (names.length <= 2) {
+            messages.push(`Issues with ${names.join(', ')}`);
+          } else {
+            messages.push(`Issues with ${names.slice(0, 2).join(', ')} and ${names.length - 2} other${names.length - 2 > 1 ? 's' : ''}`);
+          }
+        }
+
+        const toastMessage = `${messages.join('; ')}. Check the Failed Bills tab for details.`;
+        toast.warning(toastMessage, { autoClose: 6000 });
+        hasShownSummaryToast.current = true;
+      }
+
       setLoading(false);
     } catch (err) {
       console.error("Error in fetchEnergyData:", err);
@@ -338,21 +481,97 @@ const BillModal: React.FC<BillModalProps> = ({
     }
   }, [startDate, endDate, customerData]);
 
+  // Calculate interest for overdue balance
+  const calculateInterest = useCallback((overdueBalance: number): number => {
+    if (!parameters || parameters.length === 0) return 0;
+    const interestRate = parameters[0]?.interest_rate || 0;
+    return overdueBalance * interestRate;
+  }, [parameters]);
+
   // classify bills once energySums + parameters are ready
 const classifyBills = useCallback(() => {
   if (!energySums || !parameters?.length) return;
 
   const parameter = parameters[0];
+  const defaultInterestRatePercent = (parameter?.interest_rate || 0) * 100; // Convert 0.05 to 5
   const newSuccess: any[] = [];
   const newFailed: any[] = [];
+  const newInterestAmounts: { [customerId: string]: number } = {};
+  const newCustomerInterestRates: { [customerId: string]: number } = {};
 
   selectedBills.forEach((customerId) => {
     const customer = customers.find((c) => c.id === customerId);
     if (!customer) return;
 
     const sums = energySums?.[customerId];
+    const error = energyDataErrors[customerId];
+
+    // Priority 1: Check for explicit errors from API calls
+    if (error) {
+      let reason = '';
+      let issue = '';
+      let actionRequired = '';
+
+      switch (error.errorType) {
+        case 'TOKEN_EXPIRED':
+          reason = 'Enphase Token Expired';
+          issue = 'Customer needs re-authorization';
+          actionRequired = 'Re-authorize customer in Enphase portal';
+          break;
+        case 'API_ERROR':
+          reason = `API Error: ${error.errorMessage}`;
+          issue = 'Failed to retrieve energy data from API';
+          actionRequired = 'Check API credentials and service status';
+          break;
+        case 'ZERO_PRODUCTION':
+          reason = 'Zero Production Detected';
+          issue = 'No solar energy production during billing period';
+          actionRequired = 'Verify solar system is operational';
+          break;
+        case 'INVALID_RESPONSE':
+          reason = 'Invalid API Response';
+          issue = error.errorMessage;
+          actionRequired = 'Contact API provider or check data format';
+          break;
+        case 'NETWORK_ERROR':
+          reason = 'Network/Connection Error';
+          issue = error.errorMessage;
+          actionRequired = 'Check internet connection and retry';
+          break;
+        case 'NO_DATA':
+          reason = 'No Energy Data Available';
+          issue = 'API returned no data for billing period';
+          actionRequired = 'Verify date range and customer setup';
+          break;
+        default:
+          reason = 'Unknown Error';
+          issue = error.errorMessage;
+          actionRequired = 'Review error logs and customer configuration';
+      }
+
+      newFailed.push({
+        customerId,
+        customer,
+        reason,
+        issue,
+        actionRequired,
+        errorType: error.errorType,
+        errorDetails: error,
+        timestamp: error.timestamp,
+      });
+      return;
+    }
+
+    // Priority 2: Check for missing energy data
     if (!sums) {
-      newFailed.push({ customerId, customer, reason: "API Error / No Data" });
+      newFailed.push({
+        customerId,
+        customer,
+        reason: 'No Energy Data',
+        issue: 'Energy data not available for this customer',
+        actionRequired: 'Verify customer API configuration and retry',
+        errorType: 'NO_DATA',
+      });
       return;
     }
 
@@ -361,67 +580,118 @@ const classifyBills = useCallback(() => {
     const exportVal = sums.FeedIn ?? 0;
     const selfCons = sums.SelfConsumption ?? 0;
 
+    // Priority 3: Check for zero production (if not already caught by error)
     if (production === 0) {
-      newFailed.push({ customerId, customer, reason: "Zero Production" });
-      return;
-    }
-
-    const billResult = calculateBilling({
-      energyConsumed: consumption,
-      energyExported: exportVal,
-      selfConsumption: selfCons,
-      totalProduction: production,
-      startDate: new Date(startDate || ""),
-      endDate: new Date(endDate || ""),
-      fuelRate: parameter?.fuelRate,
-      basePrice: parameter?.basePrice,
-      feedInPrice: parameter?.feedInPrice,
-      belcodisc: parameter?.belcodisc,
-      ra_fee: parameter?.ra_fee,
-      export_rate: parameter?.export_rate,
-      tier1: parameter?.tier1,
-      tier2: parameter?.tier2,
-      tier3: parameter?.tier3,
-      scaling: customer?.scaling_factor,
-      price: customer?.price,
-      fixedFeeSaving: 54.37,
-    });
-
-    if (
-      !billResult ||
-      [billResult.finalRevenue, billResult.belcoPerKwh].some(
-        (v) => !isFinite(v)
-      )
-    ) {
       newFailed.push({
         customerId,
         customer,
-        reason: "Invalid Billing Data",
+        reason: 'Zero Production',
+        issue: 'No solar energy production during billing period',
+        actionRequired: 'Check if solar panels are functioning properly',
+        errorType: 'ZERO_PRODUCTION',
+        energy: { consumption, production, feedIn: exportVal, selfConsumption: selfCons },
       });
       return;
     }
 
+    // Priority 4: Attempt to calculate billing
+    let billResult;
+    try {
+      billResult = calculateBilling({
+        energyConsumed: consumption,
+        energyExported: exportVal,
+        selfConsumption: selfCons,
+        totalProduction: production,
+        startDate: new Date(startDate || ""),
+        endDate: new Date(endDate || ""),
+        belcodisc: parameter?.belcodisc || 0,
+        export_rate: parameter?.export_rate || 0,
+        price: customer?.price || 0,
+        belcoRate: customer?.belco_rate || 0,
+        scaling: customer?.scaling_factor || 1.0,
+      });
+    } catch (calcError) {
+      newFailed.push({
+        customerId,
+        customer,
+        reason: 'Billing Calculation Failed',
+        issue: calcError instanceof Error ? calcError.message : 'Unknown calculation error',
+        actionRequired: 'Review customer rates and billing parameters',
+        errorType: 'INVALID_RESPONSE',
+        energy: { consumption, production, feedIn: exportVal, selfConsumption: selfCons },
+      });
+      return;
+    }
+
+    // Priority 5: Validate billing results
+    if (
+      !billResult ||
+      isNaN(billResult.finalRevenue) ||
+      !isFinite(billResult.finalRevenue) ||
+      isNaN(billResult.effectiveRate) ||
+      !isFinite(billResult.effectiveRate)
+    ) {
+      newFailed.push({
+        customerId,
+        customer,
+        reason: 'Invalid Billing Data',
+        issue: 'Calculation resulted in invalid values (NaN or Infinity)',
+        actionRequired: 'Review customer pricing parameters and energy data',
+        errorType: 'INVALID_RESPONSE',
+        energy: { consumption, production, feedIn: exportVal, selfConsumption: selfCons },
+      });
+      return;
+    }
+
+    // Success: Bill can be processed
     const balEntry = customerBalance.find(
       (b) => b.customer_id === customerId
     );
     const outstanding = balEntry?.current_balance ?? 0;
+
+    // Use existing interest rate if already set, otherwise use default from parameters
+    if (!(customerId in customerInterestRates)) {
+      newCustomerInterestRates[customerId] = defaultInterestRatePercent;
+    } else {
+      newCustomerInterestRates[customerId] = customerInterestRates[customerId];
+    }
+
+    // Calculate interest using customer-specific rate percentage
+    const customerRatePercent = newCustomerInterestRates[customerId];
+    const customerRateDecimal = customerRatePercent / 100;
+    const calculatedInterest = outstanding * customerRateDecimal;
+
+    // Use existing interest amount if already set, otherwise use calculated
+    if (!(customerId in interestAmounts)) {
+      newInterestAmounts[customerId] = calculatedInterest;
+    } else {
+      newInterestAmounts[customerId] = interestAmounts[customerId];
+    }
 
     newSuccess.push({
       customerId,
       customer,
       billResult,
       outstanding,
+      interest: newInterestAmounts[customerId],
+      interestRatePercent: newCustomerInterestRates[customerId],
+      energy: { consumption, production, feedIn: exportVal, selfConsumption: selfCons }
     });
   });
 
   setSuccessfulBills(newSuccess);
   setFailedBills(newFailed);
-}, [energySums, parameters, selectedBills, customers, customerBalance, startDate, endDate]);
+  setInterestAmounts(newInterestAmounts);
+  setCustomerInterestRates(newCustomerInterestRates);
+}, [energySums, energyDataErrors, parameters, selectedBills, customers, customerBalance, startDate, endDate, calculateInterest, interestAmounts, customerInterestRates]);
 
-// auto-classify whenever inputs change
+// auto-classify only when energy data changes, not when interest values change
 useEffect(() => {
-  classifyBills();
-}, [classifyBills]);
+  if (energySums && parameters?.length) {
+    classifyBills();
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [energySums, parameters, energyDataErrors, selectedBills, customers, customerBalance, startDate, endDate]);
 
   useEffect(() => {
     fetchParameters();
@@ -436,244 +706,6 @@ useEffect(() => {
     }
   }, [customerData, fetchEnergyData]);
 
-  const calculateSummary = () => {
-    return selectedCustomers.reduce(
-      (summary, customerId) => {
-        const customer = customers.find((c) => c.id === customerId);
-        if (!customer) return summary;
-        const parameter = parameters[0];
-
-        const customerEnergySums = energySums?.[customerId] || {};
-
-        console.log(
-          `Energy Sums for Customer 👀👀👀🐱‍🚀👀 ${customerId}:`,
-          customerEnergySums,
-        );
-
-        // Calculate solar consumption (self consumption + export) instead of total house consumption
-        const exportValue =
-          typeof customerEnergySums?.FeedIn === "number"
-            ? customerEnergySums.FeedIn
-            : 50;
-        const selfConsumptionValue =
-          typeof customerEnergySums?.SelfConsumption === "number"
-            ? customerEnergySums.SelfConsumption
-            : 0;
-        const productionValue =
-          typeof customerEnergySums?.Production === "number"
-            ? customerEnergySums.Production
-            : 0;
-
-        // Use total consumption from the API (not just solar consumption)
-        const consumptionValue = typeof customerEnergySums?.Consumption === "number" ?
-          customerEnergySums.Consumption : 500;
-
-        const customerBalanceEntry = customerBalance.find(
-          (balance) => balance.customer_id === customerId,
-        );
-
-        console.log(`Customer Energy Data - ID: ${customerId}`);
-        console.log("Total Consumption:", consumptionValue);
-        console.log("FeedIn (Export):", exportValue);
-        console.log("Self Consumption:", selfConsumptionValue);
-        console.log("Total Production:", productionValue);
-
-        let billResult;
-        try {
-          // Validate required parameters before billing calculation
-          if (!parameter) {
-            throw new Error(`Missing billing parameters for customer ${customer?.site_name || customerId}`);
-          }
-
-          const requiredParams = ['fuelRate', 'basePrice', 'feedInPrice', 'belcodisc', 'ra_fee', 'export_rate', 'tier1', 'tier2', 'tier3'] as const;
-          const missingParams = requiredParams.filter(param => typeof parameter[param as keyof Parameters] !== 'number');
-
-          if (missingParams.length > 0) {
-            throw new Error(`Missing required parameters for ${customer?.site_name || customerId}: ${missingParams.join(', ')}`);
-          }
-
-          // Validate energy values
-          if (consumptionValue < 0 || exportValue < 0 || selfConsumptionValue < 0 || productionValue < 0) {
-            throw new Error(`Invalid energy values for customer ${customer?.site_name || customerId}: negative values not allowed`);
-          }
-
-          // Validate dates
-          if (!startDate || !endDate) {
-            throw new Error(`Invalid billing period for customer ${customer?.site_name || customerId}: start and end dates required`);
-          }
-
-          const startDateObj = new Date(startDate);
-          const endDateObj = new Date(endDate);
-
-          if (isNaN(startDateObj.getTime()) || isNaN(endDateObj.getTime())) {
-            throw new Error(`Invalid date format for customer ${customer?.site_name || customerId}`);
-          }
-
-          if (startDateObj >= endDateObj) {
-            throw new Error(`Invalid billing period for customer ${customer?.site_name || customerId}: end date must be after start date`);
-          }
-
-          billResult = calculateBilling({
-            energyConsumed: consumptionValue,
-            energyExported: exportValue,
-            selfConsumption: selfConsumptionValue,
-            totalProduction: productionValue,
-            startDate: startDateObj,
-            endDate: endDateObj,
-            fuelRate: parameter.fuelRate,
-            basePrice: parameter.basePrice,
-            feedInPrice: parameter.feedInPrice,
-            belcodisc: parameter.belcodisc,
-            ra_fee: parameter.ra_fee,
-            export_rate: parameter.export_rate,
-            tier1: parameter.tier1,
-            tier2: parameter.tier2,
-            tier3: parameter.tier3,
-            scaling: customer?.scaling_factor || 1.0,
-            price: customer?.price || parameter.basePrice,
-            fixedFeeSaving: 54.37,
-          });
-
-          // Validate billing result
-          if (!billResult || typeof billResult.finalRevenue !== 'number' || isNaN(billResult.finalRevenue)) {
-            throw new Error(`Invalid billing calculation result for customer ${customer?.site_name || customerId}`);
-          }
-
-        } catch (billError) {
-          console.error(`Billing calculation error for customer ${customer?.site_name || customerId}:`, billError);
-
-          // Return a default bill result to prevent crashes
-          billResult = {
-            totalpts: consumptionValue,
-            numberOfDays: 30,
-            belcoPerKwh: 0,
-            belcoTotal: 0,
-            finalRevenue: 0,
-            belcoRevenue: 0,
-            greenlightRevenue: 0,
-            savings: 0,
-          };
-        }
-
-        console.log(
-          `Billing Calculation Result for Customer ${customerId}:`,
-        );
-        console.log("Final Revenue:", billResult.finalRevenue);
-        console.log("Total PTS:", billResult.totalpts);
-        console.log("Belco Total:", billResult.belcoTotal);
-        console.log("Belco Per kWh:", billResult.belcoPerKwh);
-        console.log("GreenLight Revenue:", billResult.greenlightRevenue);
-        console.log("Belco Revenue:", billResult.belcoRevenue);
-        console.log("Savings:", billResult.savings);
-
-        const outstandingBalance = (customerBalanceEntry?.current_balance || 0) + (overdueAdjustments[customerId] || 0);
-
-        summary.totalRevenue += billResult.finalRevenue;
-        summary.totalPts += consumptionValue || 0;
-        summary.totalOutstanding += outstandingBalance;
-        summary.totalBelcoRevenue += billResult.belcoRevenue;
-        summary.totalGreenlightRevenue += billResult.greenlightRevenue;
-        summary.totalSavings += billResult.savings;
-
-        return summary;
-      },
-      {
-        totalCost: 0,
-        totalRevenue: 0,
-        totalPts: 0,
-        totalOutstanding: 0,
-        totalBelcoRevenue: 0,
-        totalGreenlightRevenue: 0,
-        totalSavings: 0,
-      },
-    );
-  };
-
-  const summary = useMemo(() => {
-    return selectedBills.reduce(
-      (summary, customerId) => {
-        const customer = customers.find((c) => c.id === customerId);
-        if (!customer) return summary;
-        const parameter = parameters[0];
-
-        const customerEnergySums = energySums?.[customerId] || {};
-
-        // Calculate solar consumption (self consumption + export) instead of total house consumption
-        const exportValue =
-          typeof customerEnergySums?.FeedIn === "number"
-            ? customerEnergySums.FeedIn
-            : 50;
-        const selfConsumptionValue =
-          typeof customerEnergySums?.SelfConsumption === "number"
-            ? customerEnergySums.SelfConsumption
-            : 0;
-        const productionValue =
-          typeof customerEnergySums?.Production === "number"
-            ? customerEnergySums.Production
-            : 0;
-
-        // Use total consumption from the API (not just solar consumption)
-        // This matches the C# implementation which uses item.consumption
-        const consumptionValue = typeof customerEnergySums?.Consumption === "number" ?
-          customerEnergySums.Consumption : 500;
-
-        const customerBalanceEntry = customerBalance.find(
-          (balance) => balance.customer_id === customerId,
-        );
-
-        console.log(`Customer Energy Data - ID: ${customerId}`);
-        console.log("Total Consumption:", consumptionValue);
-        console.log("FeedIn (Export):", exportValue);
-        console.log("Self Consumption:", selfConsumptionValue);
-        console.log("Total Production:", productionValue);
-
-        const billResult = calculateBilling({
-          energyConsumed: consumptionValue,
-          energyExported: exportValue,
-          selfConsumption: selfConsumptionValue,
-          totalProduction: productionValue, // Add this line
-
-          startDate: new Date(startDate || ""),
-          endDate: new Date(endDate || ""),
-          fuelRate: parameter?.fuelRate,
-          basePrice: parameter?.basePrice,
-          feedInPrice: parameter?.feedInPrice,
-          belcodisc: parameter?.belcodisc,
-          ra_fee: parameter?.ra_fee,
-          export_rate: parameter?.export_rate,
-          tier1: parameter?.tier1,
-          tier2: parameter?.tier2,
-          tier3: parameter?.tier3,
-          scaling: customer?.scaling_factor,
-          price: customer?.price,
-          fixedFeeSaving: 54.37,
-        });
-
-        const outstandingBalance = (customerBalanceEntry?.current_balance || 0) + (overdueAdjustments[customerId] || 0);
-
-        summary.totalRevenue += billResult.finalRevenue;
-        summary.totalPts += consumptionValue || 0;
-        summary.totalOutstanding += outstandingBalance;
-        summary.totalBelcoRevenue += billResult.belcoRevenue;
-        summary.totalGreenlightRevenue += billResult.greenlightRevenue;
-        summary.totalSavings += billResult.savings;
-
-        return summary;
-      },
-      {
-        totalCost: 0,
-        totalRevenue: 0,
-        totalPts: 0,
-        totalOutstanding: 0,
-        totalBelcoRevenue: 0,
-        totalGreenlightRevenue: 0,
-        totalSavings: 0,
-      },
-    );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBills, customers, energySums, parameters, customerBalance]);
-
-  // const summary = calculateSummary();
 
 // Type-safe fix for mixed string/number customer IDs
 const handleRemoveBill = (customerId: number | string) => {
@@ -688,97 +720,53 @@ const handleRemoveBill = (customerId: number | string) => {
   );
 };
 
+// Handle interest rate percentage change
+const handleInterestRateChange = (customerId: string, newRatePercent: number) => {
+  // Find the bill first to get outstanding balance
+  const bill = successfulBills.find((b) => b.customerId === customerId);
+  if (!bill) return;
 
-  // Apply manual adjustment to customer balance
-  const applyOverdueAdjustment = async (customerId: string, adjustmentAmount: number) => {
-    try {
-      console.log(`Applying overdue adjustment for customer ${customerId}: ${adjustmentAmount}`);
+  const rateDecimal = newRatePercent / 100;
+  const newInterest = bill.outstanding * rateDecimal;
 
-      // First get the current balance
-      const { data: currentBalance, error: fetchError } = await supabase
-        .from("customer_balances")
-        .select("current_balance")
-        .eq("customer_id", customerId)
-        .single();
+  // Update all states in batch
+  setCustomerInterestRates((prev) => ({
+    ...prev,
+    [customerId]: newRatePercent,
+  }));
 
-      console.log("Fetch result:", { currentBalance, fetchError });
+  setInterestAmounts((prev) => ({
+    ...prev,
+    [customerId]: newInterest,
+  }));
 
-      let newBalance = adjustmentAmount;
+  setSuccessfulBills((prev) =>
+    prev.map((b) =>
+      b.customerId === customerId
+        ? { ...b, interest: newInterest, interestRatePercent: newRatePercent }
+        : b
+    )
+  );
+};
 
-      if (fetchError) {
-        // If customer balance record doesn't exist, create it
-        if (fetchError.code === 'PGRST116') {
-          console.log("Customer balance record not found, creating new one");
+// Handle interest amount change
+const handleInterestChange = (customerId: string, newInterest: number) => {
+  setInterestAmounts((prev) => ({
+    ...prev,
+    [customerId]: newInterest,
+  }));
 
-          const { error: insertError } = await supabase
-            .from("customer_balances")
-            .insert({
-              customer_id: customerId,
-              current_balance: adjustmentAmount,
-              total_billed: 0,
-              total_paid: 0,
-            });
+  // Update the successful bills array with new interest
+  setSuccessfulBills((prev) =>
+    prev.map((bill) =>
+      bill.customerId === customerId
+        ? { ...bill, interest: newInterest }
+        : bill
+    )
+  );
+};
 
-          if (insertError) {
-            console.error("Insert error:", insertError);
-            throw insertError;
-          }
-
-          newBalance = adjustmentAmount;
-        } else {
-          console.error("Fetch error:", fetchError);
-          throw fetchError;
-        }
-      } else {
-        // Calculate new balance
-        newBalance = (currentBalance?.current_balance || 0) + adjustmentAmount;
-
-        // Update with the new balance
-        const { error: updateError } = await supabase
-          .from("customer_balances")
-          .update({
-            current_balance: newBalance,
-          })
-          .eq("customer_id", customerId);
-
-        if (updateError) {
-          console.error("Update error:", updateError);
-          throw updateError;
-        }
-      }
-
-      console.log(`Successfully updated balance to: ${newBalance}`);
-
-      // Update local state only after successful database update
-      setOverdueAdjustments((prev) => ({
-        ...prev,
-        [customerId]: (prev[customerId] || 0) + adjustmentAmount,
-      }));
-
-      setShowAdjustmentModal(null);
-      toast.success(`Overdue balance adjusted by $${adjustmentAmount.toFixed(2)}`);
-
-      // Refresh customer balance data
-      await fetchCustomerBalance();
-    } catch (error) {
-      console.error("Error applying overdue adjustment:", error);
-      console.error("Error type:", typeof error);
-      console.error("Error details:", JSON.stringify(error, null, 2));
-
-      let errorMessage = 'Unknown error';
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      } else if (error && typeof error === 'object') {
-        errorMessage = JSON.stringify(error);
-      } else if (typeof error === 'string') {
-        errorMessage = error;
-      }
-
-      toast.error(`Failed to apply overdue adjustment: ${errorMessage}`);
-    }
-  };
-
-  const generateInvoiceNumber = async (): Promise<string> => {
+const generateInvoiceNumber = async (): Promise<string> => {
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
     const { count, error } = await supabase
       .from("monthly_bills")
@@ -791,209 +779,139 @@ const handleRemoveBill = (customerId: number | string) => {
     return `INV-${today}-${sequentialNumber.toString().padStart(3, "0")}`;
   };
 
-  const handlePostBill = async (billData: any) => {
+const handlePostBill = async (billData: any) => {
     try {
+      console.log("handlePostBill called with data:", billData);
+
       if (
         !billData.site_name ||
         !billData.email ||
         !billData.billing_period_start ||
         !billData.billing_period_end ||
         !billData?.total_revenue ||
-        !billData?.total_cost ||
-        !billData?.energy_rate
+        !billData?.effective_rate
       ) {
-        toast.error("All fields are required.");
+        console.error("Validation failed. Missing fields:", {
+          site_name: !billData.site_name,
+          email: !billData.email,
+          billing_period_start: !billData.billing_period_start,
+          billing_period_end: !billData.billing_period_end,
+          total_revenue: !billData?.total_revenue,
+          effective_rate: !billData?.effective_rate,
+        });
+        toast.error("All required fields must be provided.");
         return false;
       }
 
       const invoiceNumber = await generateInvoiceNumber();
 
-      const { data: existingBills, error: fetchError } = await supabase
-        .from("monthly_bills")
-        .select("id, arrears")
-        .eq("site_name", billData.site_name)
-        .eq("email", billData.email)
-        .eq("billing_period_start", billData.billing_period_start)
-        .eq("billing_period_end", billData.billing_period_end);
-
-      if (fetchError) throw fetchError;
-
-      // if (existingBills?.length > 0) {
-      //   toast.error("A bill for this date already exists.");
-      //   return false;
-      // }
-
-      const previousArrears = existingBills?.[0]?.arrears || 0;
-
-      // Calculate interest on overdue amounts if any previous arrears exist
-      let interestAmount = 0;
-      if (previousArrears > 0 && parameters[0]) {
-        // Find the oldest unpaid bill date to calculate days overdue
-        const { data: oldestBill, error: oldestBillError } = await supabase
-          .from("monthly_bills")
-          .select("billing_period_end, created_at")
-          .eq("site_name", billData.site_name)
-          .eq("status", "Pending")
-          .order("created_at", { ascending: true })
-          .limit(1);
-
-        if (!oldestBillError && oldestBill?.[0]) {
-          const oldestBillDate = new Date(oldestBill[0].created_at || oldestBill[0].billing_period_end);
-          const currentDate = new Date();
-          const daysPastDue = calculateDaysBetween(oldestBillDate, currentDate);
-
-          interestAmount = calculateOverdueInterest(
-            previousArrears,
-            daysPastDue,
-            parameters[0].interest_rate || 0.015, // Use parameter or default 1.5%
-            parameters[0].grace_period_days || 30 // Use parameter or default 30 days
-          );
-        }
-      }
-
-      const total_bill = Number(billData.total_revenue) + previousArrears + interestAmount;
+      const interestAmount = Number(billData.interest) || 0;
+      const total_bill = Number(billData.total_bill) || Number(billData.total_revenue);
+      const pending_bill = Number(billData.pending_bill) || total_bill;
 
       console.log("Saving Bill Data:", {
-        ...billData,
-        invoice_number: invoiceNumber,
+        customer_id: billData.customer_id,
+        site_name: billData.site_name,
+        email: billData.email,
+        address: billData.address,
+        billing_period_start: billData.billing_period_start,
+        billing_period_end: billData.billing_period_end,
+        total_revenue: billData.total_revenue,
+        effective_rate: billData.effective_rate,
+        total_production: billData.total_production,
+        status: billData.status || "Pending",
+        interest: interestAmount,
         total_bill,
-        pending_bill: total_bill,
-        arrears: previousArrears,
-        interest_amount: interestAmount,
-        savings: Number(billData.savings) || 0, // Ensure number value
-        belco_revenue: Number(billData.belco_revenue) || 0, // Ensure number value
-        greenlight_revenue: Number(billData.greenlight_revenue) || 0, // Ensure number value
+        pending_bill,
+        paid_amount: Number(billData.paid_amount) || 0,
+        invoice_number: invoiceNumber,
+        reconciliation_ids: [],
       });
 
       const { data: insertedBills, error: insertError } = await supabase
         .from("monthly_bills")
         .insert([
           {
-            ...billData,
+            customer_id: billData.customer_id,
+            site_name: billData.site_name,
+            email: billData.email,
+            address: billData.address,
+            billing_period_start: billData.billing_period_start,
+            billing_period_end: billData.billing_period_end,
+            total_revenue: billData.total_revenue,
+            effective_rate: billData.effective_rate,
+            total_production: billData.total_production,
+            total_cost: 0, // Required by database - set to 0 for new bills
+            energy_rate: billData.effective_rate, // Also populate old field for compatibility
+            total_PTS: billData.total_production, // Also populate old field for compatibility
+            status: billData.status || "Pending",
+            interest: interestAmount,
+            total_bill,
+            pending_bill,
+            paid_amount: Number(billData.paid_amount) || 0,
             invoice_number: invoiceNumber,
-            total_bill: total_bill,
-            pending_bill: total_bill,
-            arrears: previousArrears,
-            interest_amount: interestAmount,
             reconciliation_ids: [],
-            // payment_allocations: [], // Initialize empty payment allocations
-            status: "Pending",
-            savings: billData.savings,
-            belco_revenue: billData.belco_revenue,
-            greenlight_revenue: billData.greenlight_revenue,
           },
         ])
-        .select("*"); // Ensure the inserted data is retrieved
+        .select("*");
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        console.error("Database insert error:", insertError);
+        toast.error(`Database error: ${insertError.message}`);
+        throw insertError;
+      }
 
       await new CustomerBalanceService().addNewBill(
         billData.customer_id,
         total_bill,
       );
 
-      //  toast.success("Bill posted successfully!");
-
       console.log("Inserted Bill:", insertedBills?.[0]);
 
       return (
         insertedBills?.[0] ?? {
           invoice_number: invoiceNumber,
-          arrears: previousArrears,
         }
       );
     } catch (error) {
       console.error("Error handling bill:", error);
-      //  toast.error("Failed to post the bill.");
+      if (error instanceof Error) {
+        console.error("Error message:", error.message);
+        console.error("Error stack:", error.stack);
+      }
+      toast.error(`Failed to post bill: ${error instanceof Error ? error.message : "Unknown error"}`);
       return false;
     }
   };
 
-  const handlePostAllBills = async () => {
-    const parameter = parameters[0];
+const handlePostAllBills = async () => {
     toast.info("Processing...");
-    const billsToProcess = selectedCustomers
-      .map((customerId) => {
-        const customer = customers.find((c) => c.id === customerId); // Fetching from customerData
+
+    // Only process successful bills
+    const billsToProcess = successfulBills
+      .map((bill) => {
+        const { customer, billResult, energy, outstanding, interest } = bill;
         if (!customer) return null;
 
-        const customerEnergySums = energySums?.[customerId] || {};
-
-        // Calculate solar consumption (self consumption + export) instead of total house consumption
-        const exportValue =
-          typeof customerEnergySums?.FeedIn === "number"
-            ? customerEnergySums.FeedIn
-            : 50;
-        const selfConsumptionValue =
-          typeof customerEnergySums?.SelfConsumption === "number"
-            ? customerEnergySums.SelfConsumption
-            : 0;
-        const productionValue =
-          typeof customerEnergySums?.Production === "number"
-            ? customerEnergySums.Production
-            : 0;
-
-        // Use total consumption from the API (not just solar consumption)
-        // This matches the C# implementation which uses item.consumption
-        const consumptionValue = typeof customerEnergySums?.Consumption === "number" ?
-          customerEnergySums.Consumption : 500;
-
-        const billResult = calculateBilling({
-          energyConsumed: consumptionValue,
-          energyExported: exportValue,
-          selfConsumption: selfConsumptionValue,
-          totalProduction: productionValue, // Add this line
-
-          startDate: new Date(startDate || ""),
-          endDate: new Date(endDate || ""),
-          fuelRate: parameter?.fuelRate,
-          basePrice: parameter?.basePrice,
-          feedInPrice: parameter?.feedInPrice,
-          belcodisc: parameter?.belcodisc,
-          ra_fee: parameter?.ra_fee,
-          export_rate: parameter?.export_rate,
-          tier1: parameter?.tier1,
-          tier2: parameter?.tier2,
-          tier3: parameter?.tier3,
-          scaling: customer?.scaling_factor,
-          price: customer?.price,
-          fixedFeeSaving: 54.37,
-        });
-        // Validation for empty fields
-        if (
-          !customer?.site_name ||
-          !customer?.email ||
-          !startDate ||
-          !endDate ||
-          !billResult.finalRevenue ||
-          !billResult.belcoTotal ||
-          !billResult.belcoPerKwh
-        ) {
-          // toast.error(   `Missing required data for customer ${customer?.site_name}`, );
-          return null; // Skip this bill if any required data is missing
-        }
-        const previousArrears = customer.previousArrears || 0;
+        const interestAmount = interest || 0;
         const totalBillAmount =
-          Number(billResult.finalRevenue) + previousArrears;
+          Number(billResult.finalRevenue) + outstanding + interestAmount;
 
         return {
           customer_id: customer.id,
-          site_name: customer.site_name || "N/A", // Kept original reference
-          email: customer.email || "N/A", // Kept original reference
-          address: customer.address || "N/A", // Kept original reference
+          site_name: customer.site_name || "N/A",
+          email: customer.email || "N/A",
+          address: customer.address || "N/A",
           billing_period_start: startDate,
           billing_period_end: endDate,
-          total_cost: billResult.belcoTotal.toFixed(2),
-          energy_rate: billResult.belcoPerKwh.toFixed(2),
           total_revenue: billResult.finalRevenue.toFixed(2),
-          total_PTS: consumptionValue || 666999,
+          effective_rate: billResult.effectiveRate.toFixed(3),
+          total_production: energy.production || 0,
           status: "Pending",
-          arrears: previousArrears, // Include the arrears from previous bills
-          total_bill: totalBillAmount, // Total amount including arrears
-          // Include the additional fields
-          savings: billResult.savings.toFixed(2),
-          belco_revenue: billResult.belcoRevenue.toFixed(2),
-          greenlight_revenue: billResult.greenlightRevenue.toFixed(2),
+          interest: interestAmount.toFixed(2),
+          total_bill: totalBillAmount,
+          pending_bill: totalBillAmount,
+          paid_amount: 0,
         };
       })
       .filter(Boolean);
@@ -1054,20 +972,13 @@ const handleRemoveBill = (customerId: number | string) => {
     onClose();
   };
 
-  const handleEmailBill = async (billData: any) => {
+const handleEmailBill = async (billData: any) => {
     setStatus("Processing...");
 
     try {
-      // toast.info("Posting bill...");
-
-      // ✅ First, post the bill and retrieve the updated data
-      const updatedBillData = await handlePostBill(billData);
-      console.log("updatedbill", updatedBillData);
-
-      if (!updatedBillData || !updatedBillData.invoice_number) {
-        // toast.error("Failed to post bill. Invoice not sent.");
-        return;
-      }
+      // Generate temporary invoice number for email (without posting to DB)
+      const tempInvoiceNumber = await generateInvoiceNumber();
+      console.log("Generated temp invoice number for email:", tempInvoiceNumber);
 
       const { data: customerBalanceData, error: balanceError } = await supabase
         .from("customer_balances")
@@ -1081,41 +992,17 @@ const handleRemoveBill = (customerId: number | string) => {
         return;
       }
 
-      // ✅ Extract `overdueBalance`
-      const overdueBalance =
-        (customerBalanceData?.current_balance || 0) -
-        (billData?.total_revenue || 0);
+      // ✅ Extract `overdueBalance` - current_balance is already the overdue amount
+      const overdueBalance = customerBalanceData?.current_balance || 0;
 
-      // ✅ Calculate interest on overdue amounts
-      let interestAmount = 0;
-      if (overdueBalance > 0 && parameters[0]) {
-        // Find the oldest unpaid bill date to calculate days overdue
-        const { data: oldestBill, error: oldestBillError } = await supabase
-          .from("monthly_bills")
-          .select("billing_period_end, created_at")
-          .eq("site_name", billData.site_name)
-          .eq("status", "Pending")
-          .order("created_at", { ascending: true })
-          .limit(1);
-
-        if (!oldestBillError && oldestBill?.[0]) {
-          const oldestBillDate = new Date(oldestBill[0].created_at || oldestBill[0].billing_period_end);
-          const currentDate = new Date();
-          const daysPastDue = calculateDaysBetween(oldestBillDate, currentDate);
-
-          interestAmount = calculateOverdueInterest(
-            overdueBalance,
-            daysPastDue,
-            parameters[0].interest_rate || 0.015, // Use parameter or default 1.5%
-            parameters[0].grace_period_days || 30 // Use parameter or default 30 days
-          );
-        }
-      }
-
-      // ✅ Compute `balanceDue` including interest
+      // ✅ Calculate interest and total balance
+      const interestAmount = parseFloat(billData.interest) || 0;
       const balanceDue = parseFloat(billData.total_revenue) + overdueBalance + interestAmount;
 
       // toast.info("Generating invoice PDF...");
+
+      // ✅ Use effective rate from billData (already calculated by billingutils)
+      const effectiveRate = billData.effective_rate || "0.000";
 
       // ✅ Fetch the message separately from `parameters`
       const message =
@@ -1144,14 +1031,10 @@ const handleRemoveBill = (customerId: number | string) => {
          <p style="color: black;">Best regards,<br>Greenlight Energy <br>billing@greenlightenergy.bm <br>Phone: 1 (441) 705 3033</p>`;
       console.log(Emailmessage);
 
-      // Display the generated email message
+      // Use total_production
+      const totalProduction = billData.total_production || 0;
 
-      // ✅ Calculate effective rate from the billing result
-      const effectiveRate = billData.total_revenue > 0 && billData.total_PTS > 0
-        ? (parseFloat(billData.total_revenue) / billData.total_PTS).toFixed(3)
-        : "0.000";
-
-      // ✅ Generate Invoice HTML Template
+      // ✅ Generate Invoice HTML Template (Updated to include new fields and remove unnecessary headings)
       const invoiceHTML = `
   <div
     class="mx-auto h-[297mm] w-full max-w-[210mm] border border-gray-300 bg-white px-8 pb-12">
@@ -1170,7 +1053,6 @@ const handleRemoveBill = (customerId: number | string) => {
     <!-- Recipient and Invoice Info -->
     <section class="mb-26 mt-9">
       <div class="flex items-center justify-between pb-2">
-        <h2 class="text-md text-black">RECIPIENT</h2>
         <div class="pr-3 text-2xl font-semibold text-black">INVOICE</div>
       </div>
 
@@ -1188,60 +1070,59 @@ const handleRemoveBill = (customerId: number | string) => {
             <td class="pr-4 text-sm font-semibold text-black">Address:</td>
             <td class="text-xs">${billData.address || "N/A"}</td>
             <td class="pr-4 text-sm font-semibold text-black">Invoice Number:</td>
-            <td class="text-xs">${updatedBillData.invoice_number}</td>
+            <td class="text-xs">${tempInvoiceNumber}</td>
             <td class="pr-4 text-sm font-semibold text-black">Effective Rate:</td>
-            <td class="text-xs">$${effectiveRate}/kWh</td>
+            <td class="text-xs">${effectiveRate}</td>
           </tr>
         </tbody>
       </table>
     </section>
 
     <!-- Billing Details -->
-    <table class="mb-20 w-full text-left text-sm">
+    <table class="mb-10 w-full text-left text-sm">
       <thead class="border-b-2 border-green-300 text-gray-700">
         <tr>
           <th class="p-3 text-sm">Period Start</th>
           <th class="p-3 text-sm">Period End</th>
-          <th class="p-3 text-sm">Description</th>
-          <th class="p-3 text-sm">Solar Energy (kWh)</th>
+          <th class="p-3 text-sm">Production (kWh)</th>
           <th class="p-3 text-sm">Effective Rate</th>
-          <th class="p-3 text-sm">Total</th>
+          <th class="p-3 text-sm">Revenue</th>
         </tr>
       </thead>
       <tbody>
         <tr>
           <td class="p-3 text-xs text-gray-600">${billData.billing_period_start}</td>
           <td class="p-3 text-xs text-gray-600">${billData.billing_period_end}</td>
-          <td class="p-3 text-xs text-gray-600">Solar Energy Consumption</td>
-          <td class="p-3 text-xs text-gray-600">${billData.total_PTS.toFixed(2)}</td>
-          <td class="p-3 text-xs text-gray-600">$${effectiveRate}/kWh</td>
-          <td class="p-3 text-xs text-gray-600">$ ${billData.total_revenue}</td>
+          <td class="p-3 text-xs text-gray-600">${totalProduction.toFixed(2)}</td>
+          <td class="p-3 text-xs text-gray-600">${effectiveRate}</td>
+          <td class="p-3 text-xs text-gray-600">$${billData.total_revenue}</td>
         </tr>
       </tbody>
     </table>
 
-    
 
-    <!-- Balance Due and Overdue Balance -->
+
+    <!-- Balance Summary -->
     <section class="mb-6 space-y-6 text-right">
       <div class="flex w-full justify-end text-sm font-semibold text-gray-800">
-        <p>TOTAL PERIOD BALANCE</p>
+        <p>Revenue</p>
         <span class="ml-20 w-20 text-black">$ ${billData.total_revenue}</span>
       </div>
 
       <div class="flex w-full justify-end text-sm font-semibold text-gray-800">
-        <p> OVERDUE BALANCE</p>
+        <p>Balance (Overdue)</p>
         <span class="ml-20 w-20 text-black">$ ${overdueBalance.toFixed(2)}</span>
       </div>
 
       ${interestAmount > 0 ? `
-      <div class="flex w-full justify-end text-sm font-semibold text-orange-600">
-        <p> INTEREST ON OVERDUE</p>
-        <span class="ml-20 w-20">$ ${interestAmount.toFixed(2)}</span>
-      </div>` : ''}
+      <div class="flex w-full justify-end text-sm font-semibold text-gray-800">
+        <p>Interest</p>
+        <span class="ml-20 w-20 text-black">$ ${interestAmount.toFixed(2)}</span>
+      </div>
+      ` : ''}
 
       <div class="flex w-full justify-end text-sm font-semibold text-red-600">
-        <p> BALANCE DUE</p>
+        <p>Total Balance</p>
         <span class="ml-20 w-20">$ ${balanceDue.toFixed(2)}</span>
       </div>
     </section>
@@ -1341,81 +1222,37 @@ const handleRemoveBill = (customerId: number | string) => {
             attachment: pdfBase64, // Sending Base64 encoded PDF
           }),
         });
+
+        // Check email API response
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("Email API error:", errorText);
+          throw new Error(`Failed to send email: ${response.status} - ${errorText}`);
+        }
+
+        const emailResult = await response.json();
+        console.log("Email sent successfully:", emailResult);
+        toast.success(`Email sent to ${billData.site_name}`);
       };
     } catch (error) {
       console.error("[ERROR] Failed to process bill or send email:", error);
-      toast.error("An error occurred. Please try again.");
+      toast.error(`Failed to send email: ${error instanceof Error ? error.message : "Unknown error"}`);
+      throw error; // Re-throw to be caught by handlePostAndEmailAllBills
     }
   };
 
-  const handlePostAndEmailAllBills = async () => {
+const handlePostAndEmailAllBills = async () => {
     const toastID = toast.info("Processing...");
-    const parameter = parameters[0]; // Using the first parameter from the parameters list
 
-    // Process bills for selected customers
-    const billsToProcess = selectedCustomers
-      .map((customerId) => {
-        const customer = customers.find((c) => c.id === customerId); // Fetching customer data
-        if (!customer) return null; // If no customer found, skip it
+    // Only process successful bills
+    const billsToProcess = successfulBills
+      .map((bill) => {
+        const { customer, billResult, energy, outstanding, interest } = bill;
+        if (!customer) return null;
 
-        const customerEnergySums = energySums?.[customerId] || {}; // Fetch energy sums for the customer
-
-        // Calculate solar consumption (self consumption + export) instead of total house consumption
-        const exportValue =
-          typeof customerEnergySums?.FeedIn === "number"
-            ? customerEnergySums.FeedIn
-            : 50;
-        const selfConsumptionValue =
-          typeof customerEnergySums?.SelfConsumption === "number"
-            ? customerEnergySums.SelfConsumption
-            : 0;
-        const productionValue =
-          typeof customerEnergySums?.Production === "number"
-            ? customerEnergySums.Production
-            : 0;
-
-        // Use total consumption from the API (not just solar consumption)
-        // This matches the C# implementation which uses item.consumption
-        const consumptionValue = typeof customerEnergySums?.Consumption === "number" ?
-          customerEnergySums.Consumption : 500;
-
-        // Calculate the bill for this customer
-        const billResult = calculateBilling({
-          energyConsumed: consumptionValue,
-          energyExported: exportValue,
-          selfConsumption: selfConsumptionValue,
-          totalProduction: productionValue, // Add this line
-
-          startDate: new Date(startDate || ""),
-          endDate: new Date(endDate || ""),
-          fuelRate: parameter?.fuelRate,
-          basePrice: parameter?.basePrice,
-          feedInPrice: parameter?.feedInPrice,
-          belcodisc: parameter?.belcodisc,
-          ra_fee: parameter?.ra_fee,
-          export_rate: parameter?.export_rate,
-          tier1: parameter?.tier1,
-          tier2: parameter?.tier2,
-          tier3: parameter?.tier3,
-          scaling: customer?.scaling_factor,
-          price: customer?.price,
-          fixedFeeSaving: 54.37,
-        });
-        // Validate that necessary fields are present before proceeding
-        if (
-          !customer?.site_name ||
-          !customer?.email ||
-          !startDate ||
-          !endDate ||
-          !billResult.finalRevenue ||
-          !billResult.belcoTotal ||
-          !billResult.belcoPerKwh
-        ) {
-          toast.error(
-            `Missing required data for customer ${customer?.site_name}`,
-          );
-          return null; // Skip this bill if any required data is missing
-        }
+        const interestAmount = interest || 0;
+        const totalBillAmount =
+          Number(billResult.finalRevenue) + outstanding + interestAmount;
 
         return {
           customer_id: customer.id,
@@ -1424,17 +1261,17 @@ const handleRemoveBill = (customerId: number | string) => {
           address: customer.address || "N/A",
           billing_period_start: startDate,
           billing_period_end: endDate,
-          total_cost: billResult.belcoTotal.toFixed(2),
-          energy_rate: billResult.belcoPerKwh.toFixed(2),
-          total_PTS: consumptionValue || 666999,
+          total_revenue: billResult.finalRevenue.toFixed(2),
+          effective_rate: billResult.effectiveRate.toFixed(3),
+          total_production: energy.production || 0,
           status: "Pending",
-          total_revenue: billResult.finalRevenue.toFixed(2), // Ensure this is calculated
-          savings: billResult.savings.toFixed(2),
-          belco_revenue: billResult.belcoRevenue.toFixed(2),
-          greenlight_revenue: billResult.greenlightRevenue.toFixed(2),
+          interest: interestAmount.toFixed(2),
+          total_bill: totalBillAmount,
+          pending_bill: totalBillAmount,
+          paid_amount: 0,
         };
       })
-      .filter(Boolean); // Filter out any null values (invalid bills)
+      .filter(Boolean);
 
     console.log("Bills to process:", billsToProcess);
 
@@ -1443,14 +1280,45 @@ const handleRemoveBill = (customerId: number | string) => {
 
     // Loop over each bill and process it
     for (const billData of billsToProcess) {
+      if (!billData) continue; // Skip null entries
+
       console.log("Processing bill:", billData);
 
       try {
-        // Now directly send the email (without calling handlePostBill)
-        await handleEmailBill(billData); // Send the email with the bill
+        // Check if a bill already exists for the same customer and date range
+        const { data: existingBills, error: fetchError } = await supabase
+          .from("monthly_bills")
+          .select("id")
+          .eq("site_name", billData.site_name)
+          .eq("billing_period_start", billData.billing_period_start)
+          .eq("billing_period_end", billData.billing_period_end);
+
+        if (fetchError) {
+          console.error("Error fetching existing bills:", fetchError);
+          failureCount++;
+          continue;
+        }
+
+        if (existingBills && existingBills.length > 0) {
+          console.log(`Bill already exists for ${billData.site_name}, skipping...`);
+          failureCount++;
+          continue;
+        }
+
+        // First, post the bill to the database
+        const postedBill = await handlePostBill(billData);
+
+        if (!postedBill) {
+          console.error("Failed to post bill, skipping email");
+          failureCount++;
+          continue;
+        }
+
+        // Then send the email with the posted bill data
+        await handleEmailBill(billData);
         successCount++;
-      } catch (emailError) {
-        console.error("Failed to send email for bill:", emailError);
+      } catch (error) {
+        console.error("Failed to process bill:", error);
         failureCount++;
       }
     }
@@ -1460,344 +1328,414 @@ const handleRemoveBill = (customerId: number | string) => {
     console.log("Final failure count:", failureCount);
 
     // Display toast messages based on success/failure
+    toast.dismiss(toastID);
+
     if (failureCount === 0) {
-      toast.dismiss(toastID);
-
-      toast.success(`Successfully emailed all ${successCount} bills!`);
+      toast.success(`Successfully posted and emailed all ${successCount} bills!`);
     } else {
-      toast.dismiss(toastID);
-
       toast.error(
-        `Successfully emailed ${successCount} bills. Failed to email ${failureCount} bills. Check console for details.`,
+        `Posted and emailed ${successCount} bills. Failed to process ${failureCount} bills.`,
       );
     }
     onClose();
   };
 
-  return (
-    <Dialog open={true} onOpenChange={onClose}>
+return (
+    <div
+      className="fixed inset-0 z-999 flex items-center justify-center bg-gray-3/50 backdrop-blur-sm"
+      onClick={onClose}
+    >
       <div
-        className="fixed inset-0 z-999 flex items-center justify-center bg-gray-3/50 backdrop-blur-sm"
-        onClick={onClose}
+        className="max-h-[80vh] w-2/3 overflow-y-auto rounded-lg bg-white p-8 shadow-xl dark:bg-gray-dark"
+        onClick={(e) => e.stopPropagation()}
       >
-        <div
-          className="max-h-[80vh] w-2/3 overflow-y-auto rounded-lg bg-white p-8 shadow-xl dark:bg-gray-dark"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <h2 className="mb-6 text-center text-2xl font-bold">
-            Billing Summary
-          </h2>
-                        {/* ADDED: tab switcher */}
-              <div className="mb-4 flex justify-center gap-4">
-                <button
-                  onClick={() => setActiveTab("success")}
-                  className={`rounded px-4 py-2 ${
-                    activeTab === "success" ? "bg-green-600 text-white" : "bg-gray-200"
-                  }`}
-                >
-                  Successful ({successfulBills.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab("failed")}
-                  className={`rounded px-4 py-2 ${
-                    activeTab === "failed" ? "bg-red-600 text-white" : "bg-gray-200"
-                  }`}
-                >
-                  Failed ({failedBills.length})
-                </button>
-              </div>
+        <h2 className="mb-6 text-center text-2xl font-bold">
+          Billing Summary
+        </h2>
 
+        {error ? (
+          <p className="text-red-500">{error}</p>
+        ) : loading ? (
+          <p>Loading...</p>
+        ) : (
+          <>
+            {/* Tab Navigation */}
+            <div className="mb-6 flex gap-2 border-b-2 border-gray-200">
+              <button
+                onClick={() => setActiveTab("success")}
+                className={`px-6 py-3 font-semibold transition-all ${
+                  activeTab === "success"
+                    ? "border-b-4 border-green-500 text-green-600"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Successful Bills ({successfulBills.length})
+              </button>
+              <button
+                onClick={() => setActiveTab("failed")}
+                className={`px-6 py-3 font-semibold transition-all ${
+                  activeTab === "failed"
+                    ? "border-b-4 border-red-500 text-red-600"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Failed Bills ({failedBills.length})
+              </button>
+            </div>
 
-          {error ? (
-            <p className="text-red-500">{error}</p>
-          ) : loading ? (
-            <p>Loading...</p>
-          ) : (
-            <>
-              {/* Summary Section */}
-              <div className="mb-6 rounded-lg border border-dashed border-gray-300 bg-green-50 p-6">
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between border-b border-gray-300 pb-2">
-                    <span className="font-medium text-gray-700">
-                      Total Revenue:
-                    </span>
-                    <span className="font-semibold text-gray-900">
-                      ${summary.totalRevenue.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between border-b border-gray-300 pb-2">
-                    <span className="font-medium text-gray-700">
-                      Total Outstanding:
-                    </span>
-                    <span className="font-semibold text-gray-900">
-                      ${summary.totalOutstanding.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between border-b border-gray-300 pb-2">
-                    <span className="font-medium text-gray-700">
-                      Total PTS:
-                    </span>
-                    <span className="font-semibold text-gray-900">
-                      {summary.totalPts.toFixed(2)}
-                    </span>
-                  </div>
-                  {/* Newly Added Sections */}
-                  <div className="flex justify-between border-b border-gray-300 pb-2">
-                    <span className="font-medium text-gray-700">
-                      Total Belco Revenue:
-                    </span>
-                    <span className="font-semibold text-gray-900">
-                      ${summary.totalBelcoRevenue.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between border-b border-gray-300 pb-2">
-                    <span className="font-medium text-gray-700">
-                      Total Greenlight Revenue:
-                    </span>
-                    <span className="font-semibold text-gray-900">
-                      ${summary.totalGreenlightRevenue.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between border-b border-gray-300 pb-2">
-                    <span className="font-medium text-gray-700">
-                      Total Savings:
-                    </span>
-                    <span className="font-semibold text-gray-900">
-                      ${summary.totalSavings.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Footer (optional for additional details) */}
-                <div className="mt-4 text-center text-xs text-gray-600">
-                  All amounts are calculated based on the selected billing
-                  period.
-                </div>
-              </div>
-
-              <div className="mb-4">
-                <h3 className="text-lg font-bold">Energy Data Summary</h3>
-                {energySums ? (
-                  <ul>
-                    {Object.entries(energySums).map(([type, sum]) => (
-                      <li key={type}>
-                        {/* <strong>{type}:</strong> {sum} kWh */}
-                      </li>
-                    ))}
-                  </ul>
+            {/* Successful Bills Tab */}
+            {activeTab === "success" && (
+              <div className="space-y-8">
+                {successfulBills.length === 0 ? (
+                  <p className="text-center text-gray-500 py-8">No successful bills found</p>
                 ) : (
-                  <p>No energy data available.</p>
-                )}
-              </div>
-
-                {/* UPDATED: render conditional on activeTab */}
-                {activeTab === "success" ? (
                   <>
-                    {/* Billing Summary based on successfulBills */}
-                    <div className="mb-6 rounded-lg border border-dashed border-gray-300 bg-green-50 p-6">
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between border-b border-gray-300 pb-2">
-                          <span className="font-medium text-gray-700">Total Revenue:</span>
-                          <span className="font-semibold text-gray-900">
-                            $
-                            {successfulBills
-                              .reduce((a, b) => a + (b.billResult?.finalRevenue || 0), 0)
-                              .toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between border-b border-gray-300 pb-2">
-                          <span className="font-medium text-gray-700">Total Belco Revenue:</span>
-                          <span className="font-semibold text-gray-900">
-                            $
-                            {successfulBills
-                              .reduce((a, b) => a + (b.billResult?.belcoRevenue || 0), 0)
-                              .toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between border-b border-gray-300 pb-2">
-                          <span className="font-medium text-gray-700">
-                            Total Greenlight Revenue:
-                          </span>
-                          <span className="font-semibold text-gray-900">
-                            $
-                            {successfulBills
-                              .reduce((a, b) => a + (b.billResult?.greenlightRevenue || 0), 0)
-                              .toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between border-b border-gray-300 pb-2">
-                          <span className="font-medium text-gray-700">Total Savings:</span>
-                          <span className="font-semibold text-gray-900">
-                            $
-                            {successfulBills
-                              .reduce((a, b) => a + (b.billResult?.savings || 0), 0)
-                              .toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="mt-4 text-center text-xs text-gray-600">
-                        All amounts are based on the selected billing period.
-                      </div>
-                    </div>
+                    {/* Summary Section - Common Information */}
+                    {successfulBills.length > 0 && parameters.length > 0 && (
+                      <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-lg border-2 border-blue-300 mb-6">
+                        <h3 className="text-lg font-bold text-gray-800 mb-4 border-b-2 border-blue-200 pb-2">
+                          Billing Summary - Common Information
+                        </h3>
+                        <div className="grid grid-cols-2 gap-6">
+                          {/* Billing Period */}
+                          <div className="bg-white p-4 rounded-lg shadow-sm">
+                            <h4 className="font-semibold text-gray-700 mb-3 text-sm">Billing Period</h4>
+                            <div className="space-y-2 text-sm">
+                              <p><strong>Start Date:</strong> {startDate}</p>
+                              <p><strong>End Date:</strong> {endDate}</p>
+                              <p><strong>Number of Days:</strong> {successfulBills[0]?.billResult?.numberOfDays || 'N/A'}</p>
+                            </div>
+                          </div>
 
-                    {/* Successful bills list */}
-                    {successfulBills.map(({ customerId, customer, billResult, outstanding }) => (
+                          {/* Common Rates */}
+                          <div className="bg-white p-4 rounded-lg shadow-sm">
+                            <h4 className="font-semibold text-gray-700 mb-3 text-sm">Common Rates & Discounts</h4>
+                            <div className="space-y-2 text-sm">
+                              <p><strong>Belco Discount:</strong> {(parameters[0]?.belcodisc * 100).toFixed(2)}%</p>
+                              <p><strong>Export Rate:</strong> ${parameters[0]?.export_rate?.toFixed(4) || 'N/A'}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {successfulBills.map((bill) => {
+                    const { customerId, customer, billResult, outstanding, interest, interestRatePercent, energy } = bill;
+
+                    return (
                       <div
                         key={customerId}
-                        className="mb-8 rounded-lg border border-gray-200 bg-gray-50 p-4"
+                        className="rounded-lg border-2 border-green-300 bg-white p-6 shadow-md"
                       >
-                        <div className="flex justify-between items-start mb-2">
-                          <h3 className="text-lg font-semibold">{customer?.site_name}</h3>
+                        {/* Header */}
+                        <div className="flex justify-between items-start mb-4 border-b-2 border-green-200 pb-3">
+                          <div>
+                            <h3 className="text-xl font-bold text-gray-800">
+                              {customer?.site_name}
+                            </h3>
+                            <p className="text-sm text-gray-600">{customer?.email}</p>
+                          </div>
                           <button
-                            className="rounded bg-red-200 px-2 py-1 text-red-800 hover:bg-red-300"
+                            className="rounded bg-red-500 px-3 py-1.5 text-white hover:bg-red-600 transition"
                             onClick={() => handleRemoveBill(customerId)}
                           >
                             <FontAwesomeIcon icon={faTimes} />
                           </button>
                         </div>
 
-                        <div className="text-sm text-gray-600 grid grid-cols-2 gap-4">
-                          <div>
-                            <p>
-                              <strong>Energy Rate:</strong> ${billResult.belcoPerKwh.toFixed(2)}
-                            </p>
-                            <p>
-                              <strong>Belco Revenue:</strong> ${billResult.belcoRevenue.toFixed(2)}
-                            </p>
-                            <p>
-                              <strong>Greenlight Revenue:</strong> $
-                              {billResult.greenlightRevenue.toFixed(2)}
-                            </p>
+                        {/* Energy Summary */}
+                        <div className="bg-yellow-50 p-3 rounded mb-3">
+                          <h4 className="font-semibold text-gray-700 mb-2">Energy Data</h4>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <p><strong>Total Production:</strong> {energy.production.toFixed(3)} kWh</p>
+                            <p><strong>Feed-In:</strong> {energy.feedIn.toFixed(3)} kWh</p>
+                            <p><strong>Consumption:</strong> {energy.consumption.toFixed(3)} kWh</p>
+                            <p><strong>Self-Consumption:</strong> {energy.selfConsumption.toFixed(3)} kWh</p>
                           </div>
-                          <div>
-                            <p>
-                              <strong>Total:</strong> ${billResult.finalRevenue.toFixed(2)}
+                        </div>
+
+                        {/* Customer-Specific Rates */}
+                        <div className="bg-purple-50 p-3 rounded mb-3">
+                          <h4 className="font-semibold text-gray-700 mb-2">Customer Rates</h4>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <p><strong>Customer Rate:</strong> ${billResult.price.toFixed(2)}</p>
+                            <p><strong>Belco Rate:</strong> ${billResult.belcoRate.toFixed(3)}</p>
+                            <p><strong>Effective Rate:</strong> {billResult.effectiveRate.toFixed(3)}/kWh</p>
+                          </div>
+                        </div>
+
+                        {/* Revenue */}
+                        <div className="bg-green-50 p-3 rounded mb-3">
+                          <h4 className="font-semibold text-gray-700 mb-2">Revenue Breakdown</h4>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <p><strong>Rack Rate:</strong> ${billResult.rackRate.toFixed(2)}</p>
+                            <p><strong>After Belco Disc:</strong> ${billResult.AfterBelcoDisc.toFixed(2)}</p>
+                            <p><strong>Feed-In Credit:</strong> ${billResult.feedInCredit.toFixed(2)}</p>
+                            <p><strong>Max Bill:</strong> ${billResult.MaxBill.toFixed(2)}</p>
+                          </div>
+                        </div>
+
+                        {/* Final Revenue */}
+                        <div className="bg-gradient-to-r from-green-100 to-blue-100 p-4 rounded-lg border-2 border-green-400 mb-3">
+                          <div className="flex justify-between items-center">
+                            <h4 className="text-lg font-bold text-gray-800">Final Revenue:</h4>
+                            <span className="text-2xl font-bold text-green-700">
+                              ${billResult.finalRevenue.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Overdue Balance Section */}
+                        <div className="bg-orange-50 p-3 rounded mb-2 border-l-4 border-orange-400">
+                          <div className="flex justify-between items-center">
+                            <h4 className="font-semibold text-gray-700">Overdue Balance:</h4>
+                            <span className="text-lg font-bold text-orange-600">
+                              ${outstanding.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Interest on Overdue Balance (Editable Rate & Amount) */}
+                        {outstanding > 0 && (
+                          <div className="bg-yellow-50 p-4 rounded mb-2 border-l-4 border-yellow-400">
+                            <h4 className="font-semibold text-gray-700 mb-3">Interest on Overdue</h4>
+
+                            {/* Interest Rate Input */}
+                            <div className="flex justify-between items-center mb-3">
+                              <label className="text-sm text-gray-600 font-medium">Interest Rate:</label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  max="100"
+                                  value={interestRatePercent || 0}
+                                  onChange={(e) => {
+                                    const value = parseFloat(e.target.value);
+                                    if (!isNaN(value)) {
+                                      handleInterestRateChange(customerId, value);
+                                    }
+                                  }}
+                                  className="w-20 px-2 py-1.5 text-right border border-yellow-400 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 font-semibold text-yellow-700"
+                                />
+                                <span className="text-sm text-gray-600 font-medium">%</span>
+                              </div>
+                            </div>
+
+                            {/* Interest Amount */}
+                            <div className="flex justify-between items-center pt-3 border-t border-yellow-200">
+                              <span className="text-sm text-gray-600 font-medium">Interest Amount:</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-500">$</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={interest || 0}
+                                  onChange={(e) => {
+                                    const value = parseFloat(e.target.value);
+                                    if (!isNaN(value)) {
+                                      handleInterestChange(customerId, value);
+                                    }
+                                  }}
+                                  className="w-24 px-2 py-1 text-right border border-yellow-400 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 font-bold text-yellow-700"
+                                />
+                              </div>
+                            </div>
+
+                            <p className="text-xs text-gray-500 italic mt-2">
+                              * Change the rate to auto-recalculate, or edit the amount manually
                             </p>
-                            <p>
-                              <strong>Outstanding:</strong> ${outstanding.toFixed(2)}
-                            </p>
-                            <p>
-                              <strong>Savings:</strong> ${billResult.savings.toFixed(2)}
-                            </p>
+
+                            {/* Button to waive interest */}
+                            <button
+                              onClick={() => {
+                                handleInterestRateChange(customerId, 0);
+                              }}
+                              className="mt-3 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded text-sm font-medium transition"
+                            >
+                              Waive Interest (Set to $0)
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Total Amount Due */}
+                        <div className="bg-gradient-to-r from-red-100 to-orange-100 p-4 rounded-lg border-2 border-red-400">
+                          <div className="flex justify-between items-center">
+                            <h4 className="text-lg font-bold text-gray-800">Total Amount Due:</h4>
+                            <span className="text-2xl font-bold text-red-700">
+                              ${(billResult.finalRevenue + outstanding + (interest || 0)).toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="mt-2 text-xs text-gray-600">
+                            <p>Current Period: ${billResult.finalRevenue.toFixed(2)}</p>
+                            <p>Overdue: ${outstanding.toFixed(2)}</p>
+                            {outstanding > 0 && <p>Interest: ${(interest || 0).toFixed(2)}</p>}
                           </div>
                         </div>
                       </div>
-                    ))}
-
-                    {/* Footer actions */}
-                    <div className="mt-6 flex justify-end gap-4">
-                      <button
-                        onClick={onClose}
-                        className="rounded bg-gray-3 px-4 py-2 text-dark-2 hover:bg-gray-4"
-                      >
-                        Close
-                      </button>
-                      <button
-                        onClick={() => handlePostAndEmailAllBills()}
-                        className="rounded bg-green-200 px-4 py-2 text-gray-800 hover:bg-green-300"
-                        disabled={successfulBills.length === 0}
-                      >
-                        Post and Email
-                      </button>
-                      <button
-                        onClick={handlePostAllBills}
-                        className="rounded bg-dark-2 px-4 py-2 font-medium text-white hover:bg-dark"
-                        disabled={successfulBills.length === 0}
-                      >
-                        Post Bills
-                      </button>
-                    </div>
+                    );
+                  })}
                   </>
+                )}
+              </div>
+            )}
+
+            {/* Failed Bills Tab */}
+            {activeTab === "failed" && (
+              <div className="space-y-8">
+                {failedBills.length === 0 ? (
+                  <p className="text-center text-gray-500 py-8">No failed bills found</p>
                 ) : (
-                  // Failed tab
-                  <div className="space-y-4">
-                    {failedBills.length === 0 ? (
-                      <p className="text-center text-gray-600">No failed bills.</p>
-                    ) : (
-                      failedBills.map(({ customerId, customer, reason }) => (
-                        <div
-                          key={customerId}
-                          className="rounded border border-red-300 bg-red-50 p-4"
-                        >
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h4 className="font-semibold text-red-800">
-                                {customer?.site_name}
-                              </h4>
-                              <p className="text-sm text-gray-700">
-                                <strong>Reason:</strong> {reason}
-                              </p>
+                  failedBills.map((bill) => {
+                    const { customerId, customer, reason, issue, actionRequired, errorType, errorDetails, timestamp, energy } = bill;
+
+                    // Determine error severity and colors
+                    const isTokenExpired = errorType === 'TOKEN_EXPIRED';
+                    const isZeroProduction = errorType === 'ZERO_PRODUCTION';
+                    const isAPIError = errorType === 'API_ERROR';
+
+                    const borderColor = isTokenExpired ? 'border-orange-400' : 'border-red-300';
+                    const bgColor = isTokenExpired ? 'bg-orange-50' : 'bg-red-50';
+                    const textColor = isTokenExpired ? 'text-orange-800' : 'text-red-800';
+
+                    return (
+                      <div
+                        key={customerId}
+                        className={`rounded-lg border-2 ${borderColor} bg-white p-6 shadow-md`}
+                      >
+                        {/* Header */}
+                        <div className="flex justify-between items-start mb-4 border-b-2 border-red-200 pb-3">
+                          <div>
+                            <h3 className="text-xl font-bold text-gray-800">
+                              {customer?.site_name}
+                            </h3>
+                            <p className="text-sm text-gray-600">{customer?.email}</p>
+                            {errorType && (
+                              <span className={`inline-block mt-1 px-2 py-1 text-xs font-semibold rounded ${
+                                isTokenExpired ? 'bg-orange-100 text-orange-800' :
+                                isZeroProduction ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-red-100 text-red-800'
+                              }`}>
+                                {errorType.replace(/_/g, ' ')}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            className="rounded bg-red-500 px-3 py-1.5 text-white hover:bg-red-600 transition"
+                            onClick={() => handleRemoveBill(customerId)}
+                          >
+                            <FontAwesomeIcon icon={faTimes} />
+                          </button>
+                        </div>
+
+                        {/* Issue Alert */}
+                        <div className={`${bgColor} border-l-4 ${borderColor} p-4 mb-4`}>
+                          <div className="flex items-start">
+                            <div className="flex-shrink-0">
+                              <svg className={`h-5 w-5 ${isTokenExpired ? 'text-orange-400' : 'text-red-400'}`} viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                              </svg>
                             </div>
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => classifyBills()} // simple retry; can improve
-                                className="rounded bg-blue-200 px-3 py-1 text-blue-800 hover:bg-blue-300 text-xs"
-                              >
-                                Retry
-                              </button>
-                              <button
-                                onClick={() =>
-                                  setFailedBills((prev) =>
-                                    prev.filter((b) => b.customerId !== customerId)
-                                  )
-                                }
-                                className="rounded bg-gray-200 px-3 py-1 text-gray-800 hover:bg-gray-300 text-xs"
-                              >
-                                Dismiss
-                              </button>
+                            <div className="ml-3 flex-1">
+                              <h3 className={`text-sm font-medium ${textColor}`}>
+                                {reason}
+                              </h3>
+                              <div className={`mt-2 text-sm ${isTokenExpired ? 'text-orange-700' : 'text-red-700'}`}>
+                                <p><strong>Issue:</strong> {issue}</p>
+                                {errorDetails?.httpStatus && (
+                                  <p className="mt-1"><strong>HTTP Status:</strong> {errorDetails.httpStatus}</p>
+                                )}
+                                {timestamp && (
+                                  <p className="mt-1 text-xs text-gray-500">
+                                    <strong>Time:</strong> {new Date(timestamp).toLocaleString()}
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      ))
-                    )}
-                  </div>
-                )}
-            </>
-          )}
-        </div>
-      </div>
 
-      {/* Manual Overdue Adjustment Modal */}
-      {showAdjustmentModal && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50">
-          <div className="w-96 rounded-lg bg-white p-6 shadow-xl">
-            <h3 className="mb-4 text-lg font-semibold">Adjust Overdue Amount</h3>
-            <p className="mb-4 text-sm text-gray-600">
-              Enter adjustment amount (positive to increase, negative to decrease):
-            </p>
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Enter amount (e.g., -50.00 or +25.00)"
-              className="mb-4 w-full rounded border border-gray-300 px-3 py-2"
-              id="adjustment-input"
-            />
-            <div className="flex justify-end gap-3">
+                        {/* Customer Info */}
+                        <div className="bg-gray-50 p-3 rounded mb-3">
+                          <h4 className="font-semibold text-gray-700 mb-2">Customer Information</h4>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <p><strong>Site Name:</strong> {customer?.site_name || "N/A"}</p>
+                            <p><strong>Email:</strong> {customer?.email || "N/A"}</p>
+                            <p><strong>Address:</strong> {customer?.address || "N/A"}</p>
+                            <p><strong>Site ID:</strong> {customer?.site_ID || "N/A"}</p>
+                            <p><strong>API Type:</strong> {customer?.refresh_token ? 'Enphase' : 'SolarEdge'}</p>
+                          </div>
+                        </div>
+
+                        {/* Energy Data (if available) */}
+                        {energy && (
+                          <div className="bg-blue-50 p-3 rounded mb-3">
+                            <h4 className="font-semibold text-gray-700 mb-2">Energy Data (Retrieved)</h4>
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                              <p><strong>Production:</strong> {energy.production?.toFixed(3) || 0} kWh</p>
+                              <p><strong>Consumption:</strong> {energy.consumption?.toFixed(3) || 0} kWh</p>
+                              <p><strong>Feed-In:</strong> {energy.feedIn?.toFixed(3) || 0} kWh</p>
+                              <p><strong>Self-Consumption:</strong> {energy.selfConsumption?.toFixed(3) || 0} kWh</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Action Required */}
+                        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                          <div className="flex">
+                            <div className="flex-shrink-0">
+                              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                              </svg>
+                            </div>
+                            <div className="ml-3">
+                              <p className="text-sm font-semibold text-yellow-800 mb-1">Action Required:</p>
+                              <p className="text-sm text-yellow-700">
+                                {actionRequired || 'Please verify customer data and API credentials.'}
+                              </p>
+                              {isZeroProduction && (
+                                <p className="mt-2 text-sm text-yellow-700">
+                                  Contact the customer to verify their solar system is operational and producing energy.
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {/* Footer Actions */}
+            <div className="mt-6 flex justify-end gap-4">
               <button
-                onClick={() => setShowAdjustmentModal(null)}
-                className="rounded bg-gray-200 px-4 py-2 text-gray-800 hover:bg-gray-300"
+                onClick={onClose}
+                className="rounded bg-gray-3 px-4 py-2 text-dark-2 hover:bg-gray-4"
               >
-                Cancel
+                Close
               </button>
               <button
-                onClick={() => {
-                  const input = document.getElementById('adjustment-input') as HTMLInputElement;
-                  const amount = parseFloat(input?.value || '0');
-                  if (!isNaN(amount) && amount !== 0 && showAdjustmentModal) {
-                    applyOverdueAdjustment(showAdjustmentModal, amount);
-                  } else {
-                    toast.error('Please enter a valid adjustment amount');
-                  }
-                }}
-                className="rounded bg-orange-500 px-4 py-2 text-white hover:bg-orange-600"
+                onClick={handlePostAndEmailAllBills}
+                className="rounded bg-green-500 px-4 py-2 text-white hover:bg-green-600"
+                disabled={successfulBills.length === 0}
               >
-                Apply Adjustment
+                Post & Email All ({successfulBills.length})
+              </button>
+              <button
+                onClick={handlePostAllBills}
+                className="rounded bg-dark-2 px-4 py-2 text-white hover:bg-dark"
+                disabled={successfulBills.length === 0}
+              >
+                Post Only ({successfulBills.length})
               </button>
             </div>
-          </div>
-        </div>
-      )}
-    </Dialog>
+          </>
+        )}
+      </div>
+    </div>
   );
 };
 

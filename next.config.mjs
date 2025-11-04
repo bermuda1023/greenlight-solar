@@ -2,7 +2,9 @@
 const nextConfig = {
   images: {
     domains: ["localhost",
-      "qwiefyedkmgjkcgjqhwi.supabase.co" 
+      "qwiefyedkmgjkcgjqhwi.supabase.co",
+      "qwiefyedkmgjkcgjqhwi.supabase.co",
+      "qmyuwzwmpkcfcvguaaxc.supabase.co"
     ],
     remotePatterns: [
       {

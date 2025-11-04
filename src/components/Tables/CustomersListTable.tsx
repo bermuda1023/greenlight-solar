@@ -4,7 +4,6 @@ import {
   FaArrowLeft,
   FaArrowRight,
   FaRegEdit,
-  FaRegFilePdf,
   FaRegTrashAlt,
 } from "react-icons/fa";
 
@@ -23,7 +22,6 @@ import BillModal from "../Billing/BillModal";
 import TokenRefreshModal from "../Enphase/TokenRefreshModal";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { useRef } from "react";
 
 interface Customer {
   id: string;
@@ -37,14 +35,15 @@ interface Customer {
   created_at: string;
   scaling_factor: number;
   price: number;
-  consump_kwh: number; // Total consumption
-  self_cons_kwh: number; // Self-consumption
-  export_kwh: number; // Energy exported
-  production_kwh: number; // Energy produced
+  belco_rate: number;
+  consump_kwh: number;
+  self_cons_kwh: number;
+  export_kwh: number;
+  production_kwh: number;
   outstanding_balance: number;
   savings: number;
   belco_revenue: number;
-  greenlight_revenue: number; // Total
+  greenlight_revenue: number;
   authorization_status: string;
   authorization_token: string | null;
   verification: boolean;
@@ -69,11 +68,7 @@ const CustomersListTable = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [EditModalOpen, setEditModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // New state for customer type filtering
   const [customerType, setCustomerType] = useState<"all" | "solar" | "enphase">("all");
-  
-  // Enphase auth state
   const [isAuthWindowOpen, setIsAuthWindowOpen] = useState(false);
   const [authWindow, setAuthWindow] = useState<Window | null>(null);
   const [newAuthCode, setNewAuthCode] = useState("");
@@ -90,33 +85,27 @@ const CustomersListTable = () => {
     installed_capacity: "",
     scaling_factor: "",
     price: "",
+    belco_rate: "",
     site_ID: "",
   });
 
-  // Enphase constants
   const ENPHASE_AUTH_URL = "https://api.enphaseenergy.com/oauth/authorize";
   const CLIENT_ID = "ba5228e4f843a94607e6cc245043bc54";
   const REDIRECT_URI = "https://api.enphaseenergy.com/oauth/redirect_uri";
 
-  // State for managing the customer ID for deletion
   const [customerIdToDelete, setCustomerIdToDelete] = useState<string | null>(
     null,
   );
   const [customerIdToEdit, setCustomerIdToEdit] = useState<string | null>(null);
 
-  // Helper function to determine customer type
   const getCustomerType = (customer: Customer): "solar" | "enphase" => {
-    // Enphase customers have authorization_code, Solar API customers have solar_api_key
     return customer.authorization_code ? "enphase" : "solar";
   };
-
-  // Filter customers based on selected type
   const filteredCustomers = customers.filter(customer => {
     if (customerType === "all") return true;
     return getCustomerType(customer) === customerType;
   });
 
-  // Function to open Enphase auth window
   const openEnphaseAuth = () => {
     const authUrl = `${ENPHASE_AUTH_URL}?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}`;
     const width = 600;
@@ -133,7 +122,6 @@ const CustomersListTable = () => {
     setAuthWindow(authWindowRef);
     setIsAuthWindowOpen(true);
 
-    // Check if window was closed
     const checkWindow = setInterval(() => {
       if (authWindowRef?.closed) {
         clearInterval(checkWindow);
@@ -143,11 +131,9 @@ const CustomersListTable = () => {
     }, 500);
   };
 
-  // Handle new auth code input
   const handleNewAuthCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newCode = e.target.value;
     setNewAuthCode(newCode);
-    // Update both fields when new code is entered
     setFormData(prev => ({
       ...prev,
       authorization_code: newCode
@@ -219,7 +205,6 @@ const CustomersListTable = () => {
     try {
       setLoading(true);
 
-      // First, get total count for pagination
       const countQuery = supabase
         .from("customers")
         .select("*", { count: "exact" });
@@ -237,7 +222,6 @@ const CustomersListTable = () => {
       const { count } = await countQuery;
       setTotalCount(count || 0);
 
-      // Then fetch paginated customer data
       let query = supabase
         .from("customers")
         .select("*")
@@ -257,17 +241,14 @@ const CustomersListTable = () => {
       const { data, error: fetchError } = await query;
       if (fetchError) throw fetchError;
 
-      // Add this log to see what data is being returned:
       console.log("Customer data from database:", data);
-
-      // Fetch the outstanding balance (current_balance) for each customer
       const customersWithBalance = await Promise.all(
         data.map(async (customer) => {
           const { data: balanceData, error: balanceError } = await supabase
             .from("customer_balances")
             .select("current_balance")
             .eq("customer_id", customer.id)
-            .single(); // Assuming each customer has one balance record
+            .single();
 
           if (balanceError) {
             console.error("Error fetching balance:", balanceError);
@@ -275,7 +256,7 @@ const CustomersListTable = () => {
 
           return {
             ...customer,
-            outstanding_balance: balanceData?.current_balance || 0, // Default to 0 if no balance is found
+            outstanding_balance: balanceData?.current_balance || 0,
           };
         }),
       );
@@ -344,16 +325,13 @@ const CustomersListTable = () => {
   };
 
   const handleGenerateBill = () => {
-    // Reset error state
     setDateError(null);
 
-    // Validate dates first
     const datesValid = validateDates();
     if (!datesValid) {
       return;
     }
 
-    // Then validate customer selection
     const customersValid = validateCustomerSelection();
     if (!customersValid) {
       return;
@@ -362,22 +340,18 @@ const CustomersListTable = () => {
   };
 
   const handleDelete = async (customerId: string) => {
-    // Specify the type as string
     try {
-      // Perform the deletion using the customer ID
       const { error } = await supabase
         .from("customers")
         .delete()
-        .eq("id", customerId); // Use the customer ID directly
+        .eq("id", customerId);
 
-      if (error) throw error; // Handle any error that occurred during deletion
+      if (error) throw error;
 
-      // If no error, refetch the updated list of customers
-      fetchCustomers(); // Refetch customers to update the list
+      fetchCustomers();
 
       toast.success("Customer has been deleted.");
 
-      // Close the modal
       setDeleteModalOpen(false);
     } catch (err) {
       console.error("Error deleting customer:", err);
@@ -411,6 +385,7 @@ const CustomersListTable = () => {
           ? Number(formData.scaling_factor)
           : null,
         price: formData.price ? Number(formData.price) : null,
+        belco_rate: formData.belco_rate ? Number(formData.belco_rate) : null,
         site_ID: formData.site_ID ? Number(formData.site_ID) : null,
       };
 
@@ -423,7 +398,7 @@ const CustomersListTable = () => {
 
       toast.success("Customer updated successfully!");
       setEditModalOpen(false);
-      fetchCustomers(); // Refresh customer list
+      fetchCustomers();
     } catch (error) {
       console.error("Error updating customer:", error);
       toast.error("Failed to update customer. Please try again.");
@@ -433,21 +408,18 @@ const CustomersListTable = () => {
   };
 
   const handleClose = () => {
-    // Close the modal without doing anything
     setDeleteModalOpen(false);
   };
   const handleCloseEdit = () => {
-    // Reset auth states when closing modal
     setNewAuthCode("");
     setIsAuthWindowOpen(false);
     setAuthWindow(null);
-    // Close the modal
     setEditModalOpen(false);
   };
 
   const handleDeleteClick = (customerId: string) => {
     setCustomerIdToDelete(customerId);
-    setDeleteModalOpen(true); // Open the modal
+    setDeleteModalOpen(true);
   };
 
   const handleEditCustomer = (customerId: string) => {
@@ -467,10 +439,10 @@ const CustomersListTable = () => {
           ? customer.scaling_factor.toString()
           : "",
         price: customer.price ? customer.price.toString() : "",
+        belco_rate: customer.belco_rate ? customer.belco_rate.toString() : "",
         site_ID: customer.site_ID ? customer.site_ID.toString() : "",
       });
 
-      // Reset new auth code state
       setNewAuthCode("");
       setIsAuthWindowOpen(false);
       setAuthWindow(null);
@@ -501,17 +473,13 @@ const CustomersListTable = () => {
     }
   };
 
-
-  // Handler for clicking Pending badge or expired token
   const handlePendingClick = async (customer: Customer) => {
-    // Check if this is an Enphase customer with expired token
     if (customer.authorization_code && customer.authorization_status === "ENPHASE_AUTHORIZATION_EXPIRED") {
       setSelectedCustomerForRefresh(customer);
       setShowTokenRefreshModal(true);
       return;
     }
 
-    // Original logic for generating auth links
     try {
       const res = await fetch("/api/customers/generate-auth-link", {
         method: "POST",
@@ -535,20 +503,16 @@ const CustomersListTable = () => {
     }
   };
 
-  // Handler for successful token refresh
   const handleTokenRefreshSuccess = () => {
-    fetchCustomers(); // Refresh the customer list
+    fetchCustomers();
     toast.success("Token refreshed successfully!");
   };
-
-  // Handler for bulk token refresh
   const handleBulkTokenRefresh = async () => {
     if (selectedCustomers.length === 0) {
       toast.error("Please select customers to refresh tokens for.");
       return;
     }
 
-    // Filter to only Enphase customers (those with authorization_code)
     const enphaseCustomers = customers.filter(
       customer => selectedCustomers.includes(customer.id) && customer.authorization_code
     );
@@ -593,7 +557,6 @@ const CustomersListTable = () => {
           );
         }
 
-        // Refresh customer list to show updated statuses
         fetchCustomers();
       } else {
         toast.error(`Bulk refresh failed: ${data.details || data.error}`);
@@ -605,28 +568,8 @@ const CustomersListTable = () => {
     }
   };
 
-  // Handler for submitting the modal (save code to DB, etc.)
-  // const handleAuthModalSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-  //   e.preventDefault();
-  //   if (!authModalCustomer) return;
-  //   // Save the code to the customer (update in Supabase)
-  //   const { error } = await supabase
-  //     .from("customers")
-  //     .update({ authorization_code: authCode, verification: true })
-  //     .eq("id", authModalCustomer.id);
-
-  //   if (!error) {
-  //     toast.success("Authorization code saved!");
-  //     setShowAuthModal(false);
-  //     fetchCustomers(); // Refresh list
-  //   } else {
-  //     toast.error("Failed to save authorization code.");
-  //   }
-  // };
-
   return (
     <>
-      {/* Header Section */}
       <div className="flex items-center justify-between">
         <div className="mb-2 p-1">
           <h1 className="text-2xl font-bold text-dark">Customers List</h1>
@@ -653,13 +596,6 @@ const CustomersListTable = () => {
               value={endDate ?? ""}
             />
           </div>
-          {/* <button
-            onClick={handleBulkTokenRefresh}
-            className="hover:bg-blue-700 flex items-center gap-2 whitespace-nowrap rounded-md bg-blue-600 px-4 py-3 text-white"
-            title="Refresh Enphase tokens for selected customers"
-          >
-            <FontAwesomeIcon icon={faCheckCircle} /> Refresh Tokens
-          </button> */}
           <button
             onClick={handleGenerateBill}
             className="hover:bg-dark-1 flex items-center gap-2 whitespace-nowrap rounded-md bg-dark-2 px-4 py-3 text-white"
@@ -671,7 +607,6 @@ const CustomersListTable = () => {
       <div className="flex flex-col gap-10">
         <div className="rounded-[10px] border border-stroke bg-white shadow-1 dark:border-dark-3 dark:bg-gray-dark dark:shadow-card">
           <div className="p-4">
-            {/* Filters */}
             <div className="mb-6 flex flex-col gap-4 md:flex-row">
               <div className="relative flex-1">
                 <input
@@ -707,41 +642,6 @@ const CustomersListTable = () => {
               </div>
             </div>
 
-            {/* Customer Type Filter Buttons */}
-            {/* <div className="mb-6 flex flex-wrap gap-3">
-              <button
-                onClick={() => setCustomerType("all")}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                  customerType === "all"
-                    ? "bg-primary text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
-                }`}
-              >
-                All Customers ({customers.length})
-              </button>
-              <button
-                onClick={() => setCustomerType("solar")}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                  customerType === "solar"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
-                }`}
-              >
-                Solar API Customers ({customers.filter(c => getCustomerType(c) === "solar").length})
-              </button>
-              <button
-                onClick={() => setCustomerType("enphase")}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                  customerType === "enphase"
-                    ? "bg-green-600 text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
-                }`}
-              >
-                Enphase Customers ({customers.filter(c => getCustomerType(c) === "enphase").length})
-              </button>
-            </div> */}
-
-            {/* Loading and Error States */}
             {loading && (
               <div className="py-4 text-center">
                 <p className="text-gray-500">Loading customers...</p>
@@ -754,7 +654,6 @@ const CustomersListTable = () => {
               </div>
             )}
 
-            {/* Bills Table */}
             <div className="rounded-[10px] border border-stroke bg-white shadow-1 dark:border-dark-3 dark:bg-gray-dark">
               <div className="max-w-full overflow-x-auto">
                 <table className="w-full table-auto">
@@ -808,6 +707,12 @@ const CustomersListTable = () => {
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Installed Capacity
+                      </th>
+                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                        Customer Rate
+                      </th>
+                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                        Belco Rate
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Outstanding
@@ -882,11 +787,14 @@ const CustomersListTable = () => {
                           {customer.installed_capacity}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.outstanding_balance.toFixed(2)}{" "}
-                          {/* Display outstanding balance */}
+                          ${customer.price ? customer.price.toFixed(2) : '0.00'}
                         </td>
-
-                        {/* Action button */}
+                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
+                          ${customer.belco_rate ? customer.belco_rate.toFixed(2) : '0.00'}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
+                          {customer.outstanding_balance.toFixed(2)}
+                        </td>
 
                         <td className="whitespace-nowrap px-6 py-4 text-sm">
                           {customer.authorization_status === "ENPHASE_AUTHORIZATION_EXPIRED" ? (
@@ -932,16 +840,6 @@ const CustomersListTable = () => {
                               <FaRegEdit />
                             </span>
                           </button>
-                          
-                          {/* <button
-                            onClick={() => handleEditCustomer(customer.id)}
-                           className="rounded-lg bg-green-50 p-2 text-primary transition hover:bg-primary hover:text-green-50"
-                                    >
-                                      <span className="text-xl">
-                                        <FaRegEdit />
-                                      </span>
-                       
-                          </button> */}
                           <button
                             onClick={() => handleDeleteClick(customer.id)}
                             className="rounded-lg bg-red-50 p-2 text-red-600 transition hover:bg-red-600 hover:text-red-50"
@@ -951,7 +849,6 @@ const CustomersListTable = () => {
                             </span>
                           </button>
 
-                          {/* Token Refresh Button for Enphase customers */}
                           {customer.authorization_code && (
                             <button
                               onClick={() => {
@@ -971,7 +868,6 @@ const CustomersListTable = () => {
                             </button>
                           )}
 
-                          {/* Generate Authorization Link button for pending Enphase customers */}
                           {customer.authorization_status ===
                             "ENPHASE_AUTHORIZATION_PENDING" &&
                             !customer.authorization_token && (
@@ -989,7 +885,6 @@ const CustomersListTable = () => {
                 </table>
               </div>
 
-              {/* Pagination */}
               <div className="flex items-center justify-between p-6">
                 <div className="flex items-center">
                   <select className="rounded-[7px] border-[1.5px] border-stroke bg-transparent px-4 py-2 text-sm text-dark outline-none transition focus:border-primary dark:border-dark-3 dark:bg-dark-2 dark:text-white">
@@ -1021,16 +916,14 @@ const CustomersListTable = () => {
           </div>
         </div>
       </div>
-      {/* Bill Generation Modal */}
-      <ToastContainer />{" "}
-      {/* Toast container for displaying notifications globally */}
-      {showBillModal && ( // Conditional rendering based on showBillModal state
+      <ToastContainer />
+      {showBillModal && (
         <BillModal
           selectedCustomers={selectedCustomers}
           customers={customers}
           startDate={startDate}
           endDate={endDate}
-          onClose={() => setShowBillModal(false)} // Close the modal by setting showBillModal to false
+          onClose={() => setShowBillModal(false)}
         />
       )}
       {deleteModalOpen && (
@@ -1050,7 +943,7 @@ const CustomersListTable = () => {
                 No
               </button>
               <button
-                onClick={() => handleDelete(customerIdToDelete!)} // Use non-null assertion operator for customerIdToDelete
+                onClick={() => handleDelete(customerIdToDelete!)}
                 className="rounded-md bg-red-500 px-4 py-2 text-white hover:bg-red-600"
               >
                 Yes
@@ -1060,16 +953,16 @@ const CustomersListTable = () => {
         </div>
       )}
       {EditModalOpen && (
-        <div className="fixed inset-0 z-999 flex items-center justify-center bg-gray-500 bg-opacity-50">
-          <div className="w-full max-w-6xl rounded-lg bg-white p-6 shadow-lg">
-            <h3 className="mb-4 text-center text-lg font-semibold text-gray-700">
+        <div className="fixed inset-0 z-999 flex items-center justify-center bg-gray-500 bg-opacity-50 p-4">
+          <div className="max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-lg bg-white p-4 shadow-lg sm:p-6">
+            <h3 className="mb-4 text-center text-lg font-semibold text-gray-700 sm:text-xl">
               Edit Customer Details
             </h3>
 
             <form onSubmit={handleEditSubmit}>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                  <label className="mb-1.5 block text-xs font-medium text-gray-700 sm:mb-2 sm:text-sm">
                     Site Name
                   </label>
                   <input
@@ -1077,11 +970,11 @@ const CustomersListTable = () => {
                     value={formData.site_name}
                     onChange={handleChange}
                     name="site_name"
-                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-green-500 focus:ring-green-500 sm:px-4 sm:text-base"
                   />
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                  <label className="mb-1.5 block text-xs font-medium text-gray-700 sm:mb-2 sm:text-sm">
                     Email
                   </label>
                   <input
@@ -1089,14 +982,14 @@ const CustomersListTable = () => {
                     value={formData.email}
                     onChange={handleChange}
                     name="email"
-                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-green-500 focus:ring-green-500 sm:px-4 sm:text-base"
                   />
                 </div>
               </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:mt-4 sm:gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                  <label className="mb-1.5 block text-xs font-medium text-gray-700 sm:mb-2 sm:text-sm">
                     Installation Date
                   </label>
                   <input
@@ -1104,11 +997,11 @@ const CustomersListTable = () => {
                     value={formData.installation_date}
                     onChange={handleChange}
                     name="installation_date"
-                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-green-500 focus:ring-green-500 sm:px-4 sm:text-base"
                   />
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                  <label className="mb-1.5 block text-xs font-medium text-gray-700 sm:mb-2 sm:text-sm">
                     Address
                   </label>
                   <input
@@ -1116,24 +1009,23 @@ const CustomersListTable = () => {
                     value={formData.address}
                     onChange={handleChange}
                     name="address"
-                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-green-500 focus:ring-green-500 sm:px-4 sm:text-base"
                   />
                 </div>
               </div>
 
-              <div className={`mt-4 grid grid-cols-1 gap-4 ${
-                // check if Site ID should be visible
+              <div className={`mt-3 grid grid-cols-1 gap-3 sm:mt-4 sm:gap-4 ${
                 (() => {
                   const currentCustomer = customers.find(c => c.id === customerIdToEdit);
                   const isEnphaseCustomer = currentCustomer
                     ? getCustomerType(currentCustomer) === "enphase"
                     : false;
-                  return isEnphaseCustomer ? "grid-cols-1" : "md:grid-cols-2 grid-cols-1";
+                  return isEnphaseCustomer ? "grid-cols-1" : "md:grid-cols-2";
                 })()
               }`}
               >
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                  <label className="mb-1.5 block text-xs font-medium text-gray-700 sm:mb-2 sm:text-sm">
                     Installed Capacity
                   </label>
                   <input
@@ -1141,18 +1033,18 @@ const CustomersListTable = () => {
                     value={formData.installed_capacity}
                     onChange={handleChange}
                     name="installed_capacity"
-                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-green-500 focus:ring-green-500 sm:px-4 sm:text-base"
                   />
                 </div>
                 {(() => {
                 const currentCustomer = customers.find(c => c.id === customerIdToEdit);
                 const isEnphaseCustomer = currentCustomer ? getCustomerType(currentCustomer) === "enphase" : false;
-                
+
                 return (
                   <>
                     {!isEnphaseCustomer && (
-                      <div className="mt-4">
-                        <label className="mb-2 block text-sm font-medium text-gray-700">
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-gray-700 sm:mb-2 sm:text-sm">
                           Site ID
                         </label>
                         <input
@@ -1160,7 +1052,7 @@ const CustomersListTable = () => {
                           value={formData.site_ID}
                           onChange={handleChange}
                           name="site_ID"
-                          className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-green-500 focus:ring-green-500 sm:px-4 sm:text-base"
                         />
                       </div>
                     )}
@@ -1168,9 +1060,9 @@ const CustomersListTable = () => {
                 );
                 })()}
               </div>
-              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:mt-4 sm:gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                  <label className="mb-1.5 block text-xs font-medium text-gray-700 sm:mb-2 sm:text-sm">
                     Scaling Factor
                   </label>
                   <input
@@ -1178,11 +1070,11 @@ const CustomersListTable = () => {
                     value={formData.scaling_factor}
                     onChange={handleChange}
                     name="scaling_factor"
-                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-green-500 focus:ring-green-500 sm:px-4 sm:text-base"
                   />
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                  <label className="mb-1.5 block text-xs font-medium text-gray-700 sm:mb-2 sm:text-sm">
                     Price
                   </label>
                   <input
@@ -1190,21 +1082,33 @@ const CustomersListTable = () => {
                     value={formData.price}
                     onChange={handleChange}
                     name="price"
-                    className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-green-500 focus:ring-green-500 sm:px-4 sm:text-base"
                   />
                 </div>
               </div>
 
-              {/* Conditional API Key / Authorization Code fields */}
+              <div className="mt-3 sm:mt-4">
+                <label className="mb-1.5 block text-xs font-medium text-gray-700 sm:mb-2 sm:text-sm">
+                  Belco Rate
+                </label>
+                <input
+                  type="text"
+                  value={formData.belco_rate}
+                  onChange={handleChange}
+                  name="belco_rate"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-green-500 focus:ring-green-500 sm:px-4 sm:text-base"
+                />
+              </div>
+
               {(() => {
                 const currentCustomer = customers.find(c => c.id === customerIdToEdit);
                 const isEnphaseCustomer = currentCustomer ? getCustomerType(currentCustomer) === "enphase" : false;
-                
+
                 return (
                   <>
                     {!isEnphaseCustomer && (
-                      <div className="mt-4">
-                        <label className="mb-2 block text-sm font-medium text-gray-700">
+                      <div className="mt-3 sm:mt-4">
+                        <label className="mb-1.5 block text-xs font-medium text-gray-700 sm:mb-2 sm:text-sm">
                           Solar API Key
                         </label>
                         <input
@@ -1212,32 +1116,29 @@ const CustomersListTable = () => {
                           value={formData.solar_api_key}
                           onChange={handleChange}
                           name="solar_api_key"
-                          className="w-full rounded-md border border-gray-300 px-4 py-2 text-gray-900 focus:border-green-500 focus:ring-green-500"
+                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-green-500 focus:ring-green-500 sm:px-4 sm:text-base"
                         />
                       </div>
                     )}
-                    
+
                     {isEnphaseCustomer && (
-                      <div className="mt-4">
-                        {/* Authorization Code Section in Grid Layout */}
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                          {/* Previous Authorization Code */}
+                      <div className="mt-3 sm:mt-4">
+                        <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
                           <div>
-                            <label className="mb-2 block text-sm font-medium text-gray-700">
+                            <label className="mb-1.5 block text-xs font-medium text-gray-700 sm:mb-2 sm:text-sm">
                               Previous Authorization Code
                             </label>
                             <input
                               type="text"
                               value={currentCustomer?.authorization_code || ""}
                               readOnly
-                              className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-600"
+                              className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-600 sm:text-sm"
                               placeholder="No previous code"
                             />
                           </div>
 
-                          {/* New Authorization Code */}
                           <div>
-                            <label className="mb-2 block text-sm font-medium text-gray-700">
+                            <label className="mb-1.5 block text-xs font-medium text-gray-700 sm:mb-2 sm:text-sm">
                               New Authorization Code
                             </label>
                             <div className="flex gap-2">
@@ -1247,52 +1148,38 @@ const CustomersListTable = () => {
                                 value={newAuthCode}
                                 onChange={handleNewAuthCodeChange}
                                 placeholder="Enter New Code"
-                                className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-green-500 focus:ring-green-500"
+                                className="flex-1 rounded-md border border-gray-300 px-2 py-2 text-xs text-gray-900 focus:border-green-500 focus:ring-green-500 sm:px-3 sm:text-sm"
                                 disabled={isSubmitting}
                               />
                               <button
                                 type="button"
                                 onClick={openEnphaseAuth}
                                 disabled={isAuthWindowOpen || isSubmitting}
-                                className="flex-shrink-0 rounded-md bg-primary px-3 py-2 text-md text-white transition hover:bg-opacity-90 disabled:bg-opacity-50"
+                                className="flex-shrink-0 whitespace-nowrap rounded-md bg-primary px-2 py-2 text-xs text-white transition hover:bg-opacity-90 disabled:bg-opacity-50 sm:px-3 sm:text-sm"
                               >
                                 {isAuthWindowOpen ? "Opening..." : "Get Code"}
                               </button>
                             </div>
                           </div>
                         </div>
-
-                        {/* Compact Instructions */}
-                        {/* <details className="mt-1">
-                          <summary className="cursor-pointer text-sm font-medium text-gray-600 hover:text-gray-800">
-                            📋 How to get authorization code
-                          </summary>
-                          <div className="mt-1 rounded-md bg-gray-50 p-2 text-xs text-gray-600">
-                            <ol className="list-decimal space-y-1 pl-4">
-                              <li>Click "Get Code" → Login with Enphase credentials</li>
-                              <li>Click "Allow Access" → Copy the authorization code</li>
-                              <li>Paste the code in the "New Authorization Code" field</li>
-                            </ol>
-                          </div>
-                        </details> */}
                       </div>
                     )}
                   </>
                 );
               })()}
 
-              <div className="mt-3 flex justify-between">
+              <div className="mt-4 flex flex-col-reverse gap-2 sm:mt-6 sm:flex-row sm:justify-between">
                 <button
                   type="button"
                   onClick={handleCloseEdit}
-                  className="rounded-md bg-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-400"
+                  className="w-full rounded-md bg-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-400 sm:w-auto sm:px-6"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className={`rounded-md px-4 py-2 text-white ${
+                  className={`w-full rounded-md px-4 py-2.5 text-sm font-medium text-white sm:w-auto sm:px-6 ${
                     isSubmitting
                       ? "cursor-not-allowed bg-gray-400"
                       : "bg-blue-500 hover:bg-blue-600"
@@ -1305,8 +1192,7 @@ const CustomersListTable = () => {
           </div>
         </div>
       )}
-      
-      {/* Token Refresh Modal */}
+
       {showTokenRefreshModal && selectedCustomerForRefresh && (
         <TokenRefreshModal
           customer={selectedCustomerForRefresh}
@@ -1317,7 +1203,6 @@ const CustomersListTable = () => {
           onSuccess={handleTokenRefreshSuccess}
         />
       )}
-      {/* Removed Auth Modal as per edit hint */}
     </>
   );
 };

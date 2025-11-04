@@ -186,6 +186,20 @@ const SettingBoxes = () => {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Validate file type
+      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+      if (!validTypes.includes(file.type)) {
+        toast.error('Please upload a valid image file (JPG, PNG, GIF, or WebP)');
+        return;
+      }
+
+      // Validate file size (max 5MB)
+      const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+      if (file.size > maxSize) {
+        toast.error('Image size should be less than 5MB');
+        return;
+      }
+
       // Preview the image
       setImage(file); // Store the file
       setImagePreview(URL.createObjectURL(file));
@@ -196,18 +210,28 @@ const SettingBoxes = () => {
   const handleImageUpload = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (image) {
-      setIsUploading(true);
+    if (!image) {
+      toast.error("Please select an image to upload.");
+      return;
+    }
 
+    setIsUploading(true);
+
+    try {
       // Get the user from the session
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
-      if (!user) {
+
+      if (userError || !user) {
+        console.error("User authentication error:", userError);
         toast.error("User is not authenticated.");
         setIsUploading(false);
         return;
       }
+
+      console.log("User ID:", user.id);
 
       // First, check if the user already has an image URL
       const { data: profileData, error: profileError } = await supabase
@@ -217,69 +241,118 @@ const SettingBoxes = () => {
         .single();
 
       if (profileError) {
-        toast.error("Error fetching profile data.");
+        console.error("Profile fetch error:", profileError);
+        toast.error(`Error fetching profile data: ${profileError.message}`);
         setIsUploading(false);
         return;
       }
 
       const oldImageUrl = profileData?.image_url;
+      console.log("Old image URL:", oldImageUrl);
 
       // If there's an existing image, delete it from the bucket
       if (oldImageUrl) {
         const fileName = oldImageUrl.split("/").pop(); // Get the file name from URL
+        console.log("Attempting to delete old image:", fileName);
+
         if (fileName) {
           const { error: deleteError } = await supabase.storage
-            .from("profile_image")
-            .remove([`profile_image/${fileName}`]); // Remove the old image
+            .from("profile-pictures")
+            .remove([fileName]);
+
           if (deleteError) {
-            toast.error("Error deleting old image.");
-            setIsUploading(false);
-            return;
+            console.error("Delete error:", deleteError);
+            // Don't stop the upload if delete fails - the old image might already be deleted
+            console.warn("Could not delete old image, continuing with upload...");
+          } else {
+            console.log("Old image deleted successfully");
           }
         }
       }
 
-      // Upload the new image to the 'profile_image' bucket
-      const filePath = `profile_image/${image.name}`; // Use the same path
-      try {
-        const { data, error: uploadError } = await supabase.storage
-          .from("profile_image")
-          .upload(filePath, image);
+      // Upload the new image to the 'profile-pictures' bucket
+      const timestamp = Date.now();
+      const fileExtension = image.name.split('.').pop();
+      const filePath = `${user.id}_${timestamp}.${fileExtension}`; // Simplified unique filename
 
-        if (uploadError) {
-          toast.error("Error uploading image.");
-          setIsUploading(false);
-          return;
-        }
+      console.log("Uploading to path:", filePath);
+      console.log("Image file:", image.name, "Size:", image.size, "Type:", image.type);
 
-        // If upload is successful, generate the public URL
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("profile_image").getPublicUrl(filePath);
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("profile-pictures")
+        .upload(filePath, image, {
+          cacheControl: '3600',
+          upsert: true
+        });
 
-        // Now, update the profile table with the new image URL
-        const { error: updateError } = await supabase
-          .from("profiles")
-          .update({ image_url: publicUrl })
-          .eq("user_id", user.id);
-
-        if (updateError) {
-          toast.error("Error updating profile.");
-          setIsUploading(false);
-          return;
-        }
-
+      if (uploadError) {
+        console.error("Upload error details:", uploadError);
+        toast.error(`Error uploading image: ${uploadError.message}`);
         setIsUploading(false);
-        toast.success("Image uploaded and profile updated successfully!");
-        setTimeout(() => {}, 20000);
-        window.location.reload();
-      } catch (err) {
-        toast.error("An error occurred during the upload process.");
-        console.error(err);
-        setIsUploading(false);
+        return;
       }
-    } else {
-      toast.error("Please select an image to upload.");
+
+      console.log("Upload successful:", uploadData);
+
+      // Verify bucket exists and is accessible
+      const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
+      console.log("Available buckets:", buckets);
+      if (bucketError) {
+        console.error("Bucket list error:", bucketError);
+      }
+
+      // If upload is successful, generate the public URL
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("profile-pictures").getPublicUrl(filePath);
+
+      console.log("Public URL:", publicUrl);
+
+      // Test if the URL is accessible
+      console.log("Testing URL accessibility...");
+      const testResponse = await fetch(publicUrl);
+      console.log("URL test response:", testResponse.status, testResponse.statusText);
+
+      // Now, update the profile table with the new image URL
+      console.log("Attempting to update profile with:", {
+        user_id: user.id,
+        image_url: publicUrl
+      });
+
+      const { data: updateData, error: updateError } = await supabase
+        .from("profiles")
+        .update({ image_url: publicUrl })
+        .eq("user_id", user.id)
+        .select();
+
+      if (updateError) {
+        console.error("Profile update error:", updateError);
+        console.error("Error code:", updateError.code);
+        console.error("Error details:", updateError.details);
+        console.error("Error hint:", updateError.hint);
+        toast.error(`Error updating profile: ${updateError.message}`);
+        setIsUploading(false);
+        return;
+      }
+
+      console.log("Profile updated successfully:", updateData);
+
+      setIsUploading(false);
+      toast.success("Image uploaded and profile updated successfully!");
+
+      // Clear the image preview
+      setImage(null);
+      setImagePreview(null);
+
+      // Reload after a short delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+
+    } catch (err: any) {
+      console.error("Unexpected error:", err);
+      toast.error(`An error occurred: ${err.message || 'Unknown error'}`);
+      setIsUploading(false);
     }
   };
 
@@ -323,7 +396,7 @@ const SettingBoxes = () => {
               >
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
                   onChange={handleImageChange}
                   className="hidden"
                   id="imageUpload"

@@ -14,14 +14,17 @@ interface Bill {
   self_consumption_kwh: number;
   export_kwh: number;
   total_cost: number;
-  total_PTS: number;
-  energy_rate: number;
+  total_PTS: number; // Old field - kept for backwards compatibility
+  total_production?: number; // New field
+  energy_rate: number; // Old field - kept for backwards compatibility
+  effective_rate?: number; // New field
   total_revenue: number;
   status: string;
   created_at: string;
   arrears: number;
   invoice_number: string;
   customer_id: string;
+  interest?: number;
   // NEW FIELDS
   belco_revenue?: number;
   greenlight_revenue?: number;
@@ -102,20 +105,22 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
     fetchParameters();
   }, [fetchParameters, fetchCustomerBalance]);
 
-  // Calculate totals
-  const overdueBalance =
-    (customerBalance?.current_balance || 0) - (bill.total_revenue || 0);
-  const balanceDue = (bill.total_revenue || 0) + overdueBalance;
+  // Calculate totals - use current_balance directly as overdue amount
+  const overdueBalance = customerBalance?.current_balance || 0;
+  const interestAmount = bill.interest || 0;
+  const balanceDue = (bill.total_revenue || 0) + overdueBalance + interestAmount;
 
-  // Calculate effective rate
-  const effectiveRate = bill.total_revenue > 0 && bill.total_PTS > 0
-    ? (bill.total_revenue / bill.total_PTS).toFixed(3)
-    : "0.000";
+  // Use new effective_rate field if available, otherwise fall back to energy_rate or calculate
+  const effectiveRate = bill.effective_rate
+    ? bill.effective_rate.toFixed(3)
+    : bill.energy_rate
+    ? bill.energy_rate.toFixed(3)
+    : (bill.total_revenue > 0 && bill.total_PTS > 0
+      ? (bill.total_revenue / bill.total_PTS).toFixed(3)
+      : "0.000");
 
-  // Calculate production value from bill data
-  const productionValue = typeof bill.production_kwh === "number" 
-    ? bill.production_kwh 
-    : 0;
+  // Use new total_production field if available, otherwise fall back to total_PTS
+  const productionValue = bill.total_production ?? bill.total_PTS ?? 0;
 
   const generatePDF = async () => {
     if (invoiceRef.current) {
@@ -165,7 +170,6 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
 
           <section className="mb-26 mt-9">
             <div className="flex items-center justify-between pb-2">
-              <h2 className="text-md text-black">RECIPIENT</h2>
               <div className="pr-3 text-2xl font-semibold text-black">
                 INVOICE
               </div>
@@ -201,7 +205,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                   <td className="pr-4 text-sm font-semibold text-black">
                     Effective Rate:
                   </td>
-                  <td className="text-xs">{bill.energy_rate}c</td>
+                  <td className="text-xs">{effectiveRate}¢</td>
                 </tr>
               </tbody>
             </table>
@@ -213,11 +217,9 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
               <tr>
                 <th className="p-3 text-sm">Period Start</th>
                 <th className="p-3 text-sm">Period End</th>
-                <th className="p-3 text-sm">Description</th>
-                {/* <th className="p-3 text-sm">Solar Energy (kWh)</th> */}
                 <th className="p-3 text-sm">Production (kWh)</th>
                 <th className="p-3 text-sm">Effective Rate</th>
-                <th className="p-3 text-sm">Total</th>
+                <th className="p-3 text-sm">Revenue</th>
               </tr>
             </thead>
             <tbody>
@@ -228,12 +230,10 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
                 <td className="p-3 text-xs text-gray-600">
                   {bill.billing_period_end}
                 </td>
-                <td className="p-3 text-xs text-gray-600">Solar Energy Consumption</td>
-                {/* <td className="p-3 text-xs text-gray-600">{bill.total_PTS.toFixed(2)}</td> */}
                 <td className="p-3 text-xs text-gray-600">
-                  {(bill.total_revenue/bill.energy_rate).toFixed(2)}
+                  {productionValue.toFixed(2)}
                 </td>
-                <td className="p-3 text-xs text-gray-600">{bill.energy_rate}c</td>
+                <td className="p-3 text-xs text-gray-600">{effectiveRate}¢</td>
                 <td className="p-3 text-xs text-gray-600">
                   ${bill.total_revenue.toFixed(2)}
                 </td>
@@ -245,20 +245,28 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
 
           <section className="mb-6 space-y-6 text-right">
             <div className="flex w-full justify-end text-sm font-semibold text-gray-800">
-              <p>TOTAL PERIOD BALANCE</p>
-              <span className="ml-20 w-16 text-black">
-                ${bill.total_revenue.toFixed(2)}
+              <p>Revenue</p>
+              <span className="ml-20 w-20 text-black">
+                $ {bill.total_revenue.toFixed(2)}
               </span>
             </div>
             <div className="flex w-full justify-end text-sm font-semibold text-gray-800">
-              <p>OVERDUE BALANCE</p>
-              <span className="ml-20 w-16 text-black">
-                ${overdueBalance.toFixed(2)}
+              <p>Balance (Overdue)</p>
+              <span className="ml-20 w-20 text-black">
+                $ {overdueBalance.toFixed(2)}
               </span>
             </div>
+            {interestAmount > 0 && (
+              <div className="flex w-full justify-end text-sm font-semibold text-gray-800">
+                <p>Interest</p>
+                <span className="ml-20 w-20 text-black">
+                  $ {interestAmount.toFixed(2)}
+                </span>
+              </div>
+            )}
             <div className="flex w-full justify-end text-sm font-semibold text-red-600">
-              <p>BALANCE DUE</p>
-              <span className="ml-20 w-16">${balanceDue.toFixed(2)}</span>
+              <p>Total Balance</p>
+              <span className="ml-20 w-20">$ {balanceDue.toFixed(2)}</span>
             </div>
           </section>
 

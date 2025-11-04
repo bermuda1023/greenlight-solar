@@ -18,6 +18,7 @@ const AddCustomer = () => {
     installed_capacity: "",
     scaling_factor: "",
     price: "",
+    belco_rate: "",
     site_ID: "",
     authorization_code: "",
   });
@@ -159,24 +160,47 @@ const AddCustomer = () => {
 
       // Insert customer with refresh token
       console.log("Inserting customer with refresh token:", refreshToken);
-      const { error } = await supabase.from("customers").insert([
-        {
-          email: formData.email,
-          address: formData.address,
-          site_name: formData.site_name,
-          installation_date: formData.installation_date,
-          installed_capacity: Number(formData.installed_capacity),
-          scaling_factor: Number(formData.scaling_factor),
-          price: Number(formData.price),
-          authorization_code: formData.authorization_code || null,
-          verification: !!formData.authorization_code,
-          refresh_token: refreshToken || null,
-        },
-      ]);
+      const { data: insertedCustomer, error } = await supabase
+        .from("customers")
+        .insert([
+          {
+            email: formData.email,
+            address: formData.address,
+            site_name: formData.site_name,
+            installation_date: formData.installation_date,
+            installed_capacity: Number(formData.installed_capacity),
+            scaling_factor: Number(formData.scaling_factor),
+            price: Number(formData.price),
+            belco_rate: formData.belco_rate ? Number(formData.belco_rate) : null,
+            authorization_code: formData.authorization_code || null,
+            verification: !!formData.authorization_code,
+            refresh_token: refreshToken || null,
+          },
+        ])
+        .select();
 
       if (error) {
         console.error("Supabase insert error:", error);
         throw error;
+      }
+
+      // Create customer_balances entry with all fields set to zero
+      if (insertedCustomer && insertedCustomer[0]) {
+        const { error: balanceError } = await supabase
+          .from("customer_balances")
+          .insert([
+            {
+              customer_id: insertedCustomer[0].id,
+              total_billed: 0,
+              total_paid: 0,
+              current_balance: 0,
+            },
+          ]);
+
+        if (balanceError) {
+          console.error("Error creating customer balance:", balanceError);
+          toast.warning("Customer added but balance record creation failed.");
+        }
       }
 
       console.log("Customer added successfully!");
@@ -217,6 +241,7 @@ const AddCustomer = () => {
         installed_capacity: "",
         scaling_factor: "",
         price: "",
+        belco_rate: "",
         site_ID: "",
         authorization_code: "",
       });
@@ -256,23 +281,46 @@ const AddCustomer = () => {
     }
 
     try {
-      const { error } = await supabase.from("customers").insert([
-        {
-          email: formData.email,
-          address: formData.address,
-          site_name: formData.site_name,
-          solar_api_key: formData.solar_api_key,
-          installation_date: formData.installation_date,
-          installed_capacity: Number(formData.installed_capacity),
-          scaling_factor: Number(formData.scaling_factor),
-          price: Number(formData.price),
-          site_ID: Number(formData.site_ID),
-          verification: true,
-        },
-      ]);
+      const { data: insertedCustomer, error } = await supabase
+        .from("customers")
+        .insert([
+          {
+            email: formData.email,
+            address: formData.address,
+            site_name: formData.site_name,
+            solar_api_key: formData.solar_api_key,
+            installation_date: formData.installation_date,
+            installed_capacity: Number(formData.installed_capacity),
+            scaling_factor: Number(formData.scaling_factor),
+            price: Number(formData.price),
+            belco_rate: formData.belco_rate ? Number(formData.belco_rate) : null,
+            site_ID: Number(formData.site_ID),
+            verification: true,
+          },
+        ])
+        .select();
 
       if (error) {
         throw error;
+      }
+
+      // Create customer_balances entry with all fields set to zero
+      if (insertedCustomer && insertedCustomer[0]) {
+        const { error: balanceError } = await supabase
+          .from("customer_balances")
+          .insert([
+            {
+              customer_id: insertedCustomer[0].id,
+              total_billed: 0,
+              total_paid: 0,
+              current_balance: 0,
+            },
+          ]);
+
+        if (balanceError) {
+          console.error("Error creating customer balance:", balanceError);
+          toast.warning("Customer added but balance record creation failed.");
+        }
       }
 
       toast.success("Customer added successfully!"); // Toast success message
@@ -286,6 +334,7 @@ const AddCustomer = () => {
         installed_capacity: "",
         scaling_factor: "",
         price: "",
+        belco_rate: "",
         site_ID: "",
         authorization_code: "",
       });
@@ -527,6 +576,21 @@ const AddCustomer = () => {
               </div>
             </div>
 
+            <div className="mb-4.5">
+              <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
+                Belco Rate
+              </label>
+              <input
+                type="text"
+                name="belco_rate"
+                value={formData.belco_rate}
+                onChange={handleChange}
+                placeholder="Enter Belco Rate"
+                className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
+                disabled={isSubmitting}
+              />
+            </div>
+
             <button
               type="submit"
               className="flex w-full justify-center rounded-[7px] bg-primary p-[13px] font-medium text-white hover:bg-opacity-90"
@@ -687,6 +751,21 @@ const AddCustomer = () => {
                   disabled={isSubmitting}
                 />
               </div>
+            </div>
+
+            <div className="mb-4.5">
+              <label className="mb-3 block text-body-sm font-medium text-dark dark:text-white">
+                Belco Rate
+              </label>
+              <input
+                type="text"
+                name="belco_rate"
+                value={formData.belco_rate}
+                onChange={handleChange}
+                placeholder="Enter Belco Rate"
+                className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
+                disabled={isSubmitting}
+              />
             </div>
 
             <button
