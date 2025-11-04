@@ -233,7 +233,7 @@ const BillParams = () => {
                   ))
                 ) : (
                   <div className="p-7">
-                    <p className="text-gray-500">No parameters found. Click "Edit Parameters" to add them.</p>
+                    <p className="text-gray-500">No parameters found. Click 'Edit Parameters' to add them.</p>
                   </div>
                 )}
               </div>

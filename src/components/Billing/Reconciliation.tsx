@@ -121,6 +121,8 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
   const [selectedBills, setSelectedBills] = useState<Map<string, { bill: MonthlyBill; allocatedAmount: number; existingPayments: number }>>(new Map());
   const [remainingAmount, setRemainingAmount] = useState<number>(bill.amount);
 
+  
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     // Fetch existing payments for all selected bills
     const fetchExistingPayments = async (billId: string) => {
