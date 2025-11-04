@@ -1,13 +1,11 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import ClickOutside from "@/components/ClickOutside";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/utils/supabase/browserClient"; // Import Supabase client
 
 const DropdownUser = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [userImage, setUserImage] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>("loading...");
   const [userEmail, setUserEmail] = useState<string>("loading...");
 
@@ -37,7 +35,6 @@ const DropdownUser = () => {
         }
 
         // Update state with user profile data
-        setUserImage(profileData?.image_url || "/images/user/user-03.png"); // Fallback to default image
         setUserName(profileData?.full_name || "User Name");
         setUserEmail(profileData?.email || "User Email");
       } catch (error) {
@@ -56,19 +53,9 @@ const DropdownUser = () => {
     <ClickOutside onClick={() => setDropdownOpen(false)} className="relative">
       <Link
         onClick={() => setDropdownOpen(!dropdownOpen)}
-        className="flex items-center gap-4"
+        className="flex items-center gap-2"
         href="#"
       >
-        <span className="h-12 w-12 overflow-hidden rounded-full">
-          <Image
-            width={250}
-            height={250}
-            src={userImage || "/images/user/user-03.png"} // Use the userImage or fallback to the default image
-            alt="User"
-            className="h-full w-full object-cover"
-          />
-        </span>
-
         <span className="flex items-center gap-2 font-medium text-dark dark:text-dark-6">
           <span className="hidden lg:block">{userName}</span>
 
@@ -95,27 +82,12 @@ const DropdownUser = () => {
         <div
           className={`absolute right-0 mt-7.5 flex w-[280px] flex-col rounded-lg border-[0.5px] border-stroke bg-white shadow-default dark:border-dark-3 dark:bg-gray-dark`}
         >
-          <div className="flex items-center gap-2.5 px-2 pb-5.5 pt-3.5">
-          <span className="h-10 w-10 rounded-full overflow-hidden">
-  <Image
-    width={112}
-    height={112}
-    src={userImage || "/images/user/user-03.png"} // Use the userImage or fallback to the default image
-    alt="User"
-    className="object-cover w-full h-full"
-  />
-
-
-              <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-green dark:border-gray-dark"></span>
+          <div className="flex flex-col gap-1 px-4 pb-5.5 pt-3.5">
+            <span className="block font-medium text-dark dark:text-white">
+              {userName}
             </span>
-
-            <span className="block">
-              <span className="block font-medium text-dark dark:text-white">
-                {userName}
-              </span>
-              <span className="block font-medium text-dark-5 dark:text-dark-6">
-                {userEmail}
-              </span>
+            <span className="block text-sm font-medium text-dark-5 dark:text-dark-6">
+              {userEmail}
             </span>
           </div>
           <ul className="flex flex-col gap-1 border-y-[0.5px] border-stroke p-2.5 dark:border-dark-3">
