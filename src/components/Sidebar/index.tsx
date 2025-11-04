@@ -39,6 +39,7 @@ const menuGroups = [
         ),
         label: "Dashboard",
         route: "/dashboard",
+        disabled: true,
         // children: [{ label: "eCommerce", route: "/dashboard" }],
       },
       {
