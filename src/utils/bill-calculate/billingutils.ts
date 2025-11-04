@@ -71,6 +71,7 @@ export const calculateBilling = (inputs: {
     feedInCredit,
     MaxBill,
     effectiveRate,
-    finalRevenue
+    finalRevenue,
+    belcoRate
   };
 };

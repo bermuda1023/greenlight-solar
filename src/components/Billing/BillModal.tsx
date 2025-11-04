@@ -781,93 +781,105 @@ const generateInvoiceNumber = async (): Promise<string> => {
 
 const handlePostBill = async (billData: any) => {
     try {
+      console.log("handlePostBill called with data:", billData);
+
       if (
         !billData.site_name ||
         !billData.email ||
         !billData.billing_period_start ||
         !billData.billing_period_end ||
         !billData?.total_revenue ||
-        !billData?.total_cost ||
-        !billData?.energy_rate
+        !billData?.effective_rate
       ) {
-        toast.error("All fields are required.");
+        console.error("Validation failed. Missing fields:", {
+          site_name: !billData.site_name,
+          email: !billData.email,
+          billing_period_start: !billData.billing_period_start,
+          billing_period_end: !billData.billing_period_end,
+          total_revenue: !billData?.total_revenue,
+          effective_rate: !billData?.effective_rate,
+        });
+        toast.error("All required fields must be provided.");
         return false;
       }
 
       const invoiceNumber = await generateInvoiceNumber();
 
-      const { data: existingBills, error: fetchError } = await supabase
-        .from("monthly_bills")
-        .select("id, arrears")
-        .eq("site_name", billData.site_name)
-        .eq("email", billData.email)
-        .eq("billing_period_start", billData.billing_period_start)
-        .eq("billing_period_end", billData.billing_period_end);
-
-      if (fetchError) throw fetchError;
-
-      // if (existingBills?.length > 0) {
-      //   toast.error("A bill for this date already exists.");
-      //   return false;
-      // }
-
-      const previousArrears = existingBills?.[0]?.arrears || 0;
-
       const interestAmount = Number(billData.interest) || 0;
-      const total_bill = Number(billData.total_revenue) + (billData.arrears || previousArrears) + interestAmount;
+      const total_bill = Number(billData.total_bill) || Number(billData.total_revenue);
+      const pending_bill = Number(billData.pending_bill) || total_bill;
 
       console.log("Saving Bill Data:", {
-        ...billData,
-        invoice_number: invoiceNumber,
-        total_bill,
-        pending_bill: total_bill,
-        arrears: billData.arrears || previousArrears,
+        customer_id: billData.customer_id,
+        site_name: billData.site_name,
+        email: billData.email,
+        address: billData.address,
+        billing_period_start: billData.billing_period_start,
+        billing_period_end: billData.billing_period_end,
+        total_revenue: billData.total_revenue,
+        effective_rate: billData.effective_rate,
+        total_production: billData.total_production,
+        status: billData.status || "Pending",
         interest: interestAmount,
-        savings: Number(billData.savings) || 0, // Ensure number value
-        belco_revenue: Number(billData.belco_revenue) || 0, // Ensure number value
-        greenlight_revenue: Number(billData.greenlight_revenue) || 0, // Ensure number value
+        total_bill,
+        pending_bill,
+        paid_amount: Number(billData.paid_amount) || 0,
+        invoice_number: invoiceNumber,
+        reconciliation_ids: [],
       });
 
       const { data: insertedBills, error: insertError } = await supabase
         .from("monthly_bills")
         .insert([
           {
-            ...billData,
-            invoice_number: invoiceNumber,
-            total_bill: total_bill,
-            pending_bill: total_bill,
-            arrears: billData.arrears || previousArrears,
+            customer_id: billData.customer_id,
+            site_name: billData.site_name,
+            email: billData.email,
+            address: billData.address,
+            billing_period_start: billData.billing_period_start,
+            billing_period_end: billData.billing_period_end,
+            total_revenue: billData.total_revenue,
+            effective_rate: billData.effective_rate,
+            total_production: billData.total_production,
+            total_cost: 0, // Required by database - set to 0 for new bills
+            energy_rate: billData.effective_rate, // Also populate old field for compatibility
+            total_PTS: billData.total_production, // Also populate old field for compatibility
+            status: billData.status || "Pending",
             interest: interestAmount,
+            total_bill,
+            pending_bill,
+            paid_amount: Number(billData.paid_amount) || 0,
+            invoice_number: invoiceNumber,
             reconciliation_ids: [],
-            // payment_allocations: [], // Initialize empty payment allocations
-            status: "Pending",
-            savings: billData.savings,
-            belco_revenue: billData.belco_revenue,
-            greenlight_revenue: billData.greenlight_revenue,
           },
         ])
-        .select("*"); // Ensure the inserted data is retrieved
+        .select("*");
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        console.error("Database insert error:", insertError);
+        toast.error(`Database error: ${insertError.message}`);
+        throw insertError;
+      }
 
       await new CustomerBalanceService().addNewBill(
         billData.customer_id,
         total_bill,
       );
 
-      //  toast.success("Bill posted successfully!");
-
       console.log("Inserted Bill:", insertedBills?.[0]);
 
       return (
         insertedBills?.[0] ?? {
           invoice_number: invoiceNumber,
-          arrears: previousArrears,
         }
       );
     } catch (error) {
       console.error("Error handling bill:", error);
-      //  toast.error("Failed to post the bill.");
+      if (error instanceof Error) {
+        console.error("Error message:", error.message);
+        console.error("Error stack:", error.stack);
+      }
+      toast.error(`Failed to post bill: ${error instanceof Error ? error.message : "Unknown error"}`);
       return false;
     }
   };
@@ -892,17 +904,14 @@ const handlePostAllBills = async () => {
           address: customer.address || "N/A",
           billing_period_start: startDate,
           billing_period_end: endDate,
-          total_cost: billResult.belcoTotal.toFixed(2),
-          energy_rate: billResult.effectiveRate.toFixed(3),
           total_revenue: billResult.finalRevenue.toFixed(2),
-          total_PTS: energy.production || 0,
+          effective_rate: billResult.effectiveRate.toFixed(3),
+          total_production: energy.production || 0,
           status: "Pending",
-          arrears: outstanding,
           interest: interestAmount.toFixed(2),
           total_bill: totalBillAmount,
-          savings: billResult.savings.toFixed(2),
-          belco_revenue: billResult.belcoRevenue.toFixed(2),
-          greenlight_revenue: billResult.greenlightRevenue.toFixed(2),
+          pending_bill: totalBillAmount,
+          paid_amount: 0,
         };
       })
       .filter(Boolean);
@@ -967,16 +976,9 @@ const handleEmailBill = async (billData: any) => {
     setStatus("Processing...");
 
     try {
-      // toast.info("Posting bill...");
-
-      // ✅ First, post the bill and retrieve the updated data
-      const updatedBillData = await handlePostBill(billData);
-      console.log("updatedbill", updatedBillData);
-
-      if (!updatedBillData || !updatedBillData.invoice_number) {
-        // toast.error("Failed to post bill. Invoice not sent.");
-        return;
-      }
+      // Generate temporary invoice number for email (without posting to DB)
+      const tempInvoiceNumber = await generateInvoiceNumber();
+      console.log("Generated temp invoice number for email:", tempInvoiceNumber);
 
       const { data: customerBalanceData, error: balanceError } = await supabase
         .from("customer_balances")
@@ -990,17 +992,17 @@ const handleEmailBill = async (billData: any) => {
         return;
       }
 
-      // ✅ Extract `overdueBalance`
-      const overdueBalance =
-        (customerBalanceData?.current_balance || 0) -
-        (billData?.total_revenue || 0);
+      // ✅ Extract `overdueBalance` - current_balance is already the overdue amount
+      const overdueBalance = customerBalanceData?.current_balance || 0;
 
-      // ✅ Compute `balanceDue`
-      const balanceDue = parseFloat(billData.total_revenue) + overdueBalance;
+      // ✅ Calculate interest and total balance
+      const interestAmount = parseFloat(billData.interest) || 0;
+      const balanceDue = parseFloat(billData.total_revenue) + overdueBalance + interestAmount;
+
       // toast.info("Generating invoice PDF...");
 
       // ✅ Use effective rate from billData (already calculated by billingutils)
-      const effectiveRate = billData.energy_rate || "0.000";
+      const effectiveRate = billData.effective_rate || "0.000";
 
       // ✅ Fetch the message separately from `parameters`
       const message =
@@ -1029,9 +1031,10 @@ const handleEmailBill = async (billData: any) => {
          <p style="color: black;">Best regards,<br>Greenlight Energy <br>billing@greenlightenergy.bm <br>Phone: 1 (441) 705 3033</p>`;
       console.log(Emailmessage);
 
-      // Display the generated email message
+      // Use total_production
+      const totalProduction = billData.total_production || 0;
 
-      // ✅ Generate Invoice HTML Template (matching ViewBillModal.tsx format)
+      // ✅ Generate Invoice HTML Template (Updated to include new fields and remove unnecessary headings)
       const invoiceHTML = `
   <div
     class="mx-auto h-[297mm] w-full max-w-[210mm] border border-gray-300 bg-white px-8 pb-12">
@@ -1050,7 +1053,6 @@ const handleEmailBill = async (billData: any) => {
     <!-- Recipient and Invoice Info -->
     <section class="mb-26 mt-9">
       <div class="flex items-center justify-between pb-2">
-        <h2 class="text-md text-black">RECIPIENT</h2>
         <div class="pr-3 text-2xl font-semibold text-black">INVOICE</div>
       </div>
 
@@ -1068,9 +1070,9 @@ const handleEmailBill = async (billData: any) => {
             <td class="pr-4 text-sm font-semibold text-black">Address:</td>
             <td class="text-xs">${billData.address || "N/A"}</td>
             <td class="pr-4 text-sm font-semibold text-black">Invoice Number:</td>
-            <td class="text-xs">${updatedBillData.invoice_number}</td>
+            <td class="text-xs">${tempInvoiceNumber}</td>
             <td class="pr-4 text-sm font-semibold text-black">Effective Rate:</td>
-            <td class="text-xs">${effectiveRate}c</td>
+            <td class="text-xs">${effectiveRate}</td>
           </tr>
         </tbody>
       </table>
@@ -1082,40 +1084,45 @@ const handleEmailBill = async (billData: any) => {
         <tr>
           <th class="p-3 text-sm">Period Start</th>
           <th class="p-3 text-sm">Period End</th>
-          <th class="p-3 text-sm">Description</th>
           <th class="p-3 text-sm">Production (kWh)</th>
           <th class="p-3 text-sm">Effective Rate</th>
-          <th class="p-3 text-sm">Total</th>
+          <th class="p-3 text-sm">Revenue</th>
         </tr>
       </thead>
       <tbody>
         <tr>
           <td class="p-3 text-xs text-gray-600">${billData.billing_period_start}</td>
           <td class="p-3 text-xs text-gray-600">${billData.billing_period_end}</td>
-          <td class="p-3 text-xs text-gray-600">Solar Energy Consumption</td>
-          <td class="p-3 text-xs text-gray-600">${billData.total_PTS.toFixed(2)}</td>
-          <td class="p-3 text-xs text-gray-600">${effectiveRate}c</td>
+          <td class="p-3 text-xs text-gray-600">${totalProduction.toFixed(2)}</td>
+          <td class="p-3 text-xs text-gray-600">${effectiveRate}</td>
           <td class="p-3 text-xs text-gray-600">$${billData.total_revenue}</td>
         </tr>
       </tbody>
     </table>
 
-    
 
-    <!-- Balance Due and Overdue Balance -->
+
+    <!-- Balance Summary -->
     <section class="mb-6 space-y-6 text-right">
       <div class="flex w-full justify-end text-sm font-semibold text-gray-800">
-        <p>TOTAL PERIOD BALANCE</p>
+        <p>Revenue</p>
         <span class="ml-20 w-20 text-black">$ ${billData.total_revenue}</span>
       </div>
 
       <div class="flex w-full justify-end text-sm font-semibold text-gray-800">
-        <p> OVERDUE BALANCE</p>
+        <p>Balance (Overdue)</p>
         <span class="ml-20 w-20 text-black">$ ${overdueBalance.toFixed(2)}</span>
       </div>
-      
+
+      ${interestAmount > 0 ? `
+      <div class="flex w-full justify-end text-sm font-semibold text-gray-800">
+        <p>Interest</p>
+        <span class="ml-20 w-20 text-black">$ ${interestAmount.toFixed(2)}</span>
+      </div>
+      ` : ''}
+
       <div class="flex w-full justify-end text-sm font-semibold text-red-600">
-        <p> BALANCE DUE</p>
+        <p>Total Balance</p>
         <span class="ml-20 w-20">$ ${balanceDue.toFixed(2)}</span>
       </div>
     </section>
@@ -1215,10 +1222,22 @@ const handleEmailBill = async (billData: any) => {
             attachment: pdfBase64, // Sending Base64 encoded PDF
           }),
         });
+
+        // Check email API response
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("Email API error:", errorText);
+          throw new Error(`Failed to send email: ${response.status} - ${errorText}`);
+        }
+
+        const emailResult = await response.json();
+        console.log("Email sent successfully:", emailResult);
+        toast.success(`Email sent to ${billData.site_name}`);
       };
     } catch (error) {
       console.error("[ERROR] Failed to process bill or send email:", error);
-      toast.error("An error occurred. Please try again.");
+      toast.error(`Failed to send email: ${error instanceof Error ? error.message : "Unknown error"}`);
+      throw error; // Re-throw to be caught by handlePostAndEmailAllBills
     }
   };
 
@@ -1232,6 +1251,8 @@ const handlePostAndEmailAllBills = async () => {
         if (!customer) return null;
 
         const interestAmount = interest || 0;
+        const totalBillAmount =
+          Number(billResult.finalRevenue) + outstanding + interestAmount;
 
         return {
           customer_id: customer.id,
@@ -1240,16 +1261,14 @@ const handlePostAndEmailAllBills = async () => {
           address: customer.address || "N/A",
           billing_period_start: startDate,
           billing_period_end: endDate,
-          total_cost: billResult.belcoTotal.toFixed(2),
-          energy_rate: billResult.effectiveRate.toFixed(3),
-          total_PTS: energy.production || 0,
-          status: "Pending",
           total_revenue: billResult.finalRevenue.toFixed(2),
-          arrears: outstanding,
+          effective_rate: billResult.effectiveRate.toFixed(3),
+          total_production: energy.production || 0,
+          status: "Pending",
           interest: interestAmount.toFixed(2),
-          savings: billResult.savings.toFixed(2),
-          belco_revenue: billResult.belcoRevenue.toFixed(2),
-          greenlight_revenue: billResult.greenlightRevenue.toFixed(2),
+          total_bill: totalBillAmount,
+          pending_bill: totalBillAmount,
+          paid_amount: 0,
         };
       })
       .filter(Boolean);
@@ -1261,14 +1280,45 @@ const handlePostAndEmailAllBills = async () => {
 
     // Loop over each bill and process it
     for (const billData of billsToProcess) {
+      if (!billData) continue; // Skip null entries
+
       console.log("Processing bill:", billData);
 
       try {
-        // Now directly send the email (without calling handlePostBill)
-        await handleEmailBill(billData); // Send the email with the bill
+        // Check if a bill already exists for the same customer and date range
+        const { data: existingBills, error: fetchError } = await supabase
+          .from("monthly_bills")
+          .select("id")
+          .eq("site_name", billData.site_name)
+          .eq("billing_period_start", billData.billing_period_start)
+          .eq("billing_period_end", billData.billing_period_end);
+
+        if (fetchError) {
+          console.error("Error fetching existing bills:", fetchError);
+          failureCount++;
+          continue;
+        }
+
+        if (existingBills && existingBills.length > 0) {
+          console.log(`Bill already exists for ${billData.site_name}, skipping...`);
+          failureCount++;
+          continue;
+        }
+
+        // First, post the bill to the database
+        const postedBill = await handlePostBill(billData);
+
+        if (!postedBill) {
+          console.error("Failed to post bill, skipping email");
+          failureCount++;
+          continue;
+        }
+
+        // Then send the email with the posted bill data
+        await handleEmailBill(billData);
         successCount++;
-      } catch (emailError) {
-        console.error("Failed to send email for bill:", emailError);
+      } catch (error) {
+        console.error("Failed to process bill:", error);
         failureCount++;
       }
     }
@@ -1278,15 +1328,13 @@ const handlePostAndEmailAllBills = async () => {
     console.log("Final failure count:", failureCount);
 
     // Display toast messages based on success/failure
+    toast.dismiss(toastID);
+
     if (failureCount === 0) {
-      toast.dismiss(toastID);
-
-      toast.success(`Successfully emailed all ${successCount} bills!`);
+      toast.success(`Successfully posted and emailed all ${successCount} bills!`);
     } else {
-      toast.dismiss(toastID);
-
       toast.error(
-        `Successfully emailed ${successCount} bills. Failed to email ${failureCount} bills. Check console for details.`,
+        `Posted and emailed ${successCount} bills. Failed to process ${failureCount} bills.`,
       );
     }
     onClose();
@@ -1341,7 +1389,37 @@ return (
                 {successfulBills.length === 0 ? (
                   <p className="text-center text-gray-500 py-8">No successful bills found</p>
                 ) : (
-                  successfulBills.map((bill) => {
+                  <>
+                    {/* Summary Section - Common Information */}
+                    {successfulBills.length > 0 && parameters.length > 0 && (
+                      <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-lg border-2 border-blue-300 mb-6">
+                        <h3 className="text-lg font-bold text-gray-800 mb-4 border-b-2 border-blue-200 pb-2">
+                          Billing Summary - Common Information
+                        </h3>
+                        <div className="grid grid-cols-2 gap-6">
+                          {/* Billing Period */}
+                          <div className="bg-white p-4 rounded-lg shadow-sm">
+                            <h4 className="font-semibold text-gray-700 mb-3 text-sm">Billing Period</h4>
+                            <div className="space-y-2 text-sm">
+                              <p><strong>Start Date:</strong> {startDate}</p>
+                              <p><strong>End Date:</strong> {endDate}</p>
+                              <p><strong>Number of Days:</strong> {successfulBills[0]?.billResult?.numberOfDays || 'N/A'}</p>
+                            </div>
+                          </div>
+
+                          {/* Common Rates */}
+                          <div className="bg-white p-4 rounded-lg shadow-sm">
+                            <h4 className="font-semibold text-gray-700 mb-3 text-sm">Common Rates & Discounts</h4>
+                            <div className="space-y-2 text-sm">
+                              <p><strong>Belco Discount:</strong> {(parameters[0]?.belcodisc * 100).toFixed(2)}%</p>
+                              <p><strong>Export Rate:</strong> ${parameters[0]?.export_rate?.toFixed(4) || 'N/A'}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {successfulBills.map((bill) => {
                     const { customerId, customer, billResult, outstanding, interest, interestRatePercent, energy } = bill;
 
                     return (
@@ -1365,16 +1443,6 @@ return (
                           </button>
                         </div>
 
-                        {/* Billing Period */}
-                        <div className="bg-blue-50 p-3 rounded mb-3">
-                          <h4 className="font-semibold text-gray-700 mb-2">Billing Period</h4>
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <p><strong>Number of Days:</strong> {billResult.numberOfDays}</p>
-                            <p><strong>Start Date:</strong> {startDate}</p>
-                            <p><strong>End Date:</strong> {endDate}</p>
-                          </div>
-                        </div>
-
                         {/* Energy Summary */}
                         <div className="bg-yellow-50 p-3 rounded mb-3">
                           <h4 className="font-semibold text-gray-700 mb-2">Energy Data</h4>
@@ -1386,13 +1454,12 @@ return (
                           </div>
                         </div>
 
-                        {/* Rates */}
+                        {/* Customer-Specific Rates */}
                         <div className="bg-purple-50 p-3 rounded mb-3">
-                          <h4 className="font-semibold text-gray-700 mb-2">Rates & Discounts</h4>
+                          <h4 className="font-semibold text-gray-700 mb-2">Customer Rates</h4>
                           <div className="grid grid-cols-2 gap-2 text-sm">
                             <p><strong>Customer Rate:</strong> ${billResult.price.toFixed(2)}</p>
-                            <p><strong>Export Rate:</strong> ${billResult.export_rate.toFixed(3)}</p>
-                            <p><strong>Belco Discount:</strong> {(billResult.belcodisc*100).toFixed(2)}%</p>
+                            <p><strong>Belco Rate:</strong> ${billResult.belcoRate.toFixed(3)}</p>
                             <p><strong>Effective Rate:</strong> {billResult.effectiveRate.toFixed(3)}/kWh</p>
                           </div>
                         </div>
@@ -1508,7 +1575,8 @@ return (
                         </div>
                       </div>
                     );
-                  })
+                  })}
+                  </>
                 )}
               </div>
             )}

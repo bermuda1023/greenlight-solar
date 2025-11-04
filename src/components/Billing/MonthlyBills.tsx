@@ -19,15 +19,20 @@ interface Bill {
   self_consumption_kwh: number;
   export_kwh: number;
   total_cost: number;
-  energy_rate: number;
+  energy_rate: number; // Old field - kept for backwards compatibility
+  effective_rate?: number; // New field
   total_revenue: number;
   total_bill: number;
-  total_PTS: number;
+  total_PTS: number; // Old field - kept for backwards compatibility
+  total_production?: number; // New field
   status: string;
   created_at: string;
   arrears: number;
   invoice_number: string;
   reconciliation_ids: string[] | null;
+  interest?: number;
+  pending_bill?: number;
+  paid_amount?: number;
   // Add these three:
   belco_revenue?: number;
   greenlight_revenue?: number;
@@ -181,12 +186,23 @@ const BillingScreen = () => {
     }
   };
 
-  const handleDeleteBill = async (
-    billId: string,
-    billcustomer: string,
-    billrevenue: number,
-  ) => {
+  const handleDeleteBill = async (billId: string) => {
     try {
+      // First, fetch the bill details to get the total_bill amount
+      const { data: billData, error: billFetchError } = await supabase
+        .from("monthly_bills")
+        .select("customer_id, total_bill, total_revenue")
+        .eq("id", billId)
+        .single();
+
+      if (billFetchError) {
+        throw billFetchError;
+      }
+
+      const billcustomer = billData.customer_id;
+      // Use total_bill if available, otherwise fall back to total_revenue
+      const billAmount = billData.total_bill || billData.total_revenue;
+
       // Fetch the current_balance from the customer_balances table
       const { data: customerBalanceData, error: fetchError } = await supabase
         .from("customer_balances")
@@ -198,9 +214,9 @@ const BillingScreen = () => {
         throw fetchError;
       }
 
-      // Calculate the new balance by subtracting the bill revenue from the current balance
-      const newBalance = customerBalanceData.current_balance - billrevenue;
-      const newBalancetotal = customerBalanceData.total_billed - billrevenue;
+      // Calculate the new balance by subtracting the bill amount from the current balance
+      const newBalance = customerBalanceData.current_balance - billAmount;
+      const newBalancetotal = customerBalanceData.total_billed - billAmount;
 
       // Update the customer balance with the new calculated balance
       const { error: updateError } = await supabase
@@ -344,11 +360,11 @@ const BillingScreen = () => {
                         </th>
 
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Total Energy Consumption
+                          Total Production (kWh)
                         </th>
 
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Energy Rate ($/kWh)
+                          Effective Rate (¢/kWh)
                         </th>
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Total Revenue ($)
@@ -386,11 +402,11 @@ const BillingScreen = () => {
                           </td>
 
                           <td className="px-6.5 py-4 text-sm dark:text-white">
-                            {bill.total_PTS}
+                            {bill.total_production ?? bill.total_PTS}
                           </td>
 
                           <td className="px-6.5 py-4 text-sm dark:text-white">
-                            ${bill.energy_rate}
+                            {bill.effective_rate ?? bill.energy_rate}¢
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             ${bill.total_revenue}
@@ -432,13 +448,7 @@ const BillingScreen = () => {
                               </span>
                             </button>
                             <button
-                              onClick={() =>
-                                handleDeleteBill(
-                                  bill.id,
-                                  bill.customer_id,
-                                  bill.total_revenue,
-                                )
-                              }
+                              onClick={() => handleDeleteBill(bill.id)}
                               className="rounded-lg bg-red-50 p-2 text-red-600 transition hover:bg-red-600 hover:text-red-50"
                             >
                               <span className="text-xl">
