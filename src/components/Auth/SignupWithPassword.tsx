@@ -7,7 +7,6 @@ export default function SignupWithPassword() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [username, setUsername] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -21,7 +20,6 @@ export default function SignupWithPassword() {
       const trimmedEmail = email.trim();
       const trimmedPassword = password.trim();
       const trimmedFullName = fullName.trim();
-      const trimmedUsername = username.trim();
 
       // Validate inputs
       if (!trimmedEmail || !trimmedPassword) {
@@ -72,8 +70,7 @@ export default function SignupWithPassword() {
           {
             user_id: signUpData.user.id,
             email: trimmedEmail,
-            full_name: trimmedFullName,
-            username: trimmedUsername
+            full_name: trimmedFullName
           }
         ])
         .select();
@@ -109,25 +106,6 @@ export default function SignupWithPassword() {
             name="fullName"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            className="w-full rounded-lg border border-stroke bg-transparent py-[15px] pl-6 pr-11 font-medium text-dark outline-none focus:border-primary focus-visible:shadow-none dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
-          />
-        </div>
-      </div>
-
-      <div className="mb-4">
-        <label
-          htmlFor="username"
-          className="mb-2.5 block font-medium text-dark dark:text-white"
-        >
-          Username
-        </label>
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Choose a username"
-            name="username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
             className="w-full rounded-lg border border-stroke bg-transparent py-[15px] pl-6 pr-11 font-medium text-dark outline-none focus:border-primary focus-visible:shadow-none dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
           />
         </div>
