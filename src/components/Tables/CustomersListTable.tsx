@@ -20,6 +20,7 @@ import flatpickr from "flatpickr";
 import { supabase } from "@/utils/supabase/browserClient";
 import BillModal from "../Billing/BillModal";
 import TokenRefreshModal from "../Enphase/TokenRefreshModal";
+import AddCustomerModal from "../Customers/AddCustomerModal";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -74,6 +75,7 @@ const CustomersListTable = () => {
   const [newAuthCode, setNewAuthCode] = useState("");
   const [showTokenRefreshModal, setShowTokenRefreshModal] = useState(false);
   const [selectedCustomerForRefresh, setSelectedCustomerForRefresh] = useState<Customer | null>(null);
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
 
   const [formData, setFormData] = useState({
     email: "",
@@ -576,6 +578,25 @@ const CustomersListTable = () => {
           <p className="text-sm text-gray-500">View and manage customers.</p>
         </div>
         <div className="flex items-center gap-4">
+          <button
+            onClick={() => setShowAddCustomerModal(true)}
+            className="hover:bg-primary-dark flex items-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 py-3 text-white transition"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            Add New Customer
+          </button>
           <div className="flex flex-col">
             <input
               id="startDate"
@@ -1203,6 +1224,15 @@ const CustomersListTable = () => {
           onSuccess={handleTokenRefreshSuccess}
         />
       )}
+
+      <AddCustomerModal
+        isOpen={showAddCustomerModal}
+        onClose={() => setShowAddCustomerModal(false)}
+        onSuccess={() => {
+          fetchCustomers();
+          setShowAddCustomerModal(false);
+        }}
+      />
     </>
   );
 };
