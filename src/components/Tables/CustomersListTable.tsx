@@ -633,26 +633,26 @@ const CustomersListTable = () => {
                         Address
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Site ID
+                      	Solar Edge Site ID
                       </th>
                       {customerType === "all" && (
                         <>
                           <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                            Solar API Key
+                            SolarEdge API Key
                           </th>
                           <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                            Authorization Code
+                            Enphase Authorization
                           </th>
                         </>
                       )}
                       {customerType === "solar" && (
                         <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Solar API Key
+                          SolarEdge API Key
                         </th>
                       )}
                       {customerType === "enphase" && (
                         <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Authorization Code
+                          Enphase Authorization
                         </th>
                       )}
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
