@@ -66,11 +66,7 @@ const menuGroups = [
           </svg>
         ),
         label: "Customers",
-        route: "#",
-        children: [
-          { label: "Customers List", route: "/dashboard/customers/list" },
-          { label: "Add Customer", route: "/dashboard/customers/add" },
-        ],
+        route: "/dashboard/customers/list",
       },
       {
         icon: (

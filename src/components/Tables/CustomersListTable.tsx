@@ -20,6 +20,7 @@ import flatpickr from "flatpickr";
 import { supabase } from "@/utils/supabase/browserClient";
 import BillModal from "../Billing/BillModal";
 import TokenRefreshModal from "../Enphase/TokenRefreshModal";
+import AddCustomerModal from "../Customers/AddCustomerModal";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -52,11 +53,9 @@ interface Customer {
 
 const CustomersListTable = () => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
   const [startDate, setStartDate] = useState<string | null>(null);
   const [endDate, setEndDate] = useState<string | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
-  const [siteCapacity, setSiteCapacity] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,6 +73,7 @@ const CustomersListTable = () => {
   const [newAuthCode, setNewAuthCode] = useState("");
   const [showTokenRefreshModal, setShowTokenRefreshModal] = useState(false);
   const [selectedCustomerForRefresh, setSelectedCustomerForRefresh] = useState<Customer | null>(null);
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
 
   const [formData, setFormData] = useState({
     email: "",
@@ -215,10 +215,6 @@ const CustomersListTable = () => {
         );
       }
 
-      if (statusFilter) {
-        countQuery.eq("status", statusFilter);
-      }
-
       const { count } = await countQuery;
       setTotalCount(count || 0);
 
@@ -232,10 +228,6 @@ const CustomersListTable = () => {
         query = query.or(
           `site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`,
         );
-      }
-
-      if (statusFilter) {
-        query = query.eq("status", statusFilter);
       }
 
       const { data, error: fetchError } = await query;
@@ -273,7 +265,7 @@ const CustomersListTable = () => {
     } finally {
       setLoading(false);
     }
-  }, [searchTerm, statusFilter, currentPage, pageSize]);
+  }, [searchTerm, currentPage, pageSize]);
 
   useEffect(() => {
     fetchCustomers();
@@ -507,66 +499,6 @@ const CustomersListTable = () => {
     fetchCustomers();
     toast.success("Token refreshed successfully!");
   };
-  const handleBulkTokenRefresh = async () => {
-    if (selectedCustomers.length === 0) {
-      toast.error("Please select customers to refresh tokens for.");
-      return;
-    }
-
-    const enphaseCustomers = customers.filter(
-      customer => selectedCustomers.includes(customer.id) && customer.authorization_code
-    );
-
-    if (enphaseCustomers.length === 0) {
-      toast.error("No Enphase customers selected. Token refresh is only available for Enphase customers.");
-      return;
-    }
-
-    const toastId = toast.info(`Refreshing tokens for ${enphaseCustomers.length} Enphase customers...`);
-
-    try {
-      const response = await fetch("/api/enphase/bulk-refresh", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          customerIds: enphaseCustomers.map(c => c.id),
-          action: "refresh"
-        }),
-      });
-
-      const data = await response.json();
-      toast.dismiss(toastId);
-
-      if (response.ok && data.success) {
-        const { summary } = data;
-        
-        if (summary.successful > 0) {
-          toast.success(`Successfully refreshed ${summary.successful} tokens`);
-        }
-        
-        if (summary.failed > 0) {
-          toast.warn(`${summary.failed} tokens failed to refresh`);
-        }
-        
-        if (summary.needsReauthorization > 0) {
-          toast.error(
-            `${summary.needsReauthorization} customers need manual reauthorization. Click the red "Expired" badges or blue refresh icons to fix them.`,
-            { autoClose: 8000 }
-          );
-        }
-
-        fetchCustomers();
-      } else {
-        toast.error(`Bulk refresh failed: ${data.details || data.error}`);
-      }
-    } catch (error) {
-      toast.dismiss(toastId);
-      console.error("Error in bulk token refresh:", error);
-      toast.error("Failed to refresh tokens. Please try again.");
-    }
-  };
 
   return (
     <>
@@ -576,6 +508,25 @@ const CustomersListTable = () => {
           <p className="text-sm text-gray-500">View and manage customers.</p>
         </div>
         <div className="flex items-center gap-4">
+          <button
+            onClick={() => setShowAddCustomerModal(true)}
+            className="hover:bg-primary-dark flex items-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 py-3 text-white transition"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            Add New Customer
+          </button>
           <div className="flex flex-col">
             <input
               id="startDate"
@@ -620,27 +571,29 @@ const CustomersListTable = () => {
               </div>
               <div className="flex gap-4">
                 <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
+                  value={customerType}
+                  onChange={(e) => setCustomerType(e.target.value as "all" | "solar" | "enphase")}
                   className="rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:text-white"
                 >
-                  <option value="">Status: All</option>
-                  <option value="Paid">Paid</option>
-                  <option value="Pending">Pending</option>
-                </select>
-
-                <select
-                  value={siteCapacity}
-                  onChange={(e) => setSiteCapacity(e.target.value)}
-                  className="rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:text-white"
-                >
-                  <option value="">Site Capacity</option>
-                  <option value="0-5">0-5 kW</option>
-                  <option value="5-10">5-10 kW</option>
-                  <option value="10+">10+ kW</option>
+                  <option value="all">All Customers</option>
+                  <option value="solar">SolarEdge</option>
+                  <option value="enphase">Enphase</option>
                 </select>
               </div>
             </div>
+
+            {!loading && !error && (
+              <div className="mb-4 flex items-center justify-between">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Showing {filteredCustomers.length} of {customers.length} customers
+                  {customerType !== "all" && (
+                    <span className="ml-1 font-medium">
+                      ({customerType === "solar" ? "SolarEdge" : "Enphase"} only)
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
 
             {loading && (
               <div className="py-4 text-center">
@@ -680,26 +633,26 @@ const CustomersListTable = () => {
                         Address
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Site ID
+                      	Solar Edge Site ID
                       </th>
                       {customerType === "all" && (
                         <>
                           <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                            Solar API Key
+                            SolarEdge API Key
                           </th>
                           <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                            Authorization Code
+                            Enphase Authorization
                           </th>
                         </>
                       )}
                       {customerType === "solar" && (
                         <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Solar API Key
+                          SolarEdge API Key
                         </th>
                       )}
                       {customerType === "enphase" && (
                         <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Authorization Code
+                          Enphase Authorization
                         </th>
                       )}
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
@@ -1203,6 +1156,15 @@ const CustomersListTable = () => {
           onSuccess={handleTokenRefreshSuccess}
         />
       )}
+
+      <AddCustomerModal
+        isOpen={showAddCustomerModal}
+        onClose={() => setShowAddCustomerModal(false)}
+        onSuccess={() => {
+          fetchCustomers();
+          setShowAddCustomerModal(false);
+        }}
+      />
     </>
   );
 };
