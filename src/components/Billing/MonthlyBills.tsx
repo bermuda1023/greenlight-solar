@@ -65,6 +65,8 @@ const BillingScreen = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [dateRange, setDateRange] = useState("");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
@@ -139,6 +141,18 @@ const BillingScreen = () => {
           query = query
             .gte("billing_period_start", firstDayLastMonth.toISOString())
             .lte("billing_period_end", lastDayLastMonth.toISOString());
+        } else if (dateRange === "custom" && customStartDate && customEndDate) {
+          // Custom date range filter
+          const startDate = new Date(customStartDate);
+          const endDate = new Date(customEndDate);
+
+          // Set time to start of day for start date and end of day for end date
+          startDate.setHours(0, 0, 0, 0);
+          endDate.setHours(23, 59, 59, 999);
+
+          query = query
+            .gte("billing_period_start", startDate.toISOString())
+            .lte("billing_period_end", endDate.toISOString());
         }
       }
 
@@ -152,7 +166,7 @@ const BillingScreen = () => {
     } finally {
       setLoading(false);
     }
-  }, [searchTerm, statusFilter, dateRange]);
+  }, [searchTerm, statusFilter, dateRange, customStartDate, customEndDate]);
 
   useEffect(() => {
     fetchBills();
@@ -161,7 +175,7 @@ const BillingScreen = () => {
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, dateRange]);
+  }, [searchTerm, statusFilter, dateRange, customStartDate, customEndDate]);
 
   // Pagination calculations
   const totalPages = Math.ceil(bills.length / itemsPerPage);
@@ -184,6 +198,32 @@ const BillingScreen = () => {
     const start = new Date(startDate);
     const end = new Date(endDate);
     return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
+  };
+
+  const handleClearFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("");
+    setDateRange("");
+    setCustomStartDate("");
+    setCustomEndDate("");
+  };
+
+  const getActiveDateRangeText = () => {
+    if (!dateRange) return null;
+
+    if (dateRange === "this-month") {
+      const now = new Date();
+      return `This Month (${now.toLocaleString('default', { month: 'long', year: 'numeric' })})`;
+    } else if (dateRange === "last-month") {
+      const lastMonth = new Date();
+      lastMonth.setMonth(lastMonth.getMonth() - 1);
+      return `Last Month (${lastMonth.toLocaleString('default', { month: 'long', year: 'numeric' })})`;
+    } else if (dateRange === "custom" && customStartDate && customEndDate) {
+      const start = new Date(customStartDate);
+      const end = new Date(customEndDate);
+      return `Custom Range: ${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
+    }
+    return null;
   };
 
   const handleViewTransactions = async (billId: string) => {
@@ -321,36 +361,108 @@ const BillingScreen = () => {
         <div className="rounded-[10px] border border-stroke bg-white shadow-1 dark:border-dark-3 dark:bg-gray-dark dark:shadow-card">
           <div className="p-4">
             {/* Filters */}
-            <div className="mb-6 flex flex-col gap-4 md:flex-row">
-              <div className="flex-1">
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search by Site Name or Email"
-                    className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
-                  />
+            <div className="mb-6 flex flex-col gap-4">
+              <div className="flex flex-col gap-4 md:flex-row">
+                <div className="flex-1">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Search by Site Name or Email"
+                      className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition placeholder:text-dark-6 focus:border-primary active:border-primary disabled:cursor-default dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:focus:border-primary"
+                    />
+                  </div>
                 </div>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:text-white"
+                >
+                  <option value="">Status: All</option>
+                  <option value="Paid">Paid</option>
+                  <option value="Pending">Pending</option>
+                </select>
+                <select
+                  value={dateRange}
+                  onChange={(e) => {
+                    setDateRange(e.target.value);
+                    if (e.target.value !== "custom") {
+                      setCustomStartDate("");
+                      setCustomEndDate("");
+                    }
+                  }}
+                  className="rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:text-white"
+                >
+                  <option value="">Date Range: All</option>
+                  <option value="this-month">This Month</option>
+                  <option value="last-month">Last Month</option>
+                  <option value="custom">Custom Range</option>
+                </select>
               </div>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:text-white"
-              >
-                <option value="">Status: All</option>
-                <option value="Paid">Paid</option>
-                <option value="Pending">Pending</option>
-              </select>
-              <select
-                value={dateRange}
-                onChange={(e) => setDateRange(e.target.value)}
-                className="rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:text-white"
-              >
-                <option value="">Date Range</option>
-                <option value="this-month">This Month</option>
-                <option value="last-month">Last Month</option>
-              </select>
+
+              {/* Custom Date Range Inputs */}
+              {dateRange === "custom" && (
+                <div className="flex flex-col gap-4 md:flex-row md:items-center">
+                  <div className="flex-1">
+                    <label className="mb-2 block text-sm font-medium text-dark dark:text-white">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:text-white"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="mb-2 block text-sm font-medium text-dark dark:text-white">
+                      End Date
+                    </label>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="w-full rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:text-white"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Active Filters Status */}
+              {(searchTerm || statusFilter || dateRange) && (
+                <div className="flex items-center justify-between rounded-lg bg-primary/10 p-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-semibold text-dark dark:text-white">
+                      Active Filters:
+                    </span>
+                    {searchTerm && (
+                      <span className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 text-sm text-white">
+                        Search: "{searchTerm}"
+                      </span>
+                    )}
+                    {statusFilter && (
+                      <span className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 text-sm text-white">
+                        Status: {statusFilter}
+                      </span>
+                    )}
+                    {getActiveDateRangeText() && (
+                      <span className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 text-sm text-white">
+                        {getActiveDateRangeText()}
+                      </span>
+                    )}
+                    <span className="text-sm text-dark-6 dark:text-dark-6">
+                      ({bills.length} {bills.length === 1 ? 'result' : 'results'})
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleClearFilters}
+                    className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-600"
+                  >
+                    Clear All Filters
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Error Message */}
