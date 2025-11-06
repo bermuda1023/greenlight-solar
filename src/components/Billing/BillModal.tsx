@@ -141,6 +141,14 @@ const BillModal: React.FC<BillModalProps> = ({
   // Track if we've shown the summary toast to avoid duplicates
   const hasShownSummaryToast = useRef(false);
 
+  // Pagination state
+  const [successfulBillsPage, setSuccessfulBillsPage] = useState(1);
+  const [failedBillsPage, setFailedBillsPage] = useState(1);
+  const ITEMS_PER_PAGE = 5;
+
+  // State to track expanded rows for details
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
 
   const fetchParameters = useCallback(async () => {
     try {
@@ -718,6 +726,19 @@ const handleRemoveBill = (customerId: number | string) => {
   setFailedBills((prev) =>
     prev.filter((b) => String(b.customerId) !== String(customerId))
   );
+};
+
+// Toggle row expansion
+const toggleRowExpansion = (customerId: string) => {
+  setExpandedRows((prev) => {
+    const newSet = new Set(prev);
+    if (newSet.has(customerId)) {
+      newSet.delete(customerId);
+    } else {
+      newSet.add(customerId);
+    }
+    return newSet;
+  });
 };
 
 // Handle interest rate percentage change
@@ -1385,197 +1406,241 @@ return (
 
             {/* Successful Bills Tab */}
             {activeTab === "success" && (
-              <div className="space-y-8">
+              <div className="space-y-4">
                 {successfulBills.length === 0 ? (
                   <p className="text-center text-gray-500 py-8">No successful bills found</p>
                 ) : (
                   <>
                     {/* Summary Section - Common Information */}
                     {successfulBills.length > 0 && parameters.length > 0 && (
-                      <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-lg border-2 border-blue-300 mb-6">
-                        <h3 className="text-lg font-bold text-gray-800 mb-4 border-b-2 border-blue-200 pb-2">
-                          Billing Summary - Common Information
-                        </h3>
-                        <div className="grid grid-cols-2 gap-6">
-                          {/* Billing Period */}
-                          <div className="bg-white p-4 rounded-lg shadow-sm">
-                            <h4 className="font-semibold text-gray-700 mb-3 text-sm">Billing Period</h4>
-                            <div className="space-y-2 text-sm">
-                              <p><strong>Start Date:</strong> {startDate}</p>
-                              <p><strong>End Date:</strong> {endDate}</p>
-                              <p><strong>Number of Days:</strong> {successfulBills[0]?.billResult?.numberOfDays || 'N/A'}</p>
-                            </div>
+                      <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-lg border border-blue-300 mb-4">
+                        <h3 className="text-sm font-bold text-gray-800 mb-3">Billing Period & Common Rates</h3>
+                        <div className="grid grid-cols-4 gap-4 text-xs">
+                          <div>
+                            <span className="font-semibold">Period:</span> {startDate} to {endDate}
                           </div>
-
-                          {/* Common Rates */}
-                          <div className="bg-white p-4 rounded-lg shadow-sm">
-                            <h4 className="font-semibold text-gray-700 mb-3 text-sm">Common Rates & Discounts</h4>
-                            <div className="space-y-2 text-sm">
-                              <p><strong>Belco Discount:</strong> {(parameters[0]?.belcodisc * 100).toFixed(2)}%</p>
-                              <p><strong>Export Rate:</strong> ${parameters[0]?.export_rate?.toFixed(4) || 'N/A'}</p>
-                            </div>
+                          <div>
+                            <span className="font-semibold">Days:</span> {successfulBills[0]?.billResult?.numberOfDays || 'N/A'}
+                          </div>
+                          <div>
+                            <span className="font-semibold">Belco Discount:</span> {(parameters[0]?.belcodisc * 100).toFixed(2)}%
+                          </div>
+                          <div>
+                            <span className="font-semibold">Export Rate:</span> ${parameters[0]?.export_rate?.toFixed(4) || 'N/A'}
                           </div>
                         </div>
                       </div>
                     )}
 
-                    {successfulBills.map((bill) => {
-                    const { customerId, customer, billResult, outstanding, interest, interestRatePercent, energy } = bill;
+                    {/* Compact Table View */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-green-100 border-b-2 border-green-400">
+                            <th className="p-2 text-left font-semibold">Customer</th>
+                            <th className="p-2 text-right font-semibold">Production (kWh)</th>
+                            <th className="p-2 text-right font-semibold">Revenue</th>
+                            <th className="p-2 text-right font-semibold">Overdue</th>
+                            <th className="p-2 text-right font-semibold">Interest</th>
+                            <th className="p-2 text-right font-semibold">Total Due</th>
+                            <th className="p-2 text-center font-semibold">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {successfulBills
+                            .slice(0, successfulBillsPage * ITEMS_PER_PAGE)
+                            .map((bill) => {
+                              const { customerId, customer, billResult, outstanding, interest, interestRatePercent, energy } = bill;
+                              const isExpanded = expandedRows.has(customerId);
+                              const totalDue = billResult.finalRevenue + outstanding + (interest || 0);
 
-                    return (
-                      <div
-                        key={customerId}
-                        className="rounded-lg border-2 border-green-300 bg-white p-6 shadow-md"
-                      >
-                        {/* Header */}
-                        <div className="flex justify-between items-start mb-4 border-b-2 border-green-200 pb-3">
-                          <div>
-                            <h3 className="text-xl font-bold text-gray-800">
-                              {customer?.site_name}
-                            </h3>
-                            <p className="text-sm text-gray-600">{customer?.email}</p>
-                          </div>
-                          <button
-                            className="rounded bg-red-500 px-3 py-1.5 text-white hover:bg-red-600 transition"
-                            onClick={() => handleRemoveBill(customerId)}
-                          >
-                            <FontAwesomeIcon icon={faTimes} />
-                          </button>
-                        </div>
+                              return (
+                                <React.Fragment key={customerId}>
+                                  {/* Main Row */}
+                                  <tr className="border-b border-gray-200 hover:bg-gray-50">
+                                    <td className="p-2">
+                                      <div className="font-semibold text-gray-800">{customer?.site_name}</div>
+                                      <div className="text-xs text-gray-500">{customer?.email}</div>
+                                    </td>
+                                    <td className="p-2 text-right">{energy.production.toFixed(2)}</td>
+                                    <td className="p-2 text-right font-semibold text-green-700">
+                                      ${billResult.finalRevenue.toFixed(2)}
+                                    </td>
+                                    <td className="p-2 text-right text-orange-600">
+                                      ${outstanding.toFixed(2)}
+                                    </td>
+                                    <td className="p-2 text-right text-yellow-700">
+                                      ${(interest || 0).toFixed(2)}
+                                    </td>
+                                    <td className="p-2 text-right font-bold text-red-700">
+                                      ${totalDue.toFixed(2)}
+                                    </td>
+                                    <td className="p-2">
+                                      <div className="flex justify-center gap-2">
+                                        <button
+                                          onClick={() => toggleRowExpansion(customerId)}
+                                          className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition"
+                                        >
+                                          {isExpanded ? 'Hide' : 'Details'}
+                                        </button>
+                                        <button
+                                          onClick={() => handleRemoveBill(customerId)}
+                                          className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition"
+                                        >
+                                          <FontAwesomeIcon icon={faTimes} />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
 
-                        {/* Energy Summary */}
-                        <div className="bg-yellow-50 p-3 rounded mb-3">
-                          <h4 className="font-semibold text-gray-700 mb-2">Energy Data</h4>
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <p><strong>Total Production:</strong> {energy.production.toFixed(3)} kWh</p>
-                            <p><strong>Feed-In:</strong> {energy.feedIn.toFixed(3)} kWh</p>
-                            <p><strong>Consumption:</strong> {energy.consumption.toFixed(3)} kWh</p>
-                            <p><strong>Self-Consumption:</strong> {energy.selfConsumption.toFixed(3)} kWh</p>
-                          </div>
-                        </div>
+                                  {/* Expanded Details Row */}
+                                  {isExpanded && (
+                                    <tr className="bg-gray-50 border-b-2 border-gray-300">
+                                      <td colSpan={7} className="p-4">
+                                        <div className="grid grid-cols-3 gap-4">
+                                          {/* Energy Data */}
+                                          <div className="bg-yellow-50 p-3 rounded border border-yellow-200">
+                                            <h4 className="font-semibold text-gray-700 mb-2 text-sm">Energy Data</h4>
+                                            <div className="space-y-1 text-xs">
+                                              <div className="flex justify-between">
+                                                <span>Production:</span>
+                                                <span className="font-semibold">{energy.production.toFixed(3)} kWh</span>
+                                              </div>
+                                              <div className="flex justify-between">
+                                                <span>Consumption:</span>
+                                                <span className="font-semibold">{energy.consumption.toFixed(3)} kWh</span>
+                                              </div>
+                                              <div className="flex justify-between">
+                                                <span>Feed-In:</span>
+                                                <span className="font-semibold">{energy.feedIn.toFixed(3)} kWh</span>
+                                              </div>
+                                              <div className="flex justify-between">
+                                                <span>Self-Consumption:</span>
+                                                <span className="font-semibold">{energy.selfConsumption.toFixed(3)} kWh</span>
+                                              </div>
+                                            </div>
+                                          </div>
 
-                        {/* Customer-Specific Rates */}
-                        <div className="bg-purple-50 p-3 rounded mb-3">
-                          <h4 className="font-semibold text-gray-700 mb-2">Customer Rates</h4>
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <p><strong>Customer Rate:</strong> ${billResult.price.toFixed(2)}</p>
-                            <p><strong>Belco Rate:</strong> ${billResult.belcoRate.toFixed(3)}</p>
-                            <p><strong>Effective Rate:</strong> {billResult.effectiveRate.toFixed(3)}/kWh</p>
-                          </div>
-                        </div>
+                                          {/* Rates & Revenue */}
+                                          <div className="bg-purple-50 p-3 rounded border border-purple-200">
+                                            <h4 className="font-semibold text-gray-700 mb-2 text-sm">Rates & Revenue</h4>
+                                            <div className="space-y-1 text-xs">
+                                              <div className="flex justify-between">
+                                                <span>Customer Rate:</span>
+                                                <span className="font-semibold">${billResult.price.toFixed(2)}</span>
+                                              </div>
+                                              <div className="flex justify-between">
+                                                <span>Belco Rate:</span>
+                                                <span className="font-semibold">${billResult.belcoRate.toFixed(3)}</span>
+                                              </div>
+                                              <div className="flex justify-between">
+                                                <span>Effective Rate:</span>
+                                                <span className="font-semibold">{billResult.effectiveRate.toFixed(3)}/kWh</span>
+                                              </div>
+                                              <div className="flex justify-between">
+                                                <span>Rack Rate:</span>
+                                                <span className="font-semibold">${billResult.rackRate.toFixed(2)}</span>
+                                              </div>
+                                              <div className="flex justify-between">
+                                                <span>After Disc:</span>
+                                                <span className="font-semibold">${billResult.AfterBelcoDisc.toFixed(2)}</span>
+                                              </div>
+                                              <div className="flex justify-between">
+                                                <span>Feed-In Credit:</span>
+                                                <span className="font-semibold">${billResult.feedInCredit.toFixed(2)}</span>
+                                              </div>
+                                            </div>
+                                          </div>
 
-                        {/* Revenue */}
-                        <div className="bg-green-50 p-3 rounded mb-3">
-                          <h4 className="font-semibold text-gray-700 mb-2">Revenue Breakdown</h4>
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <p><strong>Rack Rate:</strong> ${billResult.rackRate.toFixed(2)}</p>
-                            <p><strong>After Belco Disc:</strong> ${billResult.AfterBelcoDisc.toFixed(2)}</p>
-                            <p><strong>Feed-In Credit:</strong> ${billResult.feedInCredit.toFixed(2)}</p>
-                            <p><strong>Max Bill:</strong> ${billResult.MaxBill.toFixed(2)}</p>
-                          </div>
-                        </div>
+                                          {/* Interest Settings */}
+                                          <div className="bg-orange-50 p-3 rounded border border-orange-200">
+                                            <h4 className="font-semibold text-gray-700 mb-2 text-sm">Interest Settings</h4>
+                                            {outstanding > 0 ? (
+                                              <div className="space-y-2">
+                                                <div className="flex justify-between items-center">
+                                                  <label className="text-xs text-gray-600">Rate:</label>
+                                                  <div className="flex items-center gap-1">
+                                                    <input
+                                                      type="number"
+                                                      step="0.1"
+                                                      min="0"
+                                                      max="100"
+                                                      value={interestRatePercent || 0}
+                                                      onChange={(e) => {
+                                                        const value = parseFloat(e.target.value);
+                                                        if (!isNaN(value)) {
+                                                          handleInterestRateChange(customerId, value);
+                                                        }
+                                                      }}
+                                                      className="w-16 px-1 py-1 text-xs text-right border border-yellow-400 rounded focus:outline-none focus:ring-1 focus:ring-yellow-500"
+                                                    />
+                                                    <span className="text-xs">%</span>
+                                                  </div>
+                                                </div>
+                                                <div className="flex justify-between items-center">
+                                                  <label className="text-xs text-gray-600">Amount:</label>
+                                                  <div className="flex items-center gap-1">
+                                                    <span className="text-xs">$</span>
+                                                    <input
+                                                      type="number"
+                                                      step="0.01"
+                                                      min="0"
+                                                      value={interest || 0}
+                                                      onChange={(e) => {
+                                                        const value = parseFloat(e.target.value);
+                                                        if (!isNaN(value)) {
+                                                          handleInterestChange(customerId, value);
+                                                        }
+                                                      }}
+                                                      className="w-20 px-1 py-1 text-xs text-right border border-yellow-400 rounded focus:outline-none focus:ring-1 focus:ring-yellow-500"
+                                                    />
+                                                  </div>
+                                                </div>
+                                                <button
+                                                  onClick={() => handleInterestRateChange(customerId, 0)}
+                                                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs transition"
+                                                >
+                                                  Waive Interest
+                                                </button>
+                                              </div>
+                                            ) : (
+                                              <p className="text-xs text-gray-500 italic">No overdue balance</p>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
 
-                        {/* Final Revenue */}
-                        <div className="bg-gradient-to-r from-green-100 to-blue-100 p-4 rounded-lg border-2 border-green-400 mb-3">
-                          <div className="flex justify-between items-center">
-                            <h4 className="text-lg font-bold text-gray-800">Final Revenue:</h4>
-                            <span className="text-2xl font-bold text-green-700">
-                              ${billResult.finalRevenue.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Overdue Balance Section */}
-                        <div className="bg-orange-50 p-3 rounded mb-2 border-l-4 border-orange-400">
-                          <div className="flex justify-between items-center">
-                            <h4 className="font-semibold text-gray-700">Overdue Balance:</h4>
-                            <span className="text-lg font-bold text-orange-600">
-                              ${outstanding.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Interest on Overdue Balance (Editable Rate & Amount) */}
-                        {outstanding > 0 && (
-                          <div className="bg-yellow-50 p-4 rounded mb-2 border-l-4 border-yellow-400">
-                            <h4 className="font-semibold text-gray-700 mb-3">Interest on Overdue</h4>
-
-                            {/* Interest Rate Input */}
-                            <div className="flex justify-between items-center mb-3">
-                              <label className="text-sm text-gray-600 font-medium">Interest Rate:</label>
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="number"
-                                  step="0.1"
-                                  min="0"
-                                  max="100"
-                                  value={interestRatePercent || 0}
-                                  onChange={(e) => {
-                                    const value = parseFloat(e.target.value);
-                                    if (!isNaN(value)) {
-                                      handleInterestRateChange(customerId, value);
-                                    }
-                                  }}
-                                  className="w-20 px-2 py-1.5 text-right border border-yellow-400 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 font-semibold text-yellow-700"
-                                />
-                                <span className="text-sm text-gray-600 font-medium">%</span>
-                              </div>
-                            </div>
-
-                            {/* Interest Amount */}
-                            <div className="flex justify-between items-center pt-3 border-t border-yellow-200">
-                              <span className="text-sm text-gray-600 font-medium">Interest Amount:</span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm text-gray-500">$</span>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  value={interest || 0}
-                                  onChange={(e) => {
-                                    const value = parseFloat(e.target.value);
-                                    if (!isNaN(value)) {
-                                      handleInterestChange(customerId, value);
-                                    }
-                                  }}
-                                  className="w-24 px-2 py-1 text-right border border-yellow-400 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 font-bold text-yellow-700"
-                                />
-                              </div>
-                            </div>
-
-                            <p className="text-xs text-gray-500 italic mt-2">
-                              * Change the rate to auto-recalculate, or edit the amount manually
-                            </p>
-
-                            {/* Button to waive interest */}
-                            <button
-                              onClick={() => {
-                                handleInterestRateChange(customerId, 0);
-                              }}
-                              className="mt-3 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded text-sm font-medium transition"
-                            >
-                              Waive Interest (Set to $0)
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Total Amount Due */}
-                        <div className="bg-gradient-to-r from-red-100 to-orange-100 p-4 rounded-lg border-2 border-red-400">
-                          <div className="flex justify-between items-center">
-                            <h4 className="text-lg font-bold text-gray-800">Total Amount Due:</h4>
-                            <span className="text-2xl font-bold text-red-700">
-                              ${(billResult.finalRevenue + outstanding + (interest || 0)).toFixed(2)}
-                            </span>
-                          </div>
-                          <div className="mt-2 text-xs text-gray-600">
-                            <p>Current Period: ${billResult.finalRevenue.toFixed(2)}</p>
-                            <p>Overdue: ${outstanding.toFixed(2)}</p>
-                            {outstanding > 0 && <p>Interest: ${(interest || 0).toFixed(2)}</p>}
-                          </div>
-                        </div>
+                    {/* See More Button */}
+                    {successfulBills.length > successfulBillsPage * ITEMS_PER_PAGE && (
+                      <div className="flex justify-center mt-4">
+                        <button
+                          onClick={() => setSuccessfulBillsPage(prev => prev + 1)}
+                          className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition font-semibold"
+                        >
+                          See More ({successfulBills.length - (successfulBillsPage * ITEMS_PER_PAGE)} remaining)
+                        </button>
                       </div>
-                    );
-                  })}
+                    )}
+
+                    {/* Show Less Button */}
+                    {successfulBillsPage > 1 && (
+                      <div className="flex justify-center mt-2">
+                        <button
+                          onClick={() => setSuccessfulBillsPage(1)}
+                          className="px-6 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 transition text-sm"
+                        >
+                          Show Less
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -1583,128 +1648,208 @@ return (
 
             {/* Failed Bills Tab */}
             {activeTab === "failed" && (
-              <div className="space-y-8">
+              <div className="space-y-4">
                 {failedBills.length === 0 ? (
                   <p className="text-center text-gray-500 py-8">No failed bills found</p>
                 ) : (
-                  failedBills.map((bill) => {
-                    const { customerId, customer, reason, issue, actionRequired, errorType, errorDetails, timestamp, energy } = bill;
+                  <>
+                    {/* Compact Table View for Failed Bills */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-red-100 border-b-2 border-red-400">
+                            <th className="p-2 text-left font-semibold">Customer</th>
+                            <th className="p-2 text-left font-semibold">Error Type</th>
+                            <th className="p-2 text-left font-semibold">Reason</th>
+                            <th className="p-2 text-left font-semibold">API Type</th>
+                            <th className="p-2 text-center font-semibold">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {failedBills
+                            .slice(0, failedBillsPage * ITEMS_PER_PAGE)
+                            .map((bill) => {
+                              const { customerId, customer, reason, issue, actionRequired, errorType, errorDetails, timestamp, energy } = bill;
+                              const isExpanded = expandedRows.has(customerId);
 
-                    // Determine error severity and colors
-                    const isTokenExpired = errorType === 'TOKEN_EXPIRED';
-                    const isZeroProduction = errorType === 'ZERO_PRODUCTION';
-                    const isAPIError = errorType === 'API_ERROR';
+                              // Determine error severity and colors
+                              const isTokenExpired = errorType === 'TOKEN_EXPIRED';
+                              const isZeroProduction = errorType === 'ZERO_PRODUCTION';
+                              const isAPIError = errorType === 'API_ERROR';
 
-                    const borderColor = isTokenExpired ? 'border-orange-400' : 'border-red-300';
-                    const bgColor = isTokenExpired ? 'bg-orange-50' : 'bg-red-50';
-                    const textColor = isTokenExpired ? 'text-orange-800' : 'text-red-800';
+                              const getBadgeColor = () => {
+                                if (isTokenExpired) return 'bg-orange-100 text-orange-800 border-orange-300';
+                                if (isZeroProduction) return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+                                if (isAPIError) return 'bg-red-100 text-red-800 border-red-300';
+                                return 'bg-gray-100 text-gray-800 border-gray-300';
+                              };
 
-                    return (
-                      <div
-                        key={customerId}
-                        className={`rounded-lg border-2 ${borderColor} bg-white p-6 shadow-md`}
-                      >
-                        {/* Header */}
-                        <div className="flex justify-between items-start mb-4 border-b-2 border-red-200 pb-3">
-                          <div>
-                            <h3 className="text-xl font-bold text-gray-800">
-                              {customer?.site_name}
-                            </h3>
-                            <p className="text-sm text-gray-600">{customer?.email}</p>
-                            {errorType && (
-                              <span className={`inline-block mt-1 px-2 py-1 text-xs font-semibold rounded ${
-                                isTokenExpired ? 'bg-orange-100 text-orange-800' :
-                                isZeroProduction ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-red-100 text-red-800'
-                              }`}>
-                                {errorType.replace(/_/g, ' ')}
-                              </span>
-                            )}
-                          </div>
-                          <button
-                            className="rounded bg-red-500 px-3 py-1.5 text-white hover:bg-red-600 transition"
-                            onClick={() => handleRemoveBill(customerId)}
-                          >
-                            <FontAwesomeIcon icon={faTimes} />
-                          </button>
-                        </div>
+                              return (
+                                <React.Fragment key={customerId}>
+                                  {/* Main Row */}
+                                  <tr className="border-b border-gray-200 hover:bg-gray-50">
+                                    <td className="p-2">
+                                      <div className="font-semibold text-gray-800">{customer?.site_name}</div>
+                                      <div className="text-xs text-gray-500">{customer?.email}</div>
+                                    </td>
+                                    <td className="p-2">
+                                      <span className={`inline-block px-2 py-1 text-xs font-semibold rounded border ${getBadgeColor()}`}>
+                                        {errorType?.replace(/_/g, ' ') || 'UNKNOWN'}
+                                      </span>
+                                    </td>
+                                    <td className="p-2 text-sm text-gray-700">{reason}</td>
+                                    <td className="p-2 text-sm">
+                                      {customer?.refresh_token ? (
+                                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">Enphase</span>
+                                      ) : (
+                                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">SolarEdge</span>
+                                      )}
+                                    </td>
+                                    <td className="p-2">
+                                      <div className="flex justify-center gap-2">
+                                        <button
+                                          onClick={() => toggleRowExpansion(customerId)}
+                                          className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition"
+                                        >
+                                          {isExpanded ? 'Hide' : 'Details'}
+                                        </button>
+                                        <button
+                                          onClick={() => handleRemoveBill(customerId)}
+                                          className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition"
+                                        >
+                                          <FontAwesomeIcon icon={faTimes} />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
 
-                        {/* Issue Alert */}
-                        <div className={`${bgColor} border-l-4 ${borderColor} p-4 mb-4`}>
-                          <div className="flex items-start">
-                            <div className="flex-shrink-0">
-                              <svg className={`h-5 w-5 ${isTokenExpired ? 'text-orange-400' : 'text-red-400'}`} viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                              </svg>
-                            </div>
-                            <div className="ml-3 flex-1">
-                              <h3 className={`text-sm font-medium ${textColor}`}>
-                                {reason}
-                              </h3>
-                              <div className={`mt-2 text-sm ${isTokenExpired ? 'text-orange-700' : 'text-red-700'}`}>
-                                <p><strong>Issue:</strong> {issue}</p>
-                                {errorDetails?.httpStatus && (
-                                  <p className="mt-1"><strong>HTTP Status:</strong> {errorDetails.httpStatus}</p>
-                                )}
-                                {timestamp && (
-                                  <p className="mt-1 text-xs text-gray-500">
-                                    <strong>Time:</strong> {new Date(timestamp).toLocaleString()}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
+                                  {/* Expanded Details Row */}
+                                  {isExpanded && (
+                                    <tr className="bg-red-50 border-b-2 border-red-300">
+                                      <td colSpan={5} className="p-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                          {/* Left Column - Issue Details */}
+                                          <div className="space-y-3">
+                                            {/* Issue Alert */}
+                                            <div className={`${isTokenExpired ? 'bg-orange-100 border-orange-400' : 'bg-red-100 border-red-400'} border-l-4 p-3 rounded`}>
+                                              <h4 className={`font-semibold text-sm mb-2 ${isTokenExpired ? 'text-orange-800' : 'text-red-800'}`}>
+                                                Issue Details
+                                              </h4>
+                                              <div className="space-y-1 text-xs">
+                                                <p><strong>Issue:</strong> {issue}</p>
+                                                {errorDetails?.httpStatus && (
+                                                  <p><strong>HTTP Status:</strong> {errorDetails.httpStatus}</p>
+                                                )}
+                                                {errorDetails?.errorMessage && (
+                                                  <p><strong>Error Message:</strong> {errorDetails.errorMessage}</p>
+                                                )}
+                                                {timestamp && (
+                                                  <p className="text-gray-600">
+                                                    <strong>Time:</strong> {new Date(timestamp).toLocaleString()}
+                                                  </p>
+                                                )}
+                                              </div>
+                                            </div>
 
-                        {/* Customer Info */}
-                        <div className="bg-gray-50 p-3 rounded mb-3">
-                          <h4 className="font-semibold text-gray-700 mb-2">Customer Information</h4>
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <p><strong>Site Name:</strong> {customer?.site_name || "N/A"}</p>
-                            <p><strong>Email:</strong> {customer?.email || "N/A"}</p>
-                            <p><strong>Address:</strong> {customer?.address || "N/A"}</p>
-                            <p><strong>Site ID:</strong> {customer?.site_ID || "N/A"}</p>
-                            <p><strong>API Type:</strong> {customer?.refresh_token ? 'Enphase' : 'SolarEdge'}</p>
-                          </div>
-                        </div>
+                                            {/* Action Required */}
+                                            <div className="bg-yellow-100 border-l-4 border-yellow-400 p-3 rounded">
+                                              <h4 className="font-semibold text-sm text-yellow-800 mb-2">Action Required</h4>
+                                              <p className="text-xs text-yellow-700">
+                                                {actionRequired || 'Please verify customer data and API credentials.'}
+                                              </p>
+                                              {isZeroProduction && (
+                                                <p className="mt-2 text-xs text-yellow-700">
+                                                  Contact the customer to verify their solar system is operational.
+                                                </p>
+                                              )}
+                                            </div>
+                                          </div>
 
-                        {/* Energy Data (if available) */}
-                        {energy && (
-                          <div className="bg-blue-50 p-3 rounded mb-3">
-                            <h4 className="font-semibold text-gray-700 mb-2">Energy Data (Retrieved)</h4>
-                            <div className="grid grid-cols-2 gap-2 text-sm">
-                              <p><strong>Production:</strong> {energy.production?.toFixed(3) || 0} kWh</p>
-                              <p><strong>Consumption:</strong> {energy.consumption?.toFixed(3) || 0} kWh</p>
-                              <p><strong>Feed-In:</strong> {energy.feedIn?.toFixed(3) || 0} kWh</p>
-                              <p><strong>Self-Consumption:</strong> {energy.selfConsumption?.toFixed(3) || 0} kWh</p>
-                            </div>
-                          </div>
-                        )}
+                                          {/* Right Column - Customer & Energy Info */}
+                                          <div className="space-y-3">
+                                            {/* Customer Info */}
+                                            <div className="bg-gray-100 p-3 rounded border border-gray-300">
+                                              <h4 className="font-semibold text-gray-700 mb-2 text-sm">Customer Information</h4>
+                                              <div className="space-y-1 text-xs">
+                                                <div className="flex justify-between">
+                                                  <span>Site Name:</span>
+                                                  <span className="font-semibold">{customer?.site_name || "N/A"}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                  <span>Email:</span>
+                                                  <span className="font-semibold">{customer?.email || "N/A"}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                  <span>Address:</span>
+                                                  <span className="font-semibold text-right">{customer?.address || "N/A"}</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                  <span>Site ID:</span>
+                                                  <span className="font-semibold">{customer?.site_ID || "N/A"}</span>
+                                                </div>
+                                              </div>
+                                            </div>
 
-                        {/* Action Required */}
-                        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-                          <div className="flex">
-                            <div className="flex-shrink-0">
-                              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                              </svg>
-                            </div>
-                            <div className="ml-3">
-                              <p className="text-sm font-semibold text-yellow-800 mb-1">Action Required:</p>
-                              <p className="text-sm text-yellow-700">
-                                {actionRequired || 'Please verify customer data and API credentials.'}
-                              </p>
-                              {isZeroProduction && (
-                                <p className="mt-2 text-sm text-yellow-700">
-                                  Contact the customer to verify their solar system is operational and producing energy.
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
+                                            {/* Energy Data (if available) */}
+                                            {energy && (
+                                              <div className="bg-blue-50 p-3 rounded border border-blue-200">
+                                                <h4 className="font-semibold text-gray-700 mb-2 text-sm">Energy Data (Retrieved)</h4>
+                                                <div className="space-y-1 text-xs">
+                                                  <div className="flex justify-between">
+                                                    <span>Production:</span>
+                                                    <span className="font-semibold">{energy.production?.toFixed(3) || 0} kWh</span>
+                                                  </div>
+                                                  <div className="flex justify-between">
+                                                    <span>Consumption:</span>
+                                                    <span className="font-semibold">{energy.consumption?.toFixed(3) || 0} kWh</span>
+                                                  </div>
+                                                  <div className="flex justify-between">
+                                                    <span>Feed-In:</span>
+                                                    <span className="font-semibold">{energy.feedIn?.toFixed(3) || 0} kWh</span>
+                                                  </div>
+                                                  <div className="flex justify-between">
+                                                    <span>Self-Consumption:</span>
+                                                    <span className="font-semibold">{energy.selfConsumption?.toFixed(3) || 0} kWh</span>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* See More Button */}
+                    {failedBills.length > failedBillsPage * ITEMS_PER_PAGE && (
+                      <div className="flex justify-center mt-4">
+                        <button
+                          onClick={() => setFailedBillsPage(prev => prev + 1)}
+                          className="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-semibold"
+                        >
+                          See More ({failedBills.length - (failedBillsPage * ITEMS_PER_PAGE)} remaining)
+                        </button>
                       </div>
-                    );
-                  })
+                    )}
+
+                    {/* Show Less Button */}
+                    {failedBillsPage > 1 && (
+                      <div className="flex justify-center mt-2">
+                        <button
+                          onClick={() => setFailedBillsPage(1)}
+                          className="px-6 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 transition text-sm"
+                        >
+                          Show Less
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
