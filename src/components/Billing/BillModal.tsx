@@ -830,6 +830,9 @@ const handlePostBill = async (billData: any) => {
       const total_bill = Number(billData.total_bill) || Number(billData.total_revenue);
       const pending_bill = Number(billData.pending_bill) || total_bill;
 
+      // Calculate the overdue balance (last_overdue)
+      const overdueBalance = Number(billData.overdue_balance) || 0;
+
       console.log("Saving Bill Data:", {
         customer_id: billData.customer_id,
         site_name: billData.site_name,
@@ -847,6 +850,7 @@ const handlePostBill = async (billData: any) => {
         paid_amount: Number(billData.paid_amount) || 0,
         invoice_number: invoiceNumber,
         reconciliation_ids: [],
+        last_overdue: overdueBalance,
       });
 
       const { data: insertedBills, error: insertError } = await supabase
@@ -872,6 +876,7 @@ const handlePostBill = async (billData: any) => {
             paid_amount: Number(billData.paid_amount) || 0,
             invoice_number: invoiceNumber,
             reconciliation_ids: [],
+            last_overdue: overdueBalance,
           },
         ])
         .select("*");
@@ -933,6 +938,7 @@ const handlePostAllBills = async () => {
           total_bill: totalBillAmount,
           pending_bill: totalBillAmount,
           paid_amount: 0,
+          overdue_balance: outstanding, // Add overdue balance for last_overdue field
         };
       })
       .filter(Boolean);
@@ -1290,6 +1296,7 @@ const handlePostAndEmailAllBills = async () => {
           total_bill: totalBillAmount,
           pending_bill: totalBillAmount,
           paid_amount: 0,
+          overdue_balance: outstanding, // Add overdue balance for last_overdue field
         };
       })
       .filter(Boolean);
