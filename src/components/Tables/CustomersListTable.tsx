@@ -579,15 +579,23 @@ const CustomersListTable = () => {
                 <AiOutlineSearch className="absolute right-3 top-1/2 -translate-y-1/2 transform text-dark-6 dark:text-white" />
               </div>
               <div className="flex gap-4">
-                <select
-                  value={customerType}
-                  onChange={(e) => setCustomerType(e.target.value as "all" | "solar" | "enphase")}
-                  className="rounded-[7px] border-[1.5px] border-stroke bg-transparent px-5 py-3 text-dark outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:text-white"
-                >
-                  <option value="all">All Customers</option>
-                  <option value="solar">SolarEdge</option>
-                  <option value="enphase">Enphase</option>
-                </select>
+                <div className="relative">
+                  <select
+                    value={customerType}
+                    onChange={(e) => setCustomerType(e.target.value as "all" | "solar" | "enphase")}
+                    className="w-full appearance-none rounded-[7px] border-[1.5px] border-stroke bg-transparent pl-5 pr-10 py-3 text-dark outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:text-white cursor-pointer hover:border-primary"
+                    style={{ minWidth: '160px' }}
+                  >
+                    <option value="all">All Customers</option>
+                    <option value="solar">SolarEdge</option>
+                    <option value="enphase">Enphase</option>
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                    <svg className="h-4 w-4 text-dark dark:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
               </div>
             </div>
 
