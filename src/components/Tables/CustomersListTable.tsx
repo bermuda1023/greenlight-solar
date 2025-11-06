@@ -60,8 +60,8 @@ const CustomersListTable = () => {
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentPage] = useState(1);
-  const [pageSize] = useState(200);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [totalCount, setTotalCount] = useState(0);
   const [showBillModal, setShowBillModal] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -101,10 +101,33 @@ const CustomersListTable = () => {
   const getCustomerType = (customer: Customer): "solar" | "enphase" => {
     return customer.authorization_code ? "enphase" : "solar";
   };
+
   const filteredCustomers = customers.filter(customer => {
     if (customerType === "all") return true;
     return getCustomerType(customer) === customerType;
   });
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, customerType]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredCustomers.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedCustomers = filteredCustomers.slice(startIndex, endIndex);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1); // Reset to first page when changing items per page
+  };
 
   const openEnphaseAuth = () => {
     const authUrl = `${ENPHASE_AUTH_URL}?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}`;
@@ -205,23 +228,9 @@ const CustomersListTable = () => {
     try {
       setLoading(true);
 
-      const countQuery = supabase
-        .from("customers")
-        .select("*", { count: "exact" });
-
-      if (searchTerm) {
-        countQuery.or(
-          `site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`,
-        );
-      }
-
-      const { count } = await countQuery;
-      setTotalCount(count || 0);
-
       let query = supabase
         .from("customers")
         .select("*")
-        .range((currentPage - 1) * pageSize, currentPage * pageSize - 1)
         .order("created_at", { ascending: false });
 
       if (searchTerm) {
@@ -265,7 +274,7 @@ const CustomersListTable = () => {
     } finally {
       setLoading(false);
     }
-  }, [searchTerm, currentPage, pageSize]);
+  }, [searchTerm]);
 
   useEffect(() => {
     fetchCustomers();
@@ -582,10 +591,10 @@ const CustomersListTable = () => {
               </div>
             </div>
 
-            {!loading && !error && (
+            {!loading && !error && filteredCustomers.length > 0 && (
               <div className="mb-4 flex items-center justify-between">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Showing {filteredCustomers.length} of {customers.length} customers
+                  Showing {startIndex + 1} to {Math.min(endIndex, filteredCustomers.length)} of {filteredCustomers.length} customers
                   {customerType !== "all" && (
                     <span className="ml-1 font-medium">
                       ({customerType === "solar" ? "SolarEdge" : "Enphase"} only)
@@ -680,7 +689,14 @@ const CustomersListTable = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredCustomers.map((customer) => (
+                    {paginatedCustomers.length === 0 ? (
+                      <tr>
+                        <td colSpan={14} className="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                          No customers found matching your criteria.
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedCustomers.map((customer) => (
                       <tr
                         key={customer.id}
                         className="border-b border-stroke dark:border-dark-3"
@@ -833,38 +849,86 @@ const CustomersListTable = () => {
                             )}
                         </td>
                       </tr>
-                    ))}
+                    ))
+                    )}
                   </tbody>
                 </table>
               </div>
 
-              <div className="flex items-center justify-between p-6">
-                <div className="flex items-center">
-                  <select className="rounded-[7px] border-[1.5px] border-stroke bg-transparent px-4 py-2 text-sm text-dark outline-none transition focus:border-primary dark:border-dark-3 dark:bg-dark-2 dark:text-white">
-                    <option value="10">10 per page</option>
-                    <option value="25">25 per page</option>
-                    <option value="50">50 per page</option>
-                  </select>
-                  <span className="ml-4 text-sm text-dark dark:text-white">
-                    Showing 1 to {customers.length} of {customers.length}{" "}
-                    results
-                  </span>
+              {/* Pagination Controls */}
+              {!loading && filteredCustomers.length > 0 && (
+                <div className="flex flex-col gap-4 border-t border-stroke p-4 dark:border-dark-3 sm:flex-row sm:items-center sm:justify-between">
+                  {/* Items per page selector */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-dark dark:text-white">
+                      Show:
+                    </span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+                      className="rounded-[7px] border-[1.5px] border-stroke bg-transparent px-3 py-2 text-sm text-dark outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:text-white"
+                    >
+                      <option value={10}>10 per page</option>
+                      <option value={25}>25 per page</option>
+                      <option value={50}>50 per page</option>
+                    </select>
+                  </div>
+
+                  {/* Pagination info */}
+                  <div className="text-sm text-dark dark:text-white">
+                    Showing {startIndex + 1} to {Math.min(endIndex, filteredCustomers.length)} of {filteredCustomers.length} entries
+                  </div>
+
+                  {/* Page navigation */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className="flex items-center gap-1 rounded-[7px] border-[1.5px] border-stroke bg-transparent px-4 py-2 text-sm text-dark transition hover:bg-gray-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-3 dark:text-white dark:hover:bg-dark-2"
+                    >
+                      <FaArrowLeft /> Previous
+                    </button>
+
+                    {/* Page numbers */}
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNumber;
+                        if (totalPages <= 5) {
+                          pageNumber = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNumber = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNumber = totalPages - 4 + i;
+                        } else {
+                          pageNumber = currentPage - 2 + i;
+                        }
+
+                        return (
+                          <button
+                            key={pageNumber}
+                            onClick={() => handlePageChange(pageNumber)}
+                            className={`h-9 w-9 rounded-[7px] text-sm transition ${
+                              currentPage === pageNumber
+                                ? "bg-primary text-white"
+                                : "border-[1.5px] border-stroke bg-transparent text-dark hover:bg-gray-2 dark:border-dark-3 dark:text-white dark:hover:bg-dark-2"
+                            }`}
+                          >
+                            {pageNumber}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <button
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      className="flex items-center gap-1 rounded-[7px] border-[1.5px] border-stroke bg-transparent px-4 py-2 text-sm text-dark transition hover:bg-gray-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-3 dark:text-white dark:hover:bg-dark-2"
+                    >
+                      Next <FaArrowRight />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    className="rounded-[7px] border-[1.5px] border-stroke bg-transparent px-4 py-2 text-sm text-dark transition hover:bg-gray-200 disabled:opacity-50 dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:hover:bg-dark-3"
-                    disabled
-                  >
-                    <FaArrowLeft /> Previous
-                  </button>
-                  <button
-                    className="rounded-[7px] border-[1.5px] border-stroke bg-transparent px-4 py-2 text-sm text-dark transition hover:bg-gray-200 disabled:opacity-50 dark:border-dark-3 dark:bg-dark-2 dark:text-white dark:hover:bg-dark-3"
-                    disabled
-                  >
-                    Next <FaArrowRight />
-                  </button>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
