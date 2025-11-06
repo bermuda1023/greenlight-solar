@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "@/utils/supabase/browserClient";
 
 export default function SigninWithPassword() {
@@ -73,6 +74,15 @@ export default function SigninWithPassword() {
         >
           Sign In
         </button>
+      </div>
+
+      <div className="mt-4 text-center">
+        <Link
+          href="/authentication/forgot-password"
+          className="text-sm text-primary hover:underline"
+        >
+          Forgot your password?
+        </Link>
       </div>
     </form>
   );
