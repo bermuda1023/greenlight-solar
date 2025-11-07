@@ -24,6 +24,7 @@ const SettingBoxes = () => {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const toggleForm = () => {
     setShowUpdateForm(!showUpdateForm);
   };
@@ -119,6 +120,18 @@ const SettingBoxes = () => {
       return;
     }
 
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast.error("All password fields are required.");
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      toast.error("New password must be at least 6 characters long.");
+      return;
+    }
+
+    setIsResettingPassword(true);
+
     try {
       const {
         data: { user },
@@ -126,9 +139,11 @@ const SettingBoxes = () => {
 
       if (!user) {
         toast.error("User is not authenticated.");
+        setIsResettingPassword(false);
         return;
       }
 
+      // Verify current password
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: user.email!,
         password: currentPassword,
@@ -136,25 +151,30 @@ const SettingBoxes = () => {
 
       if (signInError) {
         toast.error("Current password is incorrect.");
+        setIsResettingPassword(false);
         return;
       }
 
+      // Update to new password
       const { error: updateError } = await supabase.auth.updateUser({
         password: newPassword,
       });
 
       if (updateError) {
         toast.error("Failed to update password.");
+        setIsResettingPassword(false);
         return;
       }
 
-      toast.success("Password updated successfully.");
+      toast.success("Password updated successfully!");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } catch (err: any) {
       toast.error("An error occurred while updating the password.");
       console.error(err);
+    } finally {
+      setIsResettingPassword(false);
     }
   };
 
@@ -349,7 +369,9 @@ const SettingBoxes = () => {
                       placeholder="Enter your current password"
                       value={currentPassword}
                       onChange={(e) => setCurrentPassword(e.target.value)}
-                      className="w-full rounded-lg border border-stroke bg-transparent py-[15px] pl-6 pr-11 font-medium text-dark outline-none focus:border-primary"
+                      className="w-full rounded-lg border border-stroke bg-transparent py-[15px] pl-6 pr-11 font-medium text-dark outline-none focus:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={isResettingPassword}
+                      required
                     />
                     <button
                       type="button"
@@ -377,7 +399,9 @@ const SettingBoxes = () => {
                       placeholder="Enter your new password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      className="w-full rounded-lg border border-stroke bg-transparent py-[15px] pl-6 pr-11 font-medium text-dark outline-none focus:border-primary"
+                      className="w-full rounded-lg border border-stroke bg-transparent py-[15px] pl-6 pr-11 font-medium text-dark outline-none focus:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={isResettingPassword}
+                      required
                     />
                     <button
                       type="button"
@@ -403,7 +427,9 @@ const SettingBoxes = () => {
                       placeholder="Confirm your new password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full rounded-lg border border-stroke bg-transparent py-[15px] pl-6 pr-11 font-medium text-dark outline-none focus:border-primary"
+                      className="w-full rounded-lg border border-stroke bg-transparent py-[15px] pl-6 pr-11 font-medium text-dark outline-none focus:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={isResettingPassword}
+                      required
                     />
                     <button
                       type="button"
@@ -430,17 +456,45 @@ const SettingBoxes = () => {
                       setNewPassword("");
                       setConfirmPassword("");
                     }}
-                    className="rounded-lg border border-stroke px-6 py-2 font-medium text-dark hover:shadow-1 dark:text-white"
+                    className="rounded-lg border border-stroke px-6 py-2 font-medium text-dark hover:shadow-1 dark:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isResettingPassword}
                   >
                     Clear Fields
                   </button>
 
-                  {/* reset password */}
+                  {/* Reset password button with loader */}
                   <button
                     type="submit"
-                    className="rounded-lg bg-primary px-6 py-2 font-medium text-white hover:bg-opacity-90"
+                    className="flex items-center justify-center gap-2 rounded-lg bg-primary px-6 py-2 font-medium text-white hover:bg-opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
+                    disabled={isResettingPassword}
                   >
-                    Reset Password
+                    {isResettingPassword ? (
+                      <>
+                        <svg
+                          className="h-5 w-5 animate-spin text-white"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          ></circle>
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          ></path>
+                        </svg>
+                        <span>Resetting...</span>
+                      </>
+                    ) : (
+                      "Reset Password"
+                    )}
                   </button>
                 </div>
               </form>

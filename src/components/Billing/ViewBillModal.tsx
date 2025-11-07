@@ -1,6 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import html2pdf from "html2pdf.js";
-import Image from "next/image";
+import React, { useCallback, useEffect, useState } from "react";
+import jsPDF from "jspdf";
 import { supabase } from "@/utils/supabase/browserClient";
 
 interface Bill {
@@ -25,17 +24,11 @@ interface Bill {
   invoice_number: string;
   customer_id: string;
   interest?: number;
+  last_overdue?: number; // Overdue balance at time of bill generation
   // NEW FIELDS
   belco_revenue?: number;
   greenlight_revenue?: number;
   savings?: number;
-}
-
-interface CustomerBalanceProp {
-  customer_id: string;
-  total_billed: number;
-  total_paid: number;
-  current_balance: number;
 }
 
 interface Parameters {
@@ -50,22 +43,14 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
   closeModal,
   bill,
 }) => {
-  const invoiceRef = useRef<HTMLDivElement>(null);
   const [parameters, setParameters] = useState<Parameters[]>([]);
-  const [customerBalance, setCustomerBalance] =
-    useState<CustomerBalanceProp | null>(null);
-
-    useEffect(() => {
-    console.log("Bill Data From Model",bill);
-    console.log("Production fields in bill:", {
-      production_kwh: bill.production_kwh,
-      self_consumption_kwh: bill.self_consumption_kwh,
-      export_kwh: bill.export_kwh,
-      production_kwh_type: typeof bill.production_kwh
-    });
-  }, [bill]);
-
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    console.log("Bill Data From Model", bill);
+  }, [bill]);
 
   const fetchParameters = useCallback(async () => {
     try {
@@ -82,35 +67,15 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
     }
   }, []);
 
-  const fetchCustomerBalance = useCallback(async () => {
-    try {
-      const { data, error: fetchError } = await supabase
-        .from("customer_balances")
-        .select("*")
-        .eq("customer_id", bill.customer_id)
-        .single();
-
-      if (fetchError) throw fetchError;
-      setCustomerBalance(data || null);
-      console.log("Fetched customer balance:", data);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Error fetching customer balance",
-      );
-    }
-  }, [bill.customer_id]);
-
   useEffect(() => {
-    fetchCustomerBalance();
     fetchParameters();
-  }, [fetchParameters, fetchCustomerBalance]);
+  }, [fetchParameters]);
 
-  // Calculate totals - use current_balance directly as overdue amount
-  const overdueBalance = customerBalance?.current_balance || 0;
+  // Calculate totals - use last_overdue from the bill instead of fetching customer_balances
+  const overdueBalance = bill.last_overdue || 0;
   const interestAmount = bill.interest || 0;
   const balanceDue = (bill.total_revenue || 0) + overdueBalance + interestAmount;
 
-  // Use new effective_rate field if available, otherwise fall back to energy_rate or calculate
   const effectiveRate = bill.effective_rate
     ? bill.effective_rate.toFixed(3)
     : bill.energy_rate
@@ -119,29 +84,221 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
       ? (bill.total_revenue / bill.total_PTS).toFixed(3)
       : "0.000");
 
-  // Use new total_production field if available, otherwise fall back to total_PTS
   const productionValue = bill.total_production ?? bill.total_PTS ?? 0;
 
-  const generatePDF = async () => {
-    if (invoiceRef.current) {
-      const options = {
-        margin: [-1, -1, -1, -1],
-        filename: `Invoice-${bill.id}.pdf`,
-        html2canvas: {
-          scale: 3,
-          logging: true,
-        },
-        jsPDF: {
-          unit: "mm",
-          format: "a4",
-          orientation: "portrait",
-        },
-      };
+  const generatePDFDocument = useCallback(() => {
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
 
-      await html2pdf().from(invoiceRef.current).set(options).save();
+    // Set font
+    doc.setFont("helvetica");
+
+    // Add Logo/Header
+    doc.setFontSize(24);
+    doc.setTextColor(34, 197, 94); // Green color
+    doc.text("GreenLight", 20, 25);
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text("Solar Energy Solutions", 20, 31);
+
+    // Invoice Title
+    doc.setFontSize(20);
+    doc.setTextColor(0, 0, 0);
+    doc.text("INVOICE", 20, 50);
+
+    // Customer Information
+    doc.setFontSize(10);
+    doc.setTextColor(60, 60, 60);
+
+    // Left column
+    doc.setFont("helvetica", "bold");
+    doc.text("Name:", 20, 65);
+    doc.setFont("helvetica", "normal");
+    doc.text(bill.site_name || "N/A", 45, 65);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Address:", 20, 72);
+    doc.setFont("helvetica", "normal");
+    doc.text(bill.address || "N/A", 45, 72);
+
+    // Right column
+    doc.setFont("helvetica", "bold");
+    doc.text("Email:", 110, 65);
+    doc.setFont("helvetica", "normal");
+    doc.text(bill.email || "N/A", 130, 65);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Date:", 110, 72);
+    doc.setFont("helvetica", "normal");
+    doc.text(new Date(bill.created_at).toLocaleDateString(), 130, 72);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Invoice Number:", 110, 79);
+    doc.setFont("helvetica", "normal");
+    doc.text(bill.invoice_number || "N/A", 150, 79);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Effective Rate:", 110, 86);
+    doc.setFont("helvetica", "normal");
+    doc.text(`${effectiveRate}¢`, 150, 86);
+
+    // Billing Period Table Header
+    doc.setFillColor(34, 197, 94); // Green
+    doc.rect(20, 95, 170, 8, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text("Period Start", 25, 100);
+    doc.text("Period End", 60, 100);
+    doc.text("Production (kWh)", 95, 100);
+    doc.text("Rate", 135, 100);
+    doc.text("Revenue", 160, 100);
+
+    // Billing Period Data
+    doc.setTextColor(60, 60, 60);
+    doc.setFont("helvetica", "normal");
+    doc.text(bill.billing_period_start || "N/A", 25, 108);
+    doc.text(bill.billing_period_end || "N/A", 60, 108);
+    doc.text(productionValue.toFixed(2), 95, 108);
+    doc.text(`${effectiveRate}¢`, 135, 108);
+    doc.text(`$${bill.total_revenue.toFixed(2)}`, 160, 108);
+
+    // Line separator
+    doc.setDrawColor(200, 200, 200);
+    doc.line(20, 113, 190, 113);
+
+    // Summary Section
+    let yPos = 130;
+    doc.setFont("helvetica", "bold");
+    doc.text("Revenue", 130, yPos);
+    doc.setFont("helvetica", "normal");
+    doc.text(`$${bill.total_revenue.toFixed(2)}`, 170, yPos, { align: "right" });
+
+    yPos += 7;
+    doc.setFont("helvetica", "bold");
+    doc.text("Balance (Overdue)", 130, yPos);
+    doc.setFont("helvetica", "normal");
+    doc.text(`$${overdueBalance.toFixed(2)}`, 170, yPos, { align: "right" });
+
+    if (interestAmount > 0) {
+      yPos += 7;
+      doc.setFont("helvetica", "bold");
+      doc.text("Interest", 130, yPos);
+      doc.setFont("helvetica", "normal");
+      doc.text(`$${interestAmount.toFixed(2)}`, 170, yPos, { align: "right" });
     }
-    closeModal();
-  };
+
+    yPos += 10;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(220, 38, 38); // Red
+    doc.text("Total Balance", 130, yPos);
+    doc.text(`$${balanceDue.toFixed(2)}`, 170, yPos, { align: "right" });
+
+    // Direct Deposit Section
+    yPos += 20;
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "bold");
+    doc.text("DIRECT DEPOSIT", 20, yPos);
+
+    // Green underline
+    doc.setDrawColor(34, 197, 94);
+    doc.setLineWidth(0.5);
+    doc.line(20, yPos + 1, 70, yPos + 1);
+
+    yPos += 8;
+    doc.setFontSize(10);
+    doc.setTextColor(60, 60, 60);
+    doc.setFont("helvetica", "normal");
+    doc.text("Bank Name: ", 20, yPos);
+    doc.setFont("helvetica", "bold");
+    doc.text("Bank of Butterfield", 50, yPos);
+
+    yPos += 6;
+    doc.setFont("helvetica", "normal");
+    doc.text("Account Name: ", 20, yPos);
+    doc.setFont("helvetica", "bold");
+    doc.text("GreenLight Financing Ltd.", 50, yPos);
+
+    yPos += 6;
+    doc.setFont("helvetica", "normal");
+    doc.text("Account Number: ", 20, yPos);
+    doc.setFont("helvetica", "bold");
+    doc.text("060400 6770 014", 50, yPos);
+
+    // Footer
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 100);
+
+    const footerY = 270;
+
+    // Message
+    const message = parameters.length > 0
+      ? parameters[0].message
+      : "Thank you for doing business with us!";
+    doc.text(message, 20, footerY, { maxWidth: 50 });
+
+    // Address
+    doc.text("Greenlight Financing Ltd.", 75, footerY);
+    doc.text("#48 Par-la-ville Road, Suite 1543,", 75, footerY + 4);
+    doc.text("Hamilton, HM11", 75, footerY + 8);
+
+    // Contact
+    doc.setTextColor(37, 99, 235); // Blue
+    doc.text("billing@greenlightenergy.bm", 135, footerY);
+    doc.setTextColor(100, 100, 100);
+    doc.text("Phone: 1 (441) 705 3033", 135, footerY + 4);
+
+    return doc;
+  }, [bill, parameters, effectiveRate, productionValue, overdueBalance, interestAmount, balanceDue]);
+
+  const generatePDFPreview = useCallback(() => {
+    setIsGeneratingPreview(true);
+    setError(null); // Clear any previous errors
+
+    try {
+      console.log("Generating PDF preview...");
+      const doc = generatePDFDocument();
+      const pdfBlob = doc.output("blob");
+      console.log("PDF Blob generated:", pdfBlob.size, "bytes");
+
+      const url = URL.createObjectURL(pdfBlob);
+      console.log("Blob URL created:", url);
+
+      setPdfUrl(url);
+      setIsGeneratingPreview(false);
+    } catch (error) {
+      console.error("Error generating PDF preview:", error);
+      setError(`Failed to generate PDF preview: ${error instanceof Error ? error.message : "Unknown error"}`);
+      setIsGeneratingPreview(false);
+    }
+  }, [generatePDFDocument]);
+
+  const downloadPDF = useCallback(() => {
+    try {
+      const doc = generatePDFDocument();
+      doc.save(`Invoice-${bill.invoice_number || bill.id}.pdf`);
+    } catch (error) {
+      console.error("Error downloading PDF:", error);
+      setError(`Failed to download PDF: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  }, [generatePDFDocument, bill.invoice_number, bill.id]);
+
+  // Don't auto-generate preview - let user click button instead
+
+  // Cleanup blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (pdfUrl) {
+        URL.revokeObjectURL(pdfUrl);
+      }
+    };
+  }, [pdfUrl]);
 
   return (
     <div
@@ -149,183 +306,62 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
       onClick={closeModal}
     >
       <div
-        className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-6 shadow-lg"
+        className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg bg-white p-6 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Invoice Content main Div */}
-        <div
-          ref={invoiceRef}
-          className="mx-auto h-[297mm] w-full max-w-[210mm] border border-gray-300 bg-white px-8 pb-12 shadow-lg"
-        >
-          <header className="mt-6 flex items-center justify-between py-16">
-            <Image
-              src="/images/logo/logo.svg"
-              alt="Logo"
-              width={360}
-              height={60}
-              priority
-              className="max-w-full"
-            />
-          </header>
-
-          <section className="mb-26 mt-9">
-            <div className="flex items-center justify-between pb-2">
-              <div className="pr-3 text-2xl font-semibold text-black">
-                INVOICE
-              </div>
-            </div>
-
-            <table className="mt-4 w-full text-left text-gray-600">
-              <tbody>
-                <tr>
-                  <td className="pr-4 text-sm font-semibold text-black">
-                    Name:
-                  </td>
-                  <td className="text-xs">{bill.site_name}</td>
-                  <td className="pr-4 text-sm font-semibold text-black">
-                    Email:
-                  </td>
-                  <td className="text-xs">{bill.email}</td>
-                  <td className="pr-4 text-sm font-semibold text-black">
-                    Date:
-                  </td>
-                  <td className="text-xs">
-                    {new Date(bill.created_at).toLocaleDateString()}
-                  </td>
-                </tr>
-                <tr>
-                  <td className="pr-4 text-sm font-semibold text-black">
-                    Address:
-                  </td>
-                  <td className="text-xs">{bill.address || "N/A"}</td>
-                  <td className="pr-4 text-sm font-semibold text-black">
-                    Invoice Number:
-                  </td>
-                  <td className="text-xs">{bill.invoice_number}</td>
-                  <td className="pr-4 text-sm font-semibold text-black">
-                    Effective Rate:
-                  </td>
-                  <td className="text-xs">{effectiveRate}¢</td>
-                </tr>
-              </tbody>
-            </table>
-          </section>
-
-          {/* Main Billing Table */}
-          <table className="mb-10 w-full text-left text-sm">
-            <thead className="border-b-2 border-green-300 text-gray-700">
-              <tr>
-                <th className="p-3 text-sm">Period Start</th>
-                <th className="p-3 text-sm">Period End</th>
-                <th className="p-3 text-sm">Production (kWh)</th>
-                <th className="p-3 text-sm">Effective Rate</th>
-                <th className="p-3 text-sm">Revenue</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="p-3 text-xs text-gray-600">
-                  {bill.billing_period_start}
-                </td>
-                <td className="p-3 text-xs text-gray-600">
-                  {bill.billing_period_end}
-                </td>
-                <td className="p-3 text-xs text-gray-600">
-                  {productionValue.toFixed(2)}
-                </td>
-                <td className="p-3 text-xs text-gray-600">{effectiveRate}¢</td>
-                <td className="p-3 text-xs text-gray-600">
-                  ${bill.total_revenue.toFixed(2)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-
-
-
-          <section className="mb-6 space-y-6 text-right">
-            <div className="flex w-full justify-end text-sm font-semibold text-gray-800">
-              <p>Revenue</p>
-              <span className="ml-20 w-20 text-black">
-                $ {bill.total_revenue.toFixed(2)}
-              </span>
-            </div>
-            <div className="flex w-full justify-end text-sm font-semibold text-gray-800">
-              <p>Balance (Overdue)</p>
-              <span className="ml-20 w-20 text-black">
-                $ {overdueBalance.toFixed(2)}
-              </span>
-            </div>
-            {interestAmount > 0 && (
-              <div className="flex w-full justify-end text-sm font-semibold text-gray-800">
-                <p>Interest</p>
-                <span className="ml-20 w-20 text-black">
-                  $ {interestAmount.toFixed(2)}
-                </span>
-              </div>
-            )}
-            <div className="flex w-full justify-end text-sm font-semibold text-red-600">
-              <p>Total Balance</p>
-              <span className="ml-20 w-20">$ {balanceDue.toFixed(2)}</span>
-            </div>
-          </section>
-
-          <section className="mt-12 text-sm text-gray-700">
-            <h3 className="mb-4 w-1/2 border-b-2 border-green-300 p-4 font-semibold text-black">
-              DIRECT DEPOSIT
-            </h3>
-            <p className="text-sm">
-              Bank Name:{" "}
-              <span className="text-xs font-semibold">Bank of Butterfield</span>
-            </p>
-            <p className="text-sm">
-              Account Name:{" "}
-              <span className="text-xs font-semibold">
-                GreenLight Financing Ltd.
-              </span>
-            </p>
-            <p className="text-sm">
-              Account Number:{" "}
-              <span className="text-xs font-semibold">060400 6770 014</span>
-            </p>
-          </section>
-
-          <footer className="mt-24 grid grid-cols-3 gap-12 text-gray-800">
-            <div className="col-span-1">
-              <p className="text-center text-sm">
-                {parameters.length > 0
-                  ? parameters[0].message
-                  : "Thank you for doing business with us!"}
-              </p>
-            </div>
-            <div className="col-span-1 text-xs">
-              <p>
-                Greenlight Financing Ltd. #48 Par-la-ville Road, Suite 1543,
-                Hamilton, HM11
-              </p>
-            </div>
-            <div className="col-span-1 text-xs">
-              <a
-                href="mailto:billing@greenlightenergy.bm"
-                className="text-blue-700 underline"
-              >
-                billing@greenlightenergy.bm <br /> Phone: 1 (441) 705 3033
-              </a>
-            </div>
-          </footer>
-        </div>
-
-        {/* Buttons */}
-        <div className="mt-4 flex gap-2">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Invoice Preview</h2>
           <button
             onClick={closeModal}
-            className="w-full rounded-lg bg-gray-200 py-2 text-dark-2 hover:text-red-700"
+            className="rounded-lg px-4 py-2 text-gray-600 hover:bg-gray-100"
           >
-            Close
+            ✕
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-4 rounded-lg bg-red-100 p-3 text-red-700">
+            {error}
+          </div>
+        )}
+
+        {isGeneratingPreview && (
+          <div className="mb-4 flex items-center justify-center p-8">
+            <div className="text-gray-600">Generating PDF preview...</div>
+          </div>
+        )}
+
+        {/* PDF Preview using iframe */}
+        {pdfUrl && !isGeneratingPreview && (
+          <div className="mb-4">
+            <iframe
+              src={pdfUrl}
+              className="h-[600px] w-full rounded-lg border border-gray-300"
+              title="Invoice PDF Preview"
+            />
+          </div>
+        )}
+
+        {/* Show placeholder when no preview */}
+        {!pdfUrl && !isGeneratingPreview && (
+          <div className="mb-4 flex items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-16">
+            <p className="text-gray-500">Click "Generate PDF Preview" to view the invoice</p>
+          </div>
+        )}
+
+        {/* Only two buttons */}
+        <div className="mt-4 flex gap-3">
+          <button
+            onClick={generatePDFPreview}
+            className="flex-1 rounded-lg bg-blue-500 py-3 text-white hover:bg-blue-600 disabled:bg-gray-300"
+            disabled={isGeneratingPreview}
+          >
+            {isGeneratingPreview ? "Generating..." : "Generate PDF Preview"}
           </button>
           <button
-            onClick={generatePDF}
-            className="w-full rounded-lg bg-primary py-2 text-white hover:bg-green-500"
+            onClick={downloadPDF}
+            className="flex-1 rounded-lg bg-primary py-3 text-white hover:bg-green-500 disabled:bg-gray-300"
+            disabled={isGeneratingPreview}
           >
             Download PDF
           </button>
