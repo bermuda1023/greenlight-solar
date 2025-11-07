@@ -345,7 +345,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
         {/* Show placeholder when no preview */}
         {!pdfUrl && !isGeneratingPreview && (
           <div className="mb-4 flex items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-16">
-            <p className="text-gray-500">Click "Generate PDF Preview" to view the invoice</p>
+            <p className="text-gray-500">Click &quot;Generate PDF Preview&quot; to view the invoice</p>
           </div>
         )}
 
