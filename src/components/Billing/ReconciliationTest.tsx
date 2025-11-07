@@ -50,6 +50,7 @@ interface BillData {
   paid_amount: number;
   pending_amount: number;
   bill_id?: string;
+  reference_no?: string;
 }
 
 interface MonthlyBill {
@@ -671,25 +672,94 @@ const ReconciliationTest = () => {
         }
       };
       reader.readAsText(files[0]);
+      // Reset the file input so the same file can be selected again
+      event.target.value = "";
     } else {
       alert("Please upload a valid CSV file.");
     }
   };
 
+  const cleanReferenceNumber = (refNo: string): string => {
+    if (!refNo) return "";
+
+    // Remove all types of quotes (single, double, backticks)
+    let cleaned = refNo.replace(/['"`]/g, "");
+
+    // Remove any leading/trailing whitespace
+    cleaned = cleaned.trim();
+
+    // Remove any special characters that might have been added during export
+    // Keep only alphanumeric, hyphens, and underscores
+    cleaned = cleaned.replace(/[^\w\-]/g, "");
+
+    return cleaned;
+  };
+
+  const parseBankStatementDate = (dateStr: string): string => {
+    // Parse DD-MMM-YY format (e.g., "31-Oct-25")
+    const months: { [key: string]: number } = {
+      'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+      'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+    };
+
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const day = parseInt(parts[0]);
+      const monthStr = parts[1];
+      const year = parseInt(parts[2]) + 2000; // Convert 25 to 2025
+
+      const month = months[monthStr];
+      if (month !== undefined) {
+        const date = new Date(year, month, day);
+        // Return in YYYY-MM-DD format for database
+        return date.toISOString().split('T')[0];
+      }
+    }
+    return dateStr; // Return as-is if parsing fails
+  };
+
   const handleMapping = async () => {
-    const errors = validateData(csvData, columnMapping, dateFormat);
-    setValidationErrors(errors);
-
-    if (errors.length > 0) return;
-
     try {
+      // Extract reference numbers from CSV data
+      const referenceNumbers = csvData
+        .map(row => row["ReferenceNo"])
+        .filter(ref => ref && ref.trim() !== "");
+
+      // Check for duplicates in database using reference numbers
+      if (referenceNumbers.length > 0) {
+        const { data: existingTransactions, error: checkError } = await supabase
+          .from("transactions")
+          .select("reference_no, date, amount")
+          .in("reference_no", referenceNumbers);
+
+        if (checkError) throw checkError;
+
+        if (existingTransactions && existingTransactions.length > 0) {
+          const duplicateCount = existingTransactions.length;
+          const duplicateRefs = existingTransactions
+            .slice(0, 5)
+            .map(t => t.reference_no)
+            .join(", ");
+
+          const moreText = duplicateCount > 5 ? ` and ${duplicateCount - 5} more` : "";
+
+          toast.error(
+            `Found ${duplicateCount} duplicate transaction${duplicateCount !== 1 ? 's' : ''} already in database. ` +
+            `Reference numbers: ${duplicateRefs}${moreText}. Import cancelled to prevent duplicates.`,
+            { autoClose: 8000 }
+          );
+          return;
+        }
+      }
+
       const processedData = csvData.map((row) => ({
-        date: row[columnMapping.date],
-        description: row[columnMapping.description],
-        amount: parseFloat(row[columnMapping.amount]),
+        date: parseBankStatementDate(row["Date"]),
+        description: row["Description"],
+        amount: parseFloat(row["Amount"]),
+        reference_no: row["ReferenceNo"] || null,
         status: "Unmatched",
         paid_amount: 0,
-        pending_amount: parseFloat(row[columnMapping.amount]),
+        pending_amount: parseFloat(row["Amount"]),
       }));
 
       const { error } = await supabase
@@ -700,9 +770,12 @@ const ReconciliationTest = () => {
 
       await fetchData();
       setShowMappingModal(false);
+      // Clear CSV data after successful import
+      setCSVData([]);
+      toast.success(`Successfully imported ${processedData.length} credit transactions`);
     } catch (error) {
       console.error("Error uploading transactions:", error);
-      alert("Error saving transactions. Please try again.");
+      toast.error("Error saving transactions. Please try again.");
     }
   };
 
@@ -785,99 +858,164 @@ const ReconciliationTest = () => {
   };
 
   const parseCSV = (text: string) => {
+    console.log("=== CSV PARSING DEBUG ===");
     const lines = text.split("\n").filter((line) => line.trim());
+    console.log(`Total lines: ${lines.length}`);
+
     if (lines.length === 0) return;
 
-    const headers = lines[0].split(",").map((header) => header.trim());
-    setCsvColumns(headers);
-
-    const data = lines.slice(1).map((line) => {
-      const values = line.split(",").map((value) => value.trim());
-      const row: CSVRow = {};
-      headers.forEach((header, index) => {
-        row[header] = values[index] || "";
-      });
-      return row;
+    // Log first few lines to understand structure
+    console.log("First 5 lines:");
+    lines.slice(0, 5).forEach((line, i) => {
+      console.log(`Line ${i}:`, line.substring(0, 150));
     });
 
+    // Skip first 4 rows (account info, opening balance, closing balance, and column headers)
+    // Data starts at row 5 (index 4)
+    const dataLines = lines.slice(4);
+    console.log(`Data lines after skipping 4 rows: ${dataLines.length}`);
+
+    const data: CSVRow[] = [];
+
+    dataLines.forEach((line, index) => {
+      // Try to detect delimiter - check if line has tabs or commas
+      const hasTab = line.includes("\t");
+      const delimiter = hasTab ? "\t" : ",";
+
+      const values = line.split(delimiter).map((value) => {
+        // Trim whitespace and remove surrounding quotes (single or double)
+        let cleaned = value.trim();
+        if ((cleaned.startsWith("'") && cleaned.endsWith("'")) ||
+            (cleaned.startsWith('"') && cleaned.endsWith('"'))) {
+          cleaned = cleaned.slice(1, -1);
+        }
+        return cleaned;
+      });
+
+      // Debug first row
+      if (index === 0) {
+        console.log(`Detected delimiter: ${delimiter === "\t" ? "TAB" : "COMMA"}`);
+        console.log(`Columns in first data row: ${values.length}`);
+        console.log("First 8 column values:", values.slice(0, 8));
+      }
+
+      // Column A (index 0): Transaction Date
+      // Column C (index 2): Description
+      // Column E (index 4): Credit Amount
+      // Column G (index 6): Reference Number
+      const transactionDate = values[0] || "";
+      const description = values[2] || "";
+      const creditAmount = values[4] || "";
+      const referenceNumber = values[6] || "";
+
+      // Debug every row to see what we're getting
+      if (index < 3) {
+        console.log(`Row ${index}:`, {
+          date: transactionDate,
+          desc: description?.substring(0, 30),
+          credit: creditAmount,
+          ref: referenceNumber
+        });
+      }
+
+      // Only process rows where credit amount exists and is not empty
+      // Ignore debit transactions (only process credits)
+      if (creditAmount && creditAmount !== "" && !isNaN(parseFloat(creditAmount)) && parseFloat(creditAmount) > 0) {
+        const row: CSVRow = {
+          "Date": transactionDate,
+          "Description": description,
+          "Amount": creditAmount,
+          "ReferenceNo": cleanReferenceNumber(referenceNumber)
+        };
+        data.push(row);
+      }
+    });
+
+    console.log(`Total credit transactions found: ${data.length}`);
+    if (data.length > 0) {
+      console.log("Sample transaction:", data[0]);
+    }
+    console.log("=== END DEBUG ===");
+
     setCSVData(data);
+  };
+
+  const handleModalClose = () => {
+    setShowMappingModal(false);
+    // Clear CSV data when modal is closed without importing
+    setCSVData([]);
   };
 
   const MappingModal: React.FC<{
     onClose: () => void;
     onConfirm: () => void;
-    csvColumns: string[];
-    columnMapping: ColumnMapping;
-    setColumnMapping: (mapping: ColumnMapping) => void;
-    dateFormat: string;
-    setDateFormat: (format: string) => void;
-    validationErrors: string[];
+    csvData: CSVRow[];
   }> = ({
     onClose,
     onConfirm,
-    csvColumns,
-    columnMapping,
-    setColumnMapping,
-    dateFormat,
-    setDateFormat,
-    validationErrors,
+    csvData,
   }) => (
     <div className="fixed inset-0 z-999 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="w-[600px] rounded-lg bg-white p-6">
-        <h2 className="mb-4 text-lg font-semibold">Map CSV Columns</h2>
+      <div className="w-[700px] rounded-lg bg-white p-6">
+        <h2 className="mb-4 text-lg font-semibold">Confirm Bank Statement Import</h2>
 
         <div className="mb-4">
-          <label className="block text-sm font-medium">Date Format</label>
-          <select
-            className="mt-1 w-full rounded border p-2"
-            value={dateFormat}
-            onChange={(e) => setDateFormat(e.target.value)}
-          >
-            {DATE_FORMAT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label} (e.g., {option.example})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {csvColumns.length > 0 ? (
-          Object.entries(columnMapping).map(([key, value]) => (
-            <div key={key} className="mb-4">
-              <label className="block text-sm font-medium capitalize">
-                {key}
-              </label>
-              <select
-                className="mt-1 w-full rounded border p-2"
-                value={value}
-                onChange={(e) =>
-                  setColumnMapping({ ...columnMapping, [key]: e.target.value })
-                }
-              >
-                <option value="">Select column</option>
-                {csvColumns.map((col) => (
-                  <option key={col} value={col}>
-                    {col}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ))
-        ) : (
-          <p className="text-sm text-red-500">
-            No columns found in the uploaded file.
+          <p className="text-sm text-gray-600 mb-3">
+            The following credit transactions were found in the bank statement:
           </p>
-        )}
 
-        {validationErrors.length > 0 && (
-          <div className="mb-4 rounded border-red-200 bg-red-50 p-4">
-            <ul className="list-inside list-disc text-sm text-red-800">
-              {validationErrors.map((error, index) => (
-                <li key={index}>{error}</li>
-              ))}
-            </ul>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <p className="text-sm font-medium text-blue-900">
+              Found {csvData.length} credit transaction{csvData.length !== 1 ? 's' : ''}
+            </p>
+            <p className="text-xs text-blue-700 mt-1">
+              Format: DD-MMM-YY (e.g., 31-Oct-25) • Debit transactions are automatically ignored
+            </p>
           </div>
-        )}
+
+          {csvData.length > 0 ? (
+            <div className="max-h-64 overflow-y-auto border rounded-lg">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Date</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Description</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Ref No</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {csvData.slice(0, 10).map((row, index) => (
+                    <tr key={index} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 text-xs">{row["Date"]}</td>
+                      <td className="px-3 py-2 text-xs">{row["Description"]}</td>
+                      <td className="px-3 py-2 text-xs">{row["ReferenceNo"] || "-"}</td>
+                      <td className="px-3 py-2 text-xs text-right">${parseFloat(row["Amount"]).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                  {csvData.length > 10 && (
+                    <tr>
+                      <td colSpan={4} className="px-3 py-2 text-xs text-center text-gray-500">
+                        ... and {csvData.length - 10} more transaction{csvData.length - 10 !== 1 ? 's' : ''}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="rounded border-red-200 bg-red-50 p-4">
+              <p className="text-sm text-red-800">
+                No credit transactions found in the file. Please ensure:
+              </p>
+              <ul className="mt-2 list-inside list-disc text-sm text-red-700">
+                <li>The file has the correct bank statement format</li>
+                <li>There are credit amounts in column E</li>
+                <li>Data starts after the first 4 header rows</li>
+              </ul>
+            </div>
+          )}
+        </div>
 
         <div className="flex justify-end gap-2">
           <button
@@ -887,10 +1025,11 @@ const ReconciliationTest = () => {
             Cancel
           </button>
           <button
-            className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+            className="rounded bg-primary px-4 py-2 text-white hover:bg-green-400 disabled:bg-gray-400 disabled:cursor-not-allowed"
             onClick={onConfirm}
+            disabled={csvData.length === 0}
           >
-            Confirm Mapping
+            Import {csvData.length} Transaction{csvData.length !== 1 ? 's' : ''}
           </button>
         </div>
       </div>
@@ -1102,6 +1241,9 @@ const ReconciliationTest = () => {
                   Description
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  Ref No
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                   Amount ($)
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
@@ -1131,6 +1273,7 @@ const ReconciliationTest = () => {
                 >
                   <td className="whitespace-nowrap px-6 py-4">{row.date}</td>
                   <td className="px-6 py-4">{row.description}</td>
+                  <td className="whitespace-nowrap px-6 py-4">{row.reference_no || "-"}</td>
                   <td className="whitespace-nowrap px-6 py-4">
                     {row.amount.toFixed(2)}
                   </td>
@@ -1206,14 +1349,9 @@ const ReconciliationTest = () => {
 
       {showMappingModal && (
         <MappingModal
-          onClose={() => setShowMappingModal(false)}
+          onClose={handleModalClose}
           onConfirm={handleMapping}
-          csvColumns={csvColumns}
-          columnMapping={columnMapping}
-          setColumnMapping={setColumnMapping}
-          dateFormat={dateFormat}
-          setDateFormat={setDateFormat}
-          validationErrors={validationErrors}
+          csvData={csvData}
         />
       )}
   {showReconcileModal && selectedBill && (
