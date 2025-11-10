@@ -99,7 +99,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
     // Add Logo/Header
     doc.setFontSize(24);
     doc.setTextColor(34, 197, 94); // Green color
-    doc.text("GreenLight", 20, 25);
+    doc.text("Greenlight", 20, 25);
     doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);
     doc.text("Solar Energy Solutions", 20, 31);
@@ -222,7 +222,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
     doc.setFont("helvetica", "normal");
     doc.text("Account Name: ", 20, yPos);
     doc.setFont("helvetica", "bold");
-    doc.text("GreenLight Financing Ltd.", 50, yPos);
+    doc.text("Greenlight Financing Ltd.", 50, yPos);
 
     yPos += 6;
     doc.setFont("helvetica", "normal");
@@ -245,8 +245,8 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
 
     // Address
     doc.text("Greenlight Financing Ltd.", 75, footerY);
-    doc.text("#48 Par-la-ville Road, Suite 1543,", 75, footerY + 4);
-    doc.text("Hamilton, HM11", 75, footerY + 8);
+    doc.text("11 Bermudiana Road, Suite 1543,", 75, footerY + 4);
+    doc.text("Hamilton, HM08", 75, footerY + 8);
 
     // Contact
     doc.setTextColor(37, 99, 235); // Blue

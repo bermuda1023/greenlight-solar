@@ -482,6 +482,7 @@ const ReconciliationTest = () => {
   const [selectedBillId, setSelectedBillId] = useState<string | null>(null);
   const [selectedMonthlyBill, setSelectedMonthlyBill] =
     useState<MonthlyBill | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   const router = useRouter();
 
@@ -1100,17 +1101,43 @@ const ReconciliationTest = () => {
   };
 
   const filteredData = useMemo(() => {
+    let filtered = [...mappedData]; // Create a new array to avoid mutating the original
+
+    // Filter by tab (status)
     switch (activeTab) {
       case "matched":
-        return mappedData.filter((item) => item.status === "Matched");
+        filtered = filtered.filter((item) => item.status === "Matched");
+        break;
       case "partially-matched":
-        return mappedData.filter((item) => item.status === "Partially Matched");
+        filtered = filtered.filter((item) => item.status === "Partially Matched");
+        break;
       case "unmatched":
-        return mappedData.filter((item) => item.status === "Unmatched");
+        filtered = filtered.filter((item) => item.status === "Unmatched");
+        break;
       default:
-        return mappedData;
+        break;
     }
-  }, [activeTab, mappedData]);
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter((item) =>
+        item.description.toLowerCase().includes(query) ||
+        item.reference_no?.toLowerCase().includes(query) ||
+        item.amount.toString().includes(query) ||
+        item.date.includes(query)
+      );
+    }
+
+    // Sort by date (latest first) - ensure consistent sorting
+    filtered.sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      return dateB - dateA; // Descending order (latest first)
+    });
+
+    return filtered;
+  }, [activeTab, mappedData, searchQuery]);
 
   return (
     <div className="min-h-screen bg-gray-100 p-6 ">
@@ -1228,6 +1255,32 @@ const ReconciliationTest = () => {
               </button>
             ))}
           </nav>
+        </div>
+
+        {/* Search Bar */}
+        <div className="px-6 py-4 border-b bg-gray-50">
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <input
+                type="text"
+                placeholder="Search by description, reference number, amount, or date..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition"
+              >
+                Clear
+              </button>
+            )}
+            <div className="text-sm text-gray-600">
+              Showing {filteredData.length} transaction{filteredData.length !== 1 ? 's' : ''}
+            </div>
+          </div>
         </div>
 
         <div className="overflow-x-auto">

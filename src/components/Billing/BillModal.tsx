@@ -135,9 +135,6 @@ const BillModal: React.FC<BillModalProps> = ({
   }>({});
 
   // State for temporary interest input values (before Apply button is clicked)
-  const [tempInterestRates, setTempInterestRates] = useState<{
-    [customerId: string]: number;
-  }>({});
   const [tempInterestAmounts, setTempInterestAmounts] = useState<{
     [customerId: string]: number;
   }>({});
@@ -153,7 +150,7 @@ const BillModal: React.FC<BillModalProps> = ({
   // Pagination state
   const [successfulBillsPage, setSuccessfulBillsPage] = useState(1);
   const [failedBillsPage, setFailedBillsPage] = useState(1);
-  const ITEMS_PER_PAGE = 5;
+  const ITEMS_PER_PAGE = 25;
 
   // State to track expanded rows for details
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -780,50 +777,24 @@ const handleInterestRateChange = (customerId: string, newRatePercent: number) =>
 };
 
 // Apply interest changes when button is clicked
-const applyInterestChanges = (customerId: string, type: 'rate' | 'amount') => {
+const applyInterestChanges = (customerId: string) => {
   const bill = successfulBills.find((b) => b.customerId === customerId);
   if (!bill) return;
 
-  if (type === 'rate') {
-    const newRatePercent = tempInterestRates[customerId];
-    if (newRatePercent !== undefined && !isNaN(newRatePercent)) {
-      const rateDecimal = newRatePercent / 100;
-      const newInterest = bill.outstanding * rateDecimal;
+  const newInterest = tempInterestAmounts[customerId];
+  if (newInterest !== undefined && !isNaN(newInterest)) {
+    setInterestAmounts((prev) => ({
+      ...prev,
+      [customerId]: newInterest,
+    }));
 
-      setCustomerInterestRates((prev) => ({
-        ...prev,
-        [customerId]: newRatePercent,
-      }));
-
-      setInterestAmounts((prev) => ({
-        ...prev,
-        [customerId]: newInterest,
-      }));
-
-      setSuccessfulBills((prev) =>
-        prev.map((b) =>
-          b.customerId === customerId
-            ? { ...b, interest: newInterest, interestRatePercent: newRatePercent }
-            : b
-        )
-      );
-    }
-  } else if (type === 'amount') {
-    const newInterest = tempInterestAmounts[customerId];
-    if (newInterest !== undefined && !isNaN(newInterest)) {
-      setInterestAmounts((prev) => ({
-        ...prev,
-        [customerId]: newInterest,
-      }));
-
-      setSuccessfulBills((prev) =>
-        prev.map((bill) =>
-          bill.customerId === customerId
-            ? { ...bill, interest: newInterest }
-            : bill
-        )
-      );
-    }
+    setSuccessfulBills((prev) =>
+      prev.map((bill) =>
+        bill.customerId === customerId
+          ? { ...bill, interest: newInterest }
+          : bill
+      )
+    );
   }
 };
 
@@ -1200,7 +1171,7 @@ const handleEmailBill = async (billData: any) => {
         DIRECT DEPOSIT
       </h3>
       <p class="text-sm">Bank Name: <span class="text-xs font-semibold">Bank of Butterfield</span></p>
-      <p class="text-sm">Account Name: <span class="text-xs font-semibold">GreenLight Financing Ltd.</span></p>
+      <p class="text-sm">Account Name: <span class="text-xs font-semibold">Greenlight Financing Ltd.</span></p>
       <p class="text-sm">Account Number: <span class="text-xs font-semibold">060400 6770 014</span></p>
     </section>
 
@@ -1213,7 +1184,7 @@ const handleEmailBill = async (billData: any) => {
       </div>
       <div class="col-span-1 text-xs">
         <p>
-          Greenlight Financing Ltd. #48 Par-la-ville Road, Suite 1543, Hamilton, HM11
+          Greenlight Financing Ltd. 11 Bermudiana Road, Suite 1543, Hamilton, HM08
         </p>
       </div>
       <div class="col-span-1 text-xs">
@@ -1604,40 +1575,6 @@ return (
                                             <h4 className="font-semibold text-gray-700 mb-2 text-sm">Interest Settings</h4>
                                             {outstanding > 0 ? (
                                               <div className="space-y-3">
-                                                {/* Interest Rate Section */}
-                                                <div className="space-y-1">
-                                                  <div className="flex justify-between items-center">
-                                                    <label className="text-xs text-gray-600 font-semibold">Current Rate:</label>
-                                                    <span className="text-xs font-bold text-gray-800">{interestRatePercent?.toFixed(2) || 0}%</span>
-                                                  </div>
-                                                  <div className="flex gap-1">
-                                                    <input
-                                                      type="number"
-                                                      step="0.1"
-                                                      min="0"
-                                                      max="100"
-                                                      placeholder={(interestRatePercent || 0).toFixed(2)}
-                                                      onChange={(e) => {
-                                                        const value = parseFloat(e.target.value);
-                                                        if (!isNaN(value)) {
-                                                          setTempInterestRates((prev) => ({
-                                                            ...prev,
-                                                            [customerId]: value,
-                                                          }));
-                                                        }
-                                                      }}
-                                                      className="flex-1 px-2 py-1 text-xs text-right border border-yellow-400 rounded focus:outline-none focus:ring-1 focus:ring-yellow-500"
-                                                    />
-                                                    <span className="text-xs self-center">%</span>
-                                                    <button
-                                                      onClick={() => applyInterestChanges(customerId, 'rate')}
-                                                      className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs transition font-semibold"
-                                                    >
-                                                      Apply
-                                                    </button>
-                                                  </div>
-                                                </div>
-
                                                 {/* Interest Amount Section */}
                                                 <div className="space-y-1">
                                                   <div className="flex justify-between items-center">
@@ -1663,7 +1600,7 @@ return (
                                                       className="flex-1 px-2 py-1 text-xs text-right border border-yellow-400 rounded focus:outline-none focus:ring-1 focus:ring-yellow-500"
                                                     />
                                                     <button
-                                                      onClick={() => applyInterestChanges(customerId, 'amount')}
+                                                      onClick={() => applyInterestChanges(customerId)}
                                                       className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs transition font-semibold"
                                                     >
                                                       Apply
