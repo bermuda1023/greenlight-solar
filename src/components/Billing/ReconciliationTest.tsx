@@ -14,7 +14,6 @@ import { IoMdCloudUpload } from "react-icons/io";
 import { toast } from "react-toastify";
 import { ReconciliationService } from "@/services/reconcile-service";
 import { BillingService } from '@/services/billing-service';
-import { CustomerBalanceService } from "@/services/balance-service";
 
 const Alert: React.FC<{ children: React.ReactNode; className?: string }> = ({
   children,
@@ -64,6 +63,7 @@ interface MonthlyBill {
   paid_amount: number;
   pending_balance: number;
   customer_id: string;
+  last_overdue?: number;
 }
 
 interface CSVRow {
@@ -89,18 +89,19 @@ const ReconcileModal: React.FC<{
   setSelectedBillId: (id: string | null) => void;
   setSelectedMonthlyBill: (bill: MonthlyBill | null) => void;
   onReconcileComplete: () => void; // Add new callback prop
-}> = ({ 
-  bill, 
-  onClose, 
-  monthlyBills, 
-  setSelectedBillId, 
+}> = ({
+  bill,
+  onClose,
+  monthlyBills,
+  setSelectedBillId,
   setSelectedMonthlyBill,
-  onReconcileComplete 
+  onReconcileComplete
 }) => {
   const [selectedBills, setSelectedBills] = useState<Map<string, { bill: MonthlyBill; allocatedAmount: number; existingPayments: number }>>(new Map());
   const [remainingAmount, setRemainingAmount] = useState<number>(bill.amount);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState<string>("");
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const reconciliationService = useMemo(() => new ReconciliationService(), []);
-  const billingService = useMemo(() => new CustomerBalanceService(), []);
 
   const router = useRouter();
   // const handleBillSelection = async (monthlyBill: MonthlyBill) => {
@@ -163,38 +164,40 @@ const ReconcileModal: React.FC<{
 
   const handleBillSelection = async (monthlyBill: MonthlyBill, isSelected: boolean) => {
     const updatedSelectedBills = new Map(selectedBills);
-    
+
     if (isSelected) {
+      // Check if a different customer is already selected
+      if (selectedCustomerId && selectedCustomerId !== monthlyBill.customer_id) {
+        const currentCustomerBill = Array.from(selectedBills.values())[0]?.bill;
+        toast.error(
+          `Cannot select bills from multiple customers. You have already selected bills for ${currentCustomerBill?.site_name}. Please clear the current selection first.`,
+          { autoClose: 5000 }
+        );
+        return;
+      }
+
       // Check if remaining amount is 0 and prevent new selections
       if (remainingAmount <= 0) {
         toast.error("You have already allocated the full transaction amount. Please remove allocation from existing bills first.");
         return;
       }
 
-      try {
-        // Fetch the current balance (arrears) from the customer_balances table
-        const currentBalance = await billingService.getCustomerBalance(monthlyBill.customer_id);
-        
-        const updatedMonthlyBill = {
-          ...monthlyBill,
-          arrears: currentBalance - monthlyBill.total_revenue,
-        };
+      // Add bill to selection with initial allocated amount of 0
+      // Do NOT modify the bill data - use it as-is to keep pending amounts consistent
+      updatedSelectedBills.set(monthlyBill.id, {
+        bill: monthlyBill,
+        allocatedAmount: 0,
+        existingPayments: 0
+      });
 
-        // Add bill to selection with initial allocated amount of 0
-        updatedSelectedBills.set(monthlyBill.id, {
-          bill: updatedMonthlyBill,
-          allocatedAmount: 0,
-          existingPayments: 0
-        });
-        
-        // Update parent component state for backward compatibility
-        setSelectedBillId(monthlyBill.id);
-        setSelectedMonthlyBill(updatedMonthlyBill);
-      } catch (error) {
-        console.error("Error during bill selection:", error);
-        toast.error("Failed to select bill.");
-        return;
+      // Set the selected customer ID if this is the first selection
+      if (!selectedCustomerId) {
+        setSelectedCustomerId(monthlyBill.customer_id);
       }
+
+      // Update parent component state for backward compatibility
+      setSelectedBillId(monthlyBill.id);
+      setSelectedMonthlyBill(monthlyBill);
     } else {
       // Remove bill from selection and update remaining amount
       const billData = selectedBills.get(monthlyBill.id);
@@ -202,38 +205,16 @@ const ReconcileModal: React.FC<{
         setRemainingAmount(prev => prev + billData.allocatedAmount);
       }
       updatedSelectedBills.delete(monthlyBill.id);
-      
-      // Clear parent state if this was the selected bill
-      if (selectedBills.size === 1) {
+
+      // Clear selected customer ID if no bills are selected
+      if (updatedSelectedBills.size === 0) {
+        setSelectedCustomerId(null);
         setSelectedBillId(null);
         setSelectedMonthlyBill(null);
       }
     }
-    
-    setSelectedBills(updatedSelectedBills);
-  };
 
-  const handleAllocationChange = (billId: string, newAmount: number) => {
-    const updatedSelectedBills = new Map(selectedBills);
-    const billData = selectedBills.get(billId);
-    
-    if (billData) {
-      const oldAmount = billData.allocatedAmount;
-      const difference = newAmount - oldAmount;
-      const originalBillAmount = billData.bill.total_revenue;
-      
-      // Check if new amount doesn't exceed original bill amount and we have enough remaining amount
-      if (newAmount <= originalBillAmount && difference <= remainingAmount) {
-        updatedSelectedBills.set(billId, {
-          ...billData,
-          allocatedAmount: newAmount
-        });
-        setSelectedBills(updatedSelectedBills);
-        setRemainingAmount(prev => prev - difference);
-      } else if (newAmount > originalBillAmount) {
-        toast.error(`Allocation amount cannot exceed the original bill amount of $${originalBillAmount.toFixed(2)}`);
-      }
-    }
+    setSelectedBills(updatedSelectedBills);
   };
 
   const autoDistributePayment = () => {
@@ -309,16 +290,48 @@ const ReconcileModal: React.FC<{
   
 
   // Function to calculate the pending amount
-  const calculatePendingAmount = (monthlyBill: MonthlyBill): number => {
+  const calculatePendingAmount = (monthlyBill: MonthlyBill, allocatedAmount: number = 0): number => {
     const totalDue = monthlyBill.total_revenue + (monthlyBill.arrears || 0);
     const paidAmount = monthlyBill.paid_amount || 0;
-    return Math.max(0, totalDue - paidAmount);
+    return Math.max(0, totalDue - paidAmount - allocatedAmount);
   };
 
+  // Filter monthly bills based on customer search query
+  const filteredMonthlyBills = useMemo(() => {
+    if (!customerSearchQuery.trim()) {
+      return monthlyBills;
+    }
+    const query = customerSearchQuery.toLowerCase();
+    return monthlyBills.filter((bill) =>
+      bill.site_name.toLowerCase().includes(query) ||
+      bill.customer_id.toLowerCase().includes(query)
+    );
+  }, [monthlyBills, customerSearchQuery]);
+
   return (
-    <div className="fixed inset-0 z-999 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="w-[800px] rounded-lg bg-white p-6">
-        <h2 className="mb-4 text-lg font-semibold">Reconcile Transaction</h2>
+    <div className="fixed inset-0 z-999 flex items-center justify-center bg-black bg-opacity-50 p-4">
+      <div className="w-full max-w-6xl max-h-[90vh] overflow-y-auto rounded-lg bg-white shadow-2xl">
+        {/* Modal Header */}
+        <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Reconcile Transaction</h2>
+              <p className="text-sm text-gray-500 mt-1">Match payment to customer bills</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="rounded-lg p-2 hover:bg-gray-100 transition-colors"
+              aria-label="Close modal"
+            >
+              <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Modal Content */}
+        <div className="px-6 py-4">
 
         <div className="mb-4">
           <div className="grid grid-cols-2 gap-4">
@@ -327,11 +340,21 @@ const ReconcileModal: React.FC<{
                 <strong>Transaction Amount:</strong> ${bill.amount.toFixed(2)}
               </p>
               <p>
-                <strong>Remaining to Allocate:</strong> 
+                <strong>Remaining to Allocate:</strong>
                 <span className={remainingAmount > 0 ? "text-red-600" : "text-green-600"}>
                   ${remainingAmount.toFixed(2)}
                 </span>
               </p>
+              {selectedCustomerId && (
+                <div className="mt-2 inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-1.5 border border-blue-200">
+                  <span className="text-sm font-medium text-blue-900">
+                    Selected Customer:
+                  </span>
+                  <span className="text-sm font-semibold text-blue-700">
+                    {Array.from(selectedBills.values())[0]?.bill.site_name}
+                  </span>
+                </div>
+              )}
             </div>
             <div className="text-right">
               <button
@@ -351,13 +374,13 @@ const ReconcileModal: React.FC<{
             <h3 className="mb-2 font-semibold">Payment Allocation</h3>
             <div className="max-h-40 overflow-y-auto rounded border">
               {Array.from(selectedBills.entries()).map(([billId, billData]) => {
-                const pendingAmount = calculatePendingAmount(billData.bill);
+                const pendingAmount = calculatePendingAmount(billData.bill, billData.allocatedAmount);
                 return (
                   <div key={billId} className="flex items-center justify-between border-b p-3 last:border-b-0">
                     <div className="flex-1">
                       <p className="font-medium">{billData.bill.site_name}</p>
                       <p className="text-sm text-gray-600">
-                        Pending: ${pendingAmount.toFixed(2)}
+                        Bill Pending: ${pendingAmount.toFixed(2)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -365,10 +388,67 @@ const ReconcileModal: React.FC<{
                       <input
                         type="number"
                         min="0"
-                        max={Math.min(billData.bill.total_revenue, remainingAmount + billData.allocatedAmount)}
                         step="0.01"
-                        value={billData.allocatedAmount}
-                        onChange={(e) => handleAllocationChange(billId, parseFloat(e.target.value) || 0)}
+                        value={billData.allocatedAmount || ""}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          const updatedSelectedBills = new Map(selectedBills);
+                          const currentBillData = selectedBills.get(billId);
+
+                          if (currentBillData) {
+                            const oldAmount = currentBillData.allocatedAmount;
+                            const newAmount = value === "" ? 0 : parseFloat(value) || 0;
+                            const difference = newAmount - oldAmount;
+
+                            // Allow free typing - update without validation
+                            updatedSelectedBills.set(billId, {
+                              ...currentBillData,
+                              allocatedAmount: newAmount
+                            });
+                            setSelectedBills(updatedSelectedBills);
+                            setRemainingAmount(prev => prev - difference);
+                          }
+                        }}
+                        onBlur={(e) => {
+                          // Validate only when user finishes editing (loses focus)
+                          const value = e.target.value;
+                          const newAmount = value === "" ? 0 : parseFloat(value) || 0;
+                          const currentBillData = selectedBills.get(billId);
+
+                          if (currentBillData) {
+                            const originalBillAmount = currentBillData.bill.total_revenue;
+                            const oldAmount = currentBillData.allocatedAmount;
+                            const maxAvailable = remainingAmount + oldAmount;
+
+                            // Check if exceeds bill amount
+                            if (newAmount > originalBillAmount) {
+                              toast.error(`Allocation amount cannot exceed the original bill amount of $${originalBillAmount.toFixed(2)}`);
+                              // Reset to old amount
+                              const updatedSelectedBills = new Map(selectedBills);
+                              updatedSelectedBills.set(billId, {
+                                ...currentBillData,
+                                allocatedAmount: oldAmount
+                              });
+                              setSelectedBills(updatedSelectedBills);
+                              return;
+                            }
+
+                            // Check if exceeds available amount
+                            if (newAmount > maxAvailable) {
+                              toast.error(`Not enough remaining amount. Available: $${maxAvailable.toFixed(2)}`);
+                              // Reset to old amount
+                              const updatedSelectedBills = new Map(selectedBills);
+                              const difference = newAmount - oldAmount;
+                              updatedSelectedBills.set(billId, {
+                                ...currentBillData,
+                                allocatedAmount: oldAmount
+                              });
+                              setSelectedBills(updatedSelectedBills);
+                              setRemainingAmount(prev => prev + difference); // Restore the remaining amount
+                              return;
+                            }
+                          }
+                        }}
                         className="w-24 rounded border px-2 py-1 text-right"
                       />
                     </div>
@@ -380,54 +460,125 @@ const ReconcileModal: React.FC<{
         )}
 
         <div className="mb-4">
-          <h3 className="mb-2 font-semibold">Available Bills</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold">Available Bills</h3>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Search customer name..."
+                value={customerSearchQuery}
+                onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                className="px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              />
+              {customerSearchQuery && (
+                <button
+                  onClick={() => setCustomerSearchQuery("")}
+                  className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+                >
+                  Clear
+                </button>
+              )}
+              <span className="text-xs text-gray-500">
+                {filteredMonthlyBills.length} of {monthlyBills.length}
+              </span>
+            </div>
+          </div>
           <div className="max-h-60 overflow-y-auto">
             <table className="w-full">
               <thead className="sticky top-0 bg-gray-50">
                 <tr>
-                  <th className="px-4 py-2 text-left">Select</th>
-                  <th className="px-4 py-2 text-left">Site Name</th>
-                  <th className="px-4 py-2 text-left">Period</th>
-                  <th className="px-4 py-2 text-left">Original Amount</th>
-                  <th className="px-4 py-2 text-left">Paid</th>
-                  <th className="px-4 py-2 text-left">Pending</th>
-                  {/* <th className="px-4 py-2 text-left">Arrears</th> */}
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase">Select</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase">Site Name</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase">Last Overdue</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase min-w-[200px]">Billing Period</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase">Bill Amount</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase">Bill Paid</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase">Bill Pending</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase">Allocate</th>
                 </tr>
               </thead>
               <tbody>
-                {monthlyBills.map((monthlyBill) => {
+                {filteredMonthlyBills.map((monthlyBill) => {
                   const billData = selectedBills.get(monthlyBill.id);
                   const existingPayments = billData?.existingPayments || 0;
                   // Use the updated bill data if selected, otherwise use original
                   const displayBill = billData ? billData.bill : monthlyBill;
-                  const pendingAmount = calculatePendingAmount(displayBill);
+                  const allocatedAmount = billData?.allocatedAmount || 0;
+                  const pendingAmount = calculatePendingAmount(displayBill, allocatedAmount);
                   const paidAmount = monthlyBill.paid_amount || 0;
                   const isSelected = selectedBills.has(monthlyBill.id);
+                  const lastOverdue = monthlyBill.last_overdue || 0;
+
+                  // Check if bill is fully paid (pending amount = 0)
+                  const isFullyPaid = pendingAmount <= 0;
+
+                  // Check if this bill belongs to a different customer than the selected one
+                  const isDifferentCustomer = !!(selectedCustomerId && selectedCustomerId !== monthlyBill.customer_id);
+                  const isDisabled = (!isSelected && remainingAmount <= 0) || isDifferentCustomer || isFullyPaid;
+
+                  // Format billing period dates
+                  const startDate = new Date(monthlyBill.billing_period_start).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                  });
+                  const endDate = new Date(monthlyBill.billing_period_end).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                  });
 
                   return (
-                    <tr key={monthlyBill.id} className={`hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''}`}>
+                    <tr key={monthlyBill.id} className={`hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''} ${isDifferentCustomer || isFullyPaid ? 'opacity-50 bg-gray-50' : ''}`}>
                       <td className="px-4 py-2">
                         <input
                           type="checkbox"
                           onChange={(e) => handleBillSelection(monthlyBill, e.target.checked)}
                           checked={isSelected}
-                          disabled={!isSelected && remainingAmount <= 0}
-                          className={!isSelected && remainingAmount <= 0 ? "cursor-not-allowed opacity-50" : "cursor-pointer"}
+                          disabled={isDisabled}
+                          className={isDisabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}
                         />
                       </td>
-                      <td className="px-4 py-2">{monthlyBill.site_name}</td>
                       <td className="px-4 py-2">
-                        {new Date(monthlyBill.billing_period_start).toLocaleDateString()}
+                        <div className={`font-medium ${isDifferentCustomer || isFullyPaid ? 'text-gray-400' : ''}`}>
+                          {monthlyBill.site_name}
+                          {isDifferentCustomer && (
+                            <span className="ml-2 text-xs text-gray-500">(Different Customer)</span>
+                          )}
+                          {isFullyPaid && !isSelected && (
+                            <span className="ml-2 text-xs text-green-600">(Fully Paid)</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className={`font-semibold ${
+                          lastOverdue > 0 ? 'text-red-600' : 'text-green-600'
+                        } ${isDifferentCustomer ? 'opacity-50' : ''}`}>
+                          ${lastOverdue.toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-sm whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <span className="font-medium text-gray-900">{startDate}</span>
+                          <span className="text-xs text-gray-500">to {endDate}</span>
+                        </div>
                       </td>
                       <td className="px-4 py-2">${monthlyBill.total_revenue.toFixed(2)}</td>
                       <td className="px-4 py-2">${paidAmount.toFixed(2)}</td>
                       <td className="px-4 py-2">
                         ${pendingAmount.toFixed(2)}
-                        {isSelected && billData && (
-                          <span className="ml-1 text-xs text-blue-600">(updated)</span>
-                        )}
                       </td>
-                      {/* <td className="px-4 py-2">${(monthlyBill.arrears || 0).toFixed(2)}</td> */}
+                      <td className="px-4 py-2">
+                        {isFullyPaid && !isSelected ? (
+                          <span className="inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
+                            Paid
+                          </span>
+                        ) : isSelected ? (
+                          <span className="font-medium text-gray-900">
+                            ${allocatedAmount.toFixed(2)}
+                          </span>
+                        ) : null}
+                      </td>
                     </tr>
                   );
                 })}
@@ -436,24 +587,26 @@ const ReconcileModal: React.FC<{
           </div>
         </div>
 
-        <div className="flex justify-end gap-2">
+        {/* Footer */}
+        <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="rounded bg-gray-200 px-4 py-2 hover:bg-gray-300"
+            className="px-6 py-2.5 rounded-lg bg-gray-200 hover:bg-gray-300 font-medium transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleReconcile}
-            className={`rounded px-4 py-2 text-white ${
+            className={`px-6 py-2.5 rounded-lg font-medium transition-colors ${
               selectedBills.size > 0 && remainingAmount === 0
-                ? "bg-primary hover:bg-green-400"
-                : "bg-gray-400 cursor-not-allowed"
+                ? "bg-primary hover:bg-green-400 text-white"
+                : "bg-gray-400 text-white cursor-not-allowed"
             }`}
             disabled={selectedBills.size === 0 || remainingAmount !== 0}
           >
             Match ({selectedBills.size} bill{selectedBills.size !== 1 ? 's' : ''})
           </button>
+        </div>
         </div>
       </div>
     </div>
