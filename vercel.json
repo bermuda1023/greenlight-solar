@@ -1,0 +1,6 @@
+{
+  "crons": [{
+    "path": "/api/cron/update-customer-logs",
+    "schedule": "0 0 * * *"
+  }]
+}

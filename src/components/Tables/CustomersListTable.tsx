@@ -21,6 +21,7 @@ import { supabase } from "@/utils/supabase/browserClient";
 import BillModal from "../Billing/BillModal";
 import TokenRefreshModal from "../Enphase/TokenRefreshModal";
 import AddCustomerModal from "../Customers/AddCustomerModal";
+import CustomerDetailsModal from "../Customers/CustomerDetailsModal";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -49,6 +50,7 @@ interface Customer {
   authorization_token: string | null;
   verification: boolean;
   authorization_code: string | null;
+  status: string | null;
 }
 
 const CustomersListTable = () => {
@@ -74,6 +76,8 @@ const CustomersListTable = () => {
   const [showTokenRefreshModal, setShowTokenRefreshModal] = useState(false);
   const [selectedCustomerForRefresh, setSelectedCustomerForRefresh] = useState<Customer | null>(null);
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedCustomerForDetails, setSelectedCustomerForDetails] = useState<{ id: string; name: string } | null>(null);
 
   const [formData, setFormData] = useState({
     email: "",
@@ -687,7 +691,9 @@ const CustomersListTable = () => {
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Outstanding
                       </th>
-
+                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                        Status
+                      </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Verification
                       </th>
@@ -699,7 +705,7 @@ const CustomersListTable = () => {
                   <tbody>
                     {paginatedCustomers.length === 0 ? (
                       <tr>
-                        <td colSpan={14} className="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                        <td colSpan={15} className="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                           No customers found matching your criteria.
                         </td>
                       </tr>
@@ -772,7 +778,29 @@ const CustomersListTable = () => {
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           {customer.outstanding_balance.toFixed(2)}
                         </td>
-
+                        <td className="whitespace-nowrap px-6 py-4 text-sm">
+                          {customer.status === "success" ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800">
+                              <FontAwesomeIcon
+                                icon={faCircleCheck}
+                                className="h-3 w-3"
+                              />
+                              Success
+                            </span>
+                          ) : customer.status === "failure" ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-800">
+                              <FontAwesomeIcon
+                                icon={faTimesCircle}
+                                className="h-3 w-3"
+                              />
+                              Failure
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 rounded-md bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-600">
+                              N/A
+                            </span>
+                          )}
+                        </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm">
                           {customer.authorization_status === "ENPHASE_AUTHORIZATION_EXPIRED" ? (
                             <button
@@ -809,6 +837,23 @@ const CustomersListTable = () => {
                           )}
                         </td>
                         <td className="flex space-x-3 px-6.5 py-4 text-sm dark:text-white">
+                          <button
+                            onClick={() => {
+                              setSelectedCustomerForDetails({
+                                id: customer.id,
+                                name: customer.site_name
+                              });
+                              setShowDetailsModal(true);
+                            }}
+                            className="rounded-lg bg-blue-50 p-2 text-blue-600 transition hover:bg-blue-600 hover:text-blue-50"
+                            title="View Details"
+                          >
+                            <span className="text-xl">
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                              </svg>
+                            </span>
+                          </button>
                           <button
                             onClick={() => handleEditCustomer(customer.id)}
                             className="rounded-lg bg-green-50 p-2 text-primary transition hover:bg-primary hover:text-green-50"
@@ -1237,6 +1282,17 @@ const CustomersListTable = () => {
           setShowAddCustomerModal(false);
         }}
       />
+
+      {showDetailsModal && selectedCustomerForDetails && (
+        <CustomerDetailsModal
+          customerId={selectedCustomerForDetails.id}
+          customerName={selectedCustomerForDetails.name}
+          onClose={() => {
+            setShowDetailsModal(false);
+            setSelectedCustomerForDetails(null);
+          }}
+        />
+      )}
     </>
   );
 };
