@@ -33,6 +33,7 @@ interface Bill {
   interest?: number;
   pending_bill?: number;
   paid_amount?: number;
+  last_overdue?: number;
   // Add these three:
   belco_revenue?: number;
   greenlight_revenue?: number;
@@ -245,6 +246,7 @@ const BillingScreen = () => {
       if (transactionsError) throw transactionsError;
 
       setTransactions(transactions);
+      setSelectedBill(bill); // Store the selected bill to pass billId to modal
       setIsTransactionsModalOpen(true);
     } catch (err) {
       console.error("Error fetching transactions:", err);
@@ -525,6 +527,14 @@ const BillingScreen = () => {
                         </th>
 
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                          Total Bill ($)
+                        </th>
+
+                        <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                          Balance Overdue ($)
+                        </th>
+
+                        <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Status
                         </th>
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
@@ -535,7 +545,7 @@ const BillingScreen = () => {
                     <tbody>
                       {paginatedBills.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className="px-6.5 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                          <td colSpan={11} className="px-6.5 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                             No bills found matching your criteria.
                           </td>
                         </tr>
@@ -570,7 +580,17 @@ const BillingScreen = () => {
                             {bill.effective_rate ?? bill.energy_rate}¢
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
-                            ${bill.total_revenue}
+                            ${bill.total_revenue.toFixed(2)}
+                          </td>
+
+                          <td className="px-6.5 py-4 text-sm font-semibold dark:text-white">
+                            ${(bill.total_bill || bill.total_revenue).toFixed(2)}
+                          </td>
+
+                          <td className="px-6.5 py-4 text-sm dark:text-white">
+                            <span className={`font-semibold ${(bill.last_overdue || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              ${(bill.last_overdue || 0).toFixed(2)}
+                            </span>
                           </td>
 
                           <td className="px-6.5 py-4 text-sm dark:text-white">
@@ -709,11 +729,12 @@ const BillingScreen = () => {
           </div>
         </div>
       </div>
-      {isTransactionsModalOpen && (
+      {isTransactionsModalOpen && selectedBill && (
         <TransactionsModal
           isOpen={isTransactionsModalOpen}
           onClose={() => setIsTransactionsModalOpen(false)}
           transactions={transactions}
+          billId={selectedBill.id}
         />
       )}
     </>

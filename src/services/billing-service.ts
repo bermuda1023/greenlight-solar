@@ -67,12 +67,16 @@ export class BillingService {
     if (!bill) throw new Error("Bill not found");
 
     // Calculate new paid amount
-    const newPaidAmount = isUndo 
+    const newPaidAmount = isUndo
       ? Math.max(0, (bill.paid_amount || 0) - transactionAmount)
       : (bill.paid_amount || 0) + transactionAmount;
 
-    // Calculate new pending amount
-    const newPendingBill = Math.max(0, bill.total_revenue - newPaidAmount);
+    // Use total_bill (which includes revenue + arrears + interest) instead of just total_revenue
+    // If total_bill is not set, fall back to total_revenue for backward compatibility
+    const totalBillAmount = bill.total_bill || bill.total_revenue;
+
+    // Calculate new pending amount based on total_bill
+    const newPendingBill = Math.max(0, totalBillAmount - newPaidAmount);
 
     // Update the bill
     const { error: updateError } = await supabase
@@ -80,7 +84,7 @@ export class BillingService {
       .update({
         paid_amount: newPaidAmount,
         pending_bill: newPendingBill,
-        status: this.calculateBillStatus(newPaidAmount, bill.total_revenue)
+        status: this.calculateBillStatus(newPaidAmount, totalBillAmount)
       })
       .eq("id", billId);
 
