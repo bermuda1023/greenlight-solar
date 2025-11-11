@@ -58,9 +58,11 @@ interface MonthlyBill {
   billing_period_start: string;
   billing_period_end: string;
   total_revenue: number;
+  total_bill: number;
   status: string;
   arrears: number;
   paid_amount: number;
+  pending_bill?: number;
   pending_balance: number;
   customer_id: string;
   last_overdue?: number;
@@ -219,32 +221,33 @@ const ReconcileModal: React.FC<{
 
   const autoDistributePayment = () => {
     if (selectedBills.size === 0) return;
-    
+
     let remainingToDistribute = bill.amount;
     const updatedSelectedBills = new Map(selectedBills);
-    
+
     // Sort bills by pending amount (smallest first for fair distribution)
     const sortedBills = Array.from(selectedBills.entries()).sort(([, a], [, b]) => {
       const pendingA = calculatePendingAmount(a.bill);
       const pendingB = calculatePendingAmount(b.bill);
       return pendingA - pendingB;
     });
-    
+
     for (const [billId, billData] of sortedBills) {
       if (remainingToDistribute <= 0) break;
-      
+
       const pendingAmount = calculatePendingAmount(billData.bill);
-      const originalBillAmount = billData.bill.total_revenue;
+      // Use total_bill for the original bill amount with fallback to total_revenue
+      const originalBillAmount = billData.bill.total_bill || billData.bill.total_revenue;
       const allocateAmount = Math.min(pendingAmount, remainingToDistribute, originalBillAmount);
-      
+
       updatedSelectedBills.set(billId, {
         ...billData,
         allocatedAmount: allocateAmount
       });
-      
+
       remainingToDistribute -= allocateAmount;
     }
-    
+
     setSelectedBills(updatedSelectedBills);
     setRemainingAmount(remainingToDistribute);
   };
@@ -291,7 +294,8 @@ const ReconcileModal: React.FC<{
 
   // Function to calculate the pending amount
   const calculatePendingAmount = (monthlyBill: MonthlyBill, allocatedAmount: number = 0): number => {
-    const totalDue = monthlyBill.total_revenue + (monthlyBill.arrears || 0);
+    // Use total_bill (which includes revenue + arrears + interest) with fallback to total_revenue + arrears
+    const totalDue = monthlyBill.total_bill || (monthlyBill.total_revenue + (monthlyBill.arrears || 0));
     const paidAmount = monthlyBill.paid_amount || 0;
     return Math.max(0, totalDue - paidAmount - allocatedAmount);
   };
@@ -416,13 +420,14 @@ const ReconcileModal: React.FC<{
                           const currentBillData = selectedBills.get(billId);
 
                           if (currentBillData) {
-                            const originalBillAmount = currentBillData.bill.total_revenue;
+                            // Use total_bill for validation with fallback to total_revenue
+                            const originalBillAmount = currentBillData.bill.total_bill || currentBillData.bill.total_revenue;
                             const oldAmount = currentBillData.allocatedAmount;
                             const maxAvailable = remainingAmount + oldAmount;
 
                             // Check if exceeds bill amount
                             if (newAmount > originalBillAmount) {
-                              toast.error(`Allocation amount cannot exceed the original bill amount of $${originalBillAmount.toFixed(2)}`);
+                              toast.error(`Allocation amount cannot exceed the total bill amount of $${originalBillAmount.toFixed(2)}`);
                               // Reset to old amount
                               const updatedSelectedBills = new Map(selectedBills);
                               updatedSelectedBills.set(billId, {
@@ -491,9 +496,9 @@ const ReconcileModal: React.FC<{
                   <th className="px-4 py-2 text-left text-xs font-medium uppercase">Site Name</th>
                   <th className="px-4 py-2 text-left text-xs font-medium uppercase">Last Overdue</th>
                   <th className="px-4 py-2 text-left text-xs font-medium uppercase min-w-[200px]">Billing Period</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium uppercase">Bill Amount</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium uppercase">Bill Paid</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium uppercase">Bill Pending</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase">Total Bill ($)</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase">Bill Paid ($)</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase">Pending Bill ($)</th>
                   <th className="px-4 py-2 text-left text-xs font-medium uppercase">Allocate</th>
                 </tr>
               </thead>
@@ -504,7 +509,13 @@ const ReconcileModal: React.FC<{
                   // Use the updated bill data if selected, otherwise use original
                   const displayBill = billData ? billData.bill : monthlyBill;
                   const allocatedAmount = billData?.allocatedAmount || 0;
-                  const pendingAmount = calculatePendingAmount(displayBill, allocatedAmount);
+
+                  // Get initial pending from database, then subtract any current allocation
+                  const initialPending = monthlyBill.pending_bill !== undefined
+                    ? monthlyBill.pending_bill
+                    : calculatePendingAmount(monthlyBill, 0);
+                  const pendingAmount = Math.max(0, initialPending - allocatedAmount);
+
                   const paidAmount = monthlyBill.paid_amount || 0;
                   const isSelected = selectedBills.has(monthlyBill.id);
                   const lastOverdue = monthlyBill.last_overdue || 0;
@@ -563,9 +574,9 @@ const ReconcileModal: React.FC<{
                           <span className="text-xs text-gray-500">to {endDate}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-2">${monthlyBill.total_revenue.toFixed(2)}</td>
+                      <td className="px-4 py-2 font-semibold">${(monthlyBill.total_bill || monthlyBill.total_revenue).toFixed(2)}</td>
                       <td className="px-4 py-2">${paidAmount.toFixed(2)}</td>
-                      <td className="px-4 py-2">
+                      <td className="px-4 py-2 font-semibold">
                         ${pendingAmount.toFixed(2)}
                       </td>
                       <td className="px-4 py-2">

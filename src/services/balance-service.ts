@@ -59,7 +59,8 @@ export class CustomerBalanceService {
     if (paymentsError) throw paymentsError;
 
     // Calculate totals
-    const total_billed = bills?.reduce((sum, bill) => sum + (bill.total_revenue || 0), 0) || 0;
+    // Use total_bill (which includes revenue + arrears + interest) instead of just total_revenue
+    const total_billed = bills?.reduce((sum, bill) => sum + (bill.total_bill || bill.total_revenue || 0), 0) || 0;
     const total_paid = payments?.reduce((sum, payment) => sum + (payment.paid_amount || 0), 0) || 0;
     const current_balance = total_billed - total_paid;
 

@@ -53,7 +53,7 @@ export class ReconciliationService {
         // Update bill with new transaction ID in reconciliation_ids
         const currentReconciliationIds = currentBill.reconciliation_ids || [];
         const updatedReconciliationIds = [...currentReconciliationIds];
-        
+
         if (!updatedReconciliationIds.includes(transactionId)) {
           updatedReconciliationIds.push(transactionId);
         }
@@ -68,6 +68,21 @@ export class ReconciliationService {
 
         if (updateBillError) {
           throw updateBillError;
+        }
+
+        // Save the allocation record to track exact amount allocated
+        const { error: allocationError } = await supabase
+          .from("transaction_bill_allocations")
+          .upsert({
+            transaction_id: transactionId,
+            bill_id: match.billId,
+            allocated_amount: match.amount
+          }, {
+            onConflict: 'transaction_id,bill_id'
+          });
+
+        if (allocationError) {
+          throw allocationError;
         }
 
         // Update bill amounts
@@ -109,6 +124,14 @@ export class ReconciliationService {
         throw new Error("Transaction not found");
       }
 
+      // Fetch all allocations for this transaction to know which bills were affected and by how much
+      const { data: allocations, error: allocError } = await supabase
+        .from("transaction_bill_allocations")
+        .select("*")
+        .eq("transaction_id", transactionId);
+
+      if (allocError) throw allocError;
+
       // Find all bills that have this transaction ID in their reconciliation_ids
       const { data: bills, error: billsError } = await supabase
         .from("monthly_bills")
@@ -133,10 +156,22 @@ export class ReconciliationService {
           throw updateBillError;
         }
 
-        // Undo the bill payment
-        if (transaction.bill_id === bill.id) {
-          await this.billingService.updateBillAmounts(bill.id, transaction.paid_amount, true);
+        // Find the exact allocation amount for this bill
+        const allocation = allocations?.find(a => a.bill_id === bill.id);
+        if (allocation) {
+          // Undo the bill payment using the exact allocated amount
+          await this.billingService.updateBillAmounts(bill.id, allocation.allocated_amount, true);
         }
+      }
+
+      // Delete all allocation records for this transaction
+      const { error: deleteAllocError } = await supabase
+        .from("transaction_bill_allocations")
+        .delete()
+        .eq("transaction_id", transactionId);
+
+      if (deleteAllocError) {
+        throw deleteAllocError;
       }
 
       // Reset the transaction

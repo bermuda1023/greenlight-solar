@@ -117,33 +117,33 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
     doc.setFont("helvetica", "bold");
     doc.text("Name:", 20, 65);
     doc.setFont("helvetica", "normal");
-    doc.text(bill.site_name || "N/A", 45, 65);
+    doc.text(String(bill.site_name || "N/A"), 45, 65);
 
     doc.setFont("helvetica", "bold");
     doc.text("Address:", 20, 72);
     doc.setFont("helvetica", "normal");
-    doc.text(bill.address || "N/A", 45, 72);
+    doc.text(String(bill.address || "N/A"), 45, 72);
 
     // Right column
     doc.setFont("helvetica", "bold");
     doc.text("Email:", 110, 65);
     doc.setFont("helvetica", "normal");
-    doc.text(bill.email || "N/A", 130, 65);
+    doc.text(String(bill.email || "N/A"), 130, 65);
 
     doc.setFont("helvetica", "bold");
     doc.text("Date:", 110, 72);
     doc.setFont("helvetica", "normal");
-    doc.text(new Date(bill.created_at).toLocaleDateString(), 130, 72);
+    doc.text(String(new Date(bill.created_at).toLocaleDateString()), 130, 72);
 
     doc.setFont("helvetica", "bold");
     doc.text("Invoice Number:", 110, 79);
     doc.setFont("helvetica", "normal");
-    doc.text(bill.invoice_number || "N/A", 150, 79);
+    doc.text(String(bill.invoice_number || "N/A"), 150, 79);
 
     doc.setFont("helvetica", "bold");
     doc.text("Effective Rate:", 110, 86);
     doc.setFont("helvetica", "normal");
-    doc.text(`${effectiveRate}¢`, 150, 86);
+    doc.text(String(`${effectiveRate}¢`), 150, 86);
 
     // Billing Period Table Header
     doc.setFillColor(34, 197, 94); // Green
@@ -160,11 +160,11 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
     // Billing Period Data
     doc.setTextColor(60, 60, 60);
     doc.setFont("helvetica", "normal");
-    doc.text(bill.billing_period_start || "N/A", 25, 108);
-    doc.text(bill.billing_period_end || "N/A", 60, 108);
-    doc.text(productionValue.toFixed(2), 95, 108);
-    doc.text(`${effectiveRate}¢`, 135, 108);
-    doc.text(`$${bill.total_revenue.toFixed(2)}`, 160, 108);
+    doc.text(String(bill.billing_period_start || "N/A"), 25, 108);
+    doc.text(String(bill.billing_period_end || "N/A"), 60, 108);
+    doc.text(String(productionValue.toFixed(2)), 95, 108);
+    doc.text(String(`${effectiveRate}¢`), 135, 108);
+    doc.text(String(`$${bill.total_revenue.toFixed(2)}`), 160, 108);
 
     // Line separator
     doc.setDrawColor(200, 200, 200);
@@ -175,20 +175,20 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
     doc.setFont("helvetica", "bold");
     doc.text("Revenue", 130, yPos);
     doc.setFont("helvetica", "normal");
-    doc.text(`$${bill.total_revenue.toFixed(2)}`, 170, yPos, { align: "right" });
+    doc.text(String(`$${bill.total_revenue.toFixed(2)}`), 190, yPos, { align: "right" });
 
     yPos += 7;
     doc.setFont("helvetica", "bold");
     doc.text("Balance (Overdue)", 130, yPos);
     doc.setFont("helvetica", "normal");
-    doc.text(`$${overdueBalance.toFixed(2)}`, 170, yPos, { align: "right" });
+    doc.text(String(`$${overdueBalance.toFixed(2)}`), 190, yPos, { align: "right" });
 
     if (interestAmount > 0) {
       yPos += 7;
       doc.setFont("helvetica", "bold");
       doc.text("Interest", 130, yPos);
       doc.setFont("helvetica", "normal");
-      doc.text(`$${interestAmount.toFixed(2)}`, 170, yPos, { align: "right" });
+      doc.text(String(`$${interestAmount.toFixed(2)}`), 190, yPos, { align: "right" });
     }
 
     yPos += 10;
@@ -196,7 +196,7 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
     doc.setFontSize(11);
     doc.setTextColor(220, 38, 38); // Red
     doc.text("Total Balance", 130, yPos);
-    doc.text(`$${balanceDue.toFixed(2)}`, 170, yPos, { align: "right" });
+    doc.text(String(`$${balanceDue.toFixed(2)}`), 190, yPos, { align: "right" });
 
     // Direct Deposit Section
     yPos += 20;
@@ -237,11 +237,14 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
 
     const footerY = 270;
 
-    // Message
-    const message = parameters.length > 0
-      ? parameters[0].message
+    // Message - ensure it's always a string and split into lines if needed
+    const message = parameters.length > 0 && parameters[0]?.message
+      ? String(parameters[0].message)
       : "Thank you for doing business with us!";
-    doc.text(message, 20, footerY, { maxWidth: 50 });
+
+    // Split text into multiple lines if too long
+    const messageLines = doc.splitTextToSize(message, 50);
+    doc.text(messageLines, 20, footerY);
 
     // Address
     doc.text("Greenlight Financing Ltd.", 75, footerY);
