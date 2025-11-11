@@ -123,7 +123,7 @@ export class EnphaseTokenService {
         refresh_token: tokenData.refreshToken,
         authorization_status: null, // Clear any expired status
         verification: true,
-        token_expires_at: tokenData.expiresAt?.toISOString(),
+        token_expired_at: tokenData.expiresAt?.toISOString(),
         last_token_refresh: new Date().toISOString()
       };
 
@@ -160,7 +160,9 @@ export class EnphaseTokenService {
       const { error } = await supabase
         .from("customers")
         .update({
-          refresh_token: null,
+          // Don't clear refresh_token - keep it so customer remains identifiable as Enphase
+          // The expired token won't work but we need to know this was an Enphase customer
+          // refresh_token: null,
           authorization_status: "ENPHASE_AUTHORIZATION_EXPIRED",
           token_expired_at: new Date().toISOString(),
           token_expiry_reason: reason
@@ -188,13 +190,12 @@ export class EnphaseTokenService {
    */
   async getCustomersNeedingTokenRefresh() {
     try {
-      const now = new Date().toISOString();
       const soonExpiry = new Date(Date.now() + (24 * 60 * 60 * 1000)).toISOString(); // 24 hours from now
 
       const { data, error } = await supabase
         .from("customers")
-        .select("id, site_name, email, refresh_token, token_expires_at, authorization_status")
-        .or(`authorization_status.eq.ENPHASE_AUTHORIZATION_EXPIRED,token_expires_at.lt.${soonExpiry}`)
+        .select("id, site_name, email, refresh_token, token_expired_at, authorization_status")
+        .or(`authorization_status.eq.ENPHASE_AUTHORIZATION_EXPIRED,token_expired_at.lt.${soonExpiry}`)
         .not("refresh_token", "is", null);
 
       if (error) {

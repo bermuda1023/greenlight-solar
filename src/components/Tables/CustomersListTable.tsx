@@ -50,6 +50,7 @@ interface Customer {
   authorization_token: string | null;
   verification: boolean;
   authorization_code: string | null;
+  refresh_token: string | null;
   status: string | null;
 }
 
@@ -103,7 +104,7 @@ const CustomersListTable = () => {
   const [customerIdToEdit, setCustomerIdToEdit] = useState<string | null>(null);
 
   const getCustomerType = (customer: Customer): "solar" | "enphase" => {
-    return customer.authorization_code ? "enphase" : "solar";
+    return (customer.authorization_code || customer.refresh_token) ? "enphase" : "solar";
   };
 
   const filteredCustomers = customers.filter(customer => {
@@ -871,7 +872,7 @@ const CustomersListTable = () => {
                             </span>
                           </button>
 
-                          {customer.authorization_code && (
+                          {(customer.authorization_code || customer.refresh_token) && (
                             <button
                               onClick={() => {
                                 setSelectedCustomerForRefresh(customer);
@@ -882,7 +883,11 @@ const CustomersListTable = () => {
                                   ? "bg-red-50 text-red-600 hover:bg-red-600 hover:text-red-50"
                                   : "bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-blue-50"
                               }`}
-                              title="Refresh Enphase Token"
+                              title={
+                                customer.authorization_status === "ENPHASE_AUTHORIZATION_EXPIRED"
+                                  ? "Token Expired - Click to Re-authorize"
+                                  : "Refresh Enphase Token"
+                              }
                             >
                               <span className="text-xl">
                                 <FontAwesomeIcon icon={faCheckCircle} />

@@ -1,5 +1,11 @@
 // src/pages/api/enphase/monitor-tokens.js
 import { enphaseTokenService } from "@/services/enphase-token-service";
+import { createClient } from '@supabase/supabase-js';
+
+// Use server-side Supabase for API routes
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') {
@@ -9,21 +15,25 @@ export default async function handler(req, res) {
   try {
     console.log("Starting Enphase token monitoring...");
 
-    // Get customers needing token refresh
-    const checkResult = await enphaseTokenService.getCustomersNeedingTokenRefresh();
-    
-    if (!checkResult.success) {
-      return res.status(500).json({ 
+    // Get customers needing token refresh - use server-side query
+    const soonExpiry = new Date(Date.now() + (24 * 60 * 60 * 1000)).toISOString();
+    const { data: customersNeedingRefresh, error } = await supabase
+      .from("customers")
+      .select("id, site_name, email, refresh_token, token_expired_at, authorization_status")
+      .or(`authorization_status.eq.ENPHASE_AUTHORIZATION_EXPIRED,token_expired_at.lt.${soonExpiry}`)
+      .not("refresh_token", "is", null);
+
+    if (error) {
+      return res.status(500).json({
         error: 'Failed to check customer tokens',
-        details: checkResult.error 
+        details: error.message
       });
     }
 
-    const customersNeedingRefresh = checkResult.customers;
-    console.log(`Found ${customersNeedingRefresh.length} customers needing token refresh`);
+    console.log(`Found ${customersNeedingRefresh?.length || 0} customers needing token refresh`);
 
     const results = {
-      total: customersNeedingRefresh.length,
+      total: customersNeedingRefresh?.length || 0,
       expired: 0,
       expiringSoon: 0,
       refreshAttempts: 0,
@@ -33,13 +43,13 @@ export default async function handler(req, res) {
     };
 
     // Process each customer
-    for (const customer of customersNeedingRefresh) {
+    for (const customer of customersNeedingRefresh || []) {
       const customerResult = {
         id: customer.id,
         siteName: customer.site_name,
         email: customer.email,
         status: customer.authorization_status,
-        tokenExpiresAt: customer.token_expires_at,
+        tokenExpiresAt: customer.token_expired_at,
         action: 'none',
         success: false,
         message: ''
@@ -47,7 +57,7 @@ export default async function handler(req, res) {
 
       // Check if token is expired or expiring soon
       const now = new Date();
-      const expiryDate = customer.token_expires_at ? new Date(customer.token_expires_at) : null;
+      const expiryDate = customer.token_expired_at ? new Date(customer.token_expired_at) : null;
       const isExpired = customer.authorization_status === "ENPHASE_AUTHORIZATION_EXPIRED";
       const isExpiringSoon = expiryDate && expiryDate < new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
