@@ -1,6 +1,12 @@
 {
-  "crons": [{
-    "path": "/api/cron/update-customer-logs",
-    "schedule": "0 0 * * *"
-  }]
+  "crons": [
+    {
+      "path": "/api/cron/update-customer-logs",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-enphase-tokens",
+      "schedule": "0 */6 * * *"
+    }
+  ]
 }

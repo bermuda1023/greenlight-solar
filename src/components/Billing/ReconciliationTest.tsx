@@ -223,34 +223,94 @@ const ReconcileModal: React.FC<{
   const autoDistributePayment = () => {
     if (selectedBills.size === 0) return;
 
-    let remainingToDistribute = bill.amount;
+    const totalAmount = bill.amount;
     const updatedSelectedBills = new Map(selectedBills);
+    const billsArray = Array.from(selectedBills.entries());
 
-    // Sort bills by pending amount (smallest first for fair distribution)
-    const sortedBills = Array.from(selectedBills.entries()).sort(([, a], [, b]) => {
-      const pendingA = calculatePendingAmount(a.bill);
-      const pendingB = calculatePendingAmount(b.bill);
-      return pendingA - pendingB;
-    });
-
-    for (const [billId, billData] of sortedBills) {
-      if (remainingToDistribute <= 0) break;
-
-      const pendingAmount = calculatePendingAmount(billData.bill);
-      // Use total_bill for the original bill amount with fallback to total_revenue
+    // Special case: If only 1 bill is selected, allocate full amount (up to pending)
+    if (billsArray.length === 1) {
+      const [billId, billData] = billsArray[0];
+      const pendingAmount = calculatePendingAmount(billData.bill, 0);
       const originalBillAmount = billData.bill.total_bill || billData.bill.total_revenue;
-      const allocateAmount = Math.min(pendingAmount, remainingToDistribute, originalBillAmount);
+      const allocateAmount = Math.min(pendingAmount, totalAmount, originalBillAmount);
 
       updatedSelectedBills.set(billId, {
         ...billData,
         allocatedAmount: allocateAmount
       });
 
-      remainingToDistribute -= allocateAmount;
+      setSelectedBills(updatedSelectedBills);
+      setRemainingAmount(totalAmount - allocateAmount);
+      toast.success(`Full amount of $${allocateAmount.toFixed(2)} allocated to the bill.`);
+      return;
     }
 
-    setSelectedBills(updatedSelectedBills);
-    setRemainingAmount(remainingToDistribute);
+    // Special case: If 2 bills are selected, do 50/50 split
+    if (billsArray.length === 2) {
+      const halfAmount = totalAmount / 2;
+      let remainingToDistribute = totalAmount;
+
+      for (const [billId, billData] of billsArray) {
+        const pendingAmount = calculatePendingAmount(billData.bill, 0);
+        const originalBillAmount = billData.bill.total_bill || billData.bill.total_revenue;
+        const allocateAmount = Math.min(pendingAmount, halfAmount, originalBillAmount);
+
+        updatedSelectedBills.set(billId, {
+          ...billData,
+          allocatedAmount: allocateAmount
+        });
+
+        remainingToDistribute -= allocateAmount;
+      }
+
+      setSelectedBills(updatedSelectedBills);
+      setRemainingAmount(remainingToDistribute);
+      toast.success(`Amount split 50/50 between 2 bills ($${halfAmount.toFixed(2)} each).`);
+      return;
+    }
+
+    // For 3+ bills: Distribute equally, with the last bill getting the remainder
+    if (billsArray.length >= 3) {
+      const equalShare = totalAmount / billsArray.length;
+      let remainingToDistribute = totalAmount;
+
+      // Allocate equal shares to all bills except the last one
+      for (let i = 0; i < billsArray.length - 1; i++) {
+        const [billId, billData] = billsArray[i];
+        const pendingAmount = calculatePendingAmount(billData.bill, 0);
+        const originalBillAmount = billData.bill.total_bill || billData.bill.total_revenue;
+        const allocateAmount = Math.min(pendingAmount, equalShare, originalBillAmount);
+
+        updatedSelectedBills.set(billId, {
+          ...billData,
+          allocatedAmount: allocateAmount
+        });
+
+        remainingToDistribute -= allocateAmount;
+      }
+
+      // Last bill gets whatever remains (can be more or less than equal share)
+      const [lastBillId, lastBillData] = billsArray[billsArray.length - 1];
+      const lastPendingAmount = calculatePendingAmount(lastBillData.bill, 0);
+      const lastOriginalBillAmount = lastBillData.bill.total_bill || lastBillData.bill.total_revenue;
+      const lastAllocateAmount = Math.min(
+        lastPendingAmount,
+        remainingToDistribute,
+        lastOriginalBillAmount
+      );
+
+      updatedSelectedBills.set(lastBillId, {
+        ...lastBillData,
+        allocatedAmount: lastAllocateAmount
+      });
+
+      remainingToDistribute -= lastAllocateAmount;
+
+      setSelectedBills(updatedSelectedBills);
+      setRemainingAmount(remainingToDistribute);
+      toast.success(`Amount distributed across ${billsArray.length} bills (equal shares, last bill gets remainder).`);
+      return;
+    }
   };
   
   

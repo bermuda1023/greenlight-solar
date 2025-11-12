@@ -1,9 +1,13 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
+import { EnphaseTokenService } from '@/services/enphase-token-service';
+import { EmailService } from '@/services/email-service';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const enphaseTokenService = new EnphaseTokenService();
+const emailService = new EmailService();
 
 interface EnergyDataError {
   errorType: 'API_ERROR' | 'ZERO_PRODUCTION' | 'NO_DATA' | 'INVALID_RESPONSE' | 'TOKEN_EXPIRED' | 'NETWORK_ERROR';
@@ -57,6 +61,58 @@ export default async function handler(
 
     console.log(`[CRON] Found ${customers?.length || 0} customers to process`);
 
+    // STEP 1: Refresh Enphase tokens before fetching energy data
+    console.log('[CRON] Step 1: Refreshing Enphase tokens...');
+    const enphaseCustomers = customers?.filter(c => c.refresh_token) || [];
+    console.log(`[CRON] Found ${enphaseCustomers.length} Enphase customers with refresh tokens`);
+
+    const tokenRefreshResults = {
+      total: enphaseCustomers.length,
+      successful: 0,
+      failed: 0,
+      needsReauth: 0
+    };
+
+    for (const customer of enphaseCustomers) {
+      try {
+        // Check if token is expiring soon (within 7 days) or already expired
+        const now = new Date();
+        const tokenExpiresAt = customer.token_expired_at ? new Date(customer.token_expired_at) : null;
+        const sevenDaysFromNow = new Date(now.getTime() + (7 * 24 * 60 * 60 * 1000));
+
+        const shouldRefresh = !tokenExpiresAt ||
+                             tokenExpiresAt < sevenDaysFromNow ||
+                             customer.authorization_status === 'ENPHASE_AUTHORIZATION_EXPIRED';
+
+        if (shouldRefresh) {
+          console.log(`[CRON] Refreshing token for ${customer.site_name} (expires: ${tokenExpiresAt?.toISOString() || 'unknown'})`);
+
+          const refreshResult = await enphaseTokenService.refreshCustomerToken(customer.id);
+
+          if (refreshResult.success) {
+            tokenRefreshResults.successful++;
+            console.log(`[CRON] ✓ Token refreshed for ${customer.site_name}`);
+          } else {
+            tokenRefreshResults.failed++;
+            console.error(`[CRON] ✗ Failed to refresh token for ${customer.site_name}: ${refreshResult.error}`);
+
+            if (refreshResult.error?.includes('expired') || refreshResult.error?.includes('invalid_token')) {
+              tokenRefreshResults.needsReauth++;
+            }
+          }
+
+          // Small delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      } catch (error) {
+        console.error(`[CRON] Error refreshing token for ${customer.site_name}:`, error);
+        tokenRefreshResults.failed++;
+      }
+    }
+
+    console.log('[CRON] Token refresh summary:', tokenRefreshResults);
+    console.log('[CRON] Step 2: Fetching energy data for all customers...');
+
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
@@ -91,9 +147,54 @@ export default async function handler(
 
     console.log(`[CRON] Completed: ${successCount} success, ${failureCount} failures`);
 
+    // STEP 3: Send daily status report email to admin
+    console.log('[CRON] Step 3: Sending daily status report email to admin...');
+
+    const adminEmail = process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
+
+    if (adminEmail) {
+      try {
+        // Prepare customer results with names for email
+        const customerResultsWithNames = results.map(result => {
+          const customer = customers?.find(c => c.id === result.customerId);
+          return {
+            customerId: result.customerId,
+            customerName: customer?.site_name || customer?.email || 'Unknown Customer',
+            status: result.status,
+            energyData: result.energyData,
+            error: result.error,
+          };
+        });
+
+        const emailResult = await emailService.sendDailyStatusReport(adminEmail, {
+          date: yesterday.toISOString().split('T')[0],
+          tokenRefreshResults,
+          customerResults: customerResultsWithNames,
+          summary: {
+            total: results.length,
+            success: successCount,
+            failure: failureCount,
+          },
+        });
+
+        if (emailResult.success) {
+          console.log(`[CRON] ✓ Daily status report email sent successfully to ${adminEmail}`);
+          console.log(`[CRON] Message ID: ${emailResult.messageId}`);
+        } else {
+          console.error(`[CRON] ✗ Failed to send daily status report email: ${emailResult.error}`);
+        }
+      } catch (emailError) {
+        console.error('[CRON] Error sending daily status report email:', emailError);
+        // Don't fail the entire cron job if email fails
+      }
+    } else {
+      console.warn('[CRON] ADMIN_EMAIL not configured. Skipping email notification.');
+    }
+
     return res.status(200).json({
       success: true,
       message: 'Customer logs updated successfully',
+      tokenRefresh: tokenRefreshResults,
       summary: {
         total: results.length,
         success: successCount,
