@@ -1,11 +1,13 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { EnphaseTokenService } from '@/services/enphase-token-service';
+import { EmailService } from '@/services/email-service';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const enphaseTokenService = new EnphaseTokenService();
+const emailService = new EmailService();
 
 interface EnergyDataError {
   errorType: 'API_ERROR' | 'ZERO_PRODUCTION' | 'NO_DATA' | 'INVALID_RESPONSE' | 'TOKEN_EXPIRED' | 'NETWORK_ERROR';
@@ -144,6 +146,50 @@ export default async function handler(
     const failureCount = results.filter(r => r.status === 'failure').length;
 
     console.log(`[CRON] Completed: ${successCount} success, ${failureCount} failures`);
+
+    // STEP 3: Send daily status report email to admin
+    console.log('[CRON] Step 3: Sending daily status report email to admin...');
+
+    const adminEmail = process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
+
+    if (adminEmail) {
+      try {
+        // Prepare customer results with names for email
+        const customerResultsWithNames = results.map(result => {
+          const customer = customers?.find(c => c.id === result.customerId);
+          return {
+            customerId: result.customerId,
+            customerName: customer?.site_name || customer?.email || 'Unknown Customer',
+            status: result.status,
+            energyData: result.energyData,
+            error: result.error,
+          };
+        });
+
+        const emailResult = await emailService.sendDailyStatusReport(adminEmail, {
+          date: yesterday.toISOString().split('T')[0],
+          tokenRefreshResults,
+          customerResults: customerResultsWithNames,
+          summary: {
+            total: results.length,
+            success: successCount,
+            failure: failureCount,
+          },
+        });
+
+        if (emailResult.success) {
+          console.log(`[CRON] ✓ Daily status report email sent successfully to ${adminEmail}`);
+          console.log(`[CRON] Message ID: ${emailResult.messageId}`);
+        } else {
+          console.error(`[CRON] ✗ Failed to send daily status report email: ${emailResult.error}`);
+        }
+      } catch (emailError) {
+        console.error('[CRON] Error sending daily status report email:', emailError);
+        // Don't fail the entire cron job if email fails
+      }
+    } else {
+      console.warn('[CRON] ADMIN_EMAIL not configured. Skipping email notification.');
+    }
 
     return res.status(200).json({
       success: true,
