@@ -1,13 +1,12 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { EnphaseTokenService } from '@/services/enphase-token-service';
-import { EmailService } from '@/services/email-service';
+import { generateDailyReportHTML } from '@/utils/email-templates';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const enphaseTokenService = new EnphaseTokenService();
-const emailService = new EmailService();
 
 interface EnergyDataError {
   errorType: 'API_ERROR' | 'ZERO_PRODUCTION' | 'NO_DATA' | 'INVALID_RESPONSE' | 'TOKEN_EXPIRED' | 'NETWORK_ERROR';
@@ -166,7 +165,8 @@ export default async function handler(
           };
         });
 
-        const emailResult = await emailService.sendDailyStatusReport(adminEmail, {
+        // Generate HTML email content
+        const htmlContent = generateDailyReportHTML({
           date: yesterday.toISOString().split('T')[0],
           tokenRefreshResults,
           customerResults: customerResultsWithNames,
@@ -177,7 +177,23 @@ export default async function handler(
           },
         });
 
-        if (emailResult.success) {
+        // Send email using the same /api/sendmail endpoint used by billing and auth
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.greenlightenergy.bm';
+        const emailResponse = await fetch(`${baseUrl}/api/sendmail`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userEmail: adminEmail,
+            subject: `Daily API & Production Status Report - ${new Date(yesterday).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
+            htmlContent: htmlContent,
+          }),
+        });
+
+        const emailResult = await emailResponse.json();
+
+        if (emailResponse.ok) {
           console.log(`[CRON] ✓ Daily status report email sent successfully to ${adminEmail}`);
           console.log(`[CRON] Message ID: ${emailResult.messageId}`);
         } else {
