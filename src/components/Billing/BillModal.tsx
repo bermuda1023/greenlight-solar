@@ -877,9 +877,6 @@ const handlePostBill = async (billData: any) => {
             total_revenue: billData.total_revenue,
             effective_rate: billData.effective_rate,
             total_production: billData.total_production,
-            total_cost: 0, // Required by database - set to 0 for new bills
-            energy_rate: billData.effective_rate, // Also populate old field for compatibility
-            total_PTS: billData.total_production, // Also populate old field for compatibility
             status: billData.status || "Pending",
             interest: interestAmount,
             total_bill,
@@ -1018,20 +1015,9 @@ const handleEmailBill = async (billData: any) => {
       const tempInvoiceNumber = await generateInvoiceNumber();
       console.log("Generated temp invoice number for email:", tempInvoiceNumber);
 
-      const { data: customerBalanceData, error: balanceError } = await supabase
-        .from("customer_balances")
-        .select("current_balance")
-        .eq("customer_id", billData.customer_id)
-        .single(); // Expecting only one record
-
-      if (balanceError) {
-        console.error("Error fetching customer balance:", balanceError);
-        toast.error("Failed to fetch customer balance. Email not sent.");
-        return;
-      }
-
-      // ✅ Extract `overdueBalance` - current_balance is already the overdue amount
-      const overdueBalance = customerBalanceData?.current_balance || 0;
+      // ✅ Use the overdue balance from billData (which was calculated at bill generation time)
+      // This ensures the email shows the correct overdue balance that was used when creating the bill
+      const overdueBalance = billData.overdue_balance || 0;
 
       // ✅ Calculate interest and total balance
       const interestAmount = parseFloat(billData.interest) || 0;

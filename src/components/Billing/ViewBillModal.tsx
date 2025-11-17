@@ -12,23 +12,15 @@ interface Bill {
   production_kwh: number;
   self_consumption_kwh: number;
   export_kwh: number;
-  total_cost: number;
-  total_PTS: number; // Old field - kept for backwards compatibility
   total_production?: number; // New field
-  energy_rate: number; // Old field - kept for backwards compatibility
   effective_rate?: number; // New field
   total_revenue: number;
   status: string;
   created_at: string;
-  arrears: number;
   invoice_number: string;
   customer_id: string;
   interest?: number;
   last_overdue?: number; // Overdue balance at time of bill generation
-  // NEW FIELDS
-  belco_revenue?: number;
-  greenlight_revenue?: number;
-  savings?: number;
 }
 
 interface Parameters {
@@ -78,13 +70,11 @@ const ViewBillModal: React.FC<{ closeModal: () => void; bill: Bill }> = ({
 
   const effectiveRate = bill.effective_rate
     ? bill.effective_rate.toFixed(3)
-    : bill.energy_rate
-    ? bill.energy_rate.toFixed(3)
-    : (bill.total_revenue > 0 && bill.total_PTS > 0
-      ? (bill.total_revenue / bill.total_PTS).toFixed(3)
+    : (bill.total_revenue > 0 && bill.total_production && bill.total_production > 0
+      ? (bill.total_revenue / bill.total_production).toFixed(3)
       : "0.000");
 
-  const productionValue = bill.total_production ?? bill.total_PTS ?? 0;
+  const productionValue = bill.total_production ?? 0;
 
   const generatePDFDocument = useCallback(() => {
     const doc = new jsPDF({
