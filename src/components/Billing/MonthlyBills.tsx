@@ -18,26 +18,18 @@ interface Bill {
   production_kwh: number;
   self_consumption_kwh: number;
   export_kwh: number;
-  total_cost: number;
-  energy_rate: number; // Old field - kept for backwards compatibility
   effective_rate?: number; // New field
   total_revenue: number;
   total_bill: number;
-  total_PTS: number; // Old field - kept for backwards compatibility
   total_production?: number; // New field
   status: string;
   created_at: string;
-  arrears: number;
   invoice_number: string;
   reconciliation_ids: string[] | null;
   interest?: number;
   pending_bill?: number;
   paid_amount?: number;
   last_overdue?: number;
-  // Add these three:
-  belco_revenue?: number;
-  greenlight_revenue?: number;
-  savings?: number;
 }
 
 interface Transaction {
@@ -317,11 +309,7 @@ const BillingScreen = () => {
   };
 
   const handleOpenBillModal = (bill: Bill) => {
-    setSelectedBill({
-    ...bill,
-    energy_rate: parameters?.[0]?.basePrice ?? bill.energy_rate, // fallback to original if undefined
-  });
-    // setSelectedBill(bill);
+    setSelectedBill(bill);
     setOpenBillModal(true);
   };
 
@@ -573,11 +561,11 @@ const BillingScreen = () => {
                           </td>
 
                           <td className="px-6.5 py-4 text-sm dark:text-white">
-                            {bill.total_production ?? bill.total_PTS}
+                            {bill.total_production}
                           </td>
 
                           <td className="px-6.5 py-4 text-sm dark:text-white">
-                            {bill.effective_rate ?? bill.energy_rate}¢
+                            {bill.effective_rate}¢
                           </td>
                           <td className="px-6.5 py-4 text-sm dark:text-white">
                             ${bill.total_revenue.toFixed(2)}

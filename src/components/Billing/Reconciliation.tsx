@@ -72,11 +72,8 @@ interface MonthlyBill {
   production_kwh: number;
   self_consumption: number;
   export_kwh: number;
-  total_cost: number;
-  energy_rate: number;
   total_revenue: number;
-  savings: number;
-  arrears: number;
+  arrears: number; // Note: Still used in reconciliation logic
   status: string;
   created_at: string;
 }
