@@ -170,7 +170,9 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
               customer_id: insertedCustomer[0].id,
               total_billed: 0,
               total_paid: 0,
-              current_balance: 0,
+              overdue: 0,
+              due_balance: 0,
+              wallet: 0,
             },
           ]);
 
@@ -282,7 +284,9 @@ const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
               customer_id: insertedCustomer[0].id,
               total_billed: 0,
               total_paid: 0,
-              current_balance: 0,
+              overdue: 0,
+              due_balance: 0,
+              wallet: 0,
             },
           ]);
 

@@ -2,9 +2,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/utils/supabase/browserClient";
 import ViewBillModal from "./ViewBillModal";
-import { FaRegFilePdf, FaRegTrashAlt } from "react-icons/fa";
-import { LiaFileInvoiceDollarSolid } from "react-icons/lia";
-import TransactionsModal from "./TransactionsModal";
+import { FaRegFilePdf } from "react-icons/fa";
 import { useSearchParams } from "next/navigation";
 import { toast } from "react-toastify";
 interface Bill {
@@ -22,13 +20,9 @@ interface Bill {
   total_revenue: number;
   total_bill: number;
   total_production?: number; // New field
-  status: string;
   created_at: string;
   invoice_number: string;
-  reconciliation_ids: string[] | null;
   interest?: number;
-  pending_bill?: number;
-  paid_amount?: number;
   last_overdue?: number;
 }
 
@@ -56,7 +50,6 @@ interface Parameters {
 const BillingScreen = () => {
   const [bills, setBills] = useState<Bill[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
   const [dateRange, setDateRange] = useState("");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
@@ -64,9 +57,6 @@ const BillingScreen = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [openbillModal, setOpenBillModal] = useState(false);
-
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [isTransactionsModalOpen, setIsTransactionsModalOpen] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -101,10 +91,6 @@ const BillingScreen = () => {
         query = query.or(
           `site_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`,
         );
-      }
-
-      if (statusFilter) {
-        query = query.eq("status", statusFilter);
       }
 
       if (dateRange) {
@@ -159,7 +145,7 @@ const BillingScreen = () => {
     } finally {
       setLoading(false);
     }
-  }, [searchTerm, statusFilter, dateRange, customStartDate, customEndDate]);
+  }, [searchTerm, dateRange, customStartDate, customEndDate]);
 
   useEffect(() => {
     fetchBills();
@@ -168,7 +154,7 @@ const BillingScreen = () => {
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, dateRange, customStartDate, customEndDate]);
+  }, [searchTerm, dateRange, customStartDate, customEndDate]);
 
   // Pagination calculations
   const totalPages = Math.ceil(bills.length / itemsPerPage);
@@ -195,7 +181,6 @@ const BillingScreen = () => {
 
   const handleClearFilters = () => {
     setSearchTerm("");
-    setStatusFilter("");
     setDateRange("");
     setCustomStartDate("");
     setCustomEndDate("");
@@ -219,94 +204,7 @@ const BillingScreen = () => {
     return null;
   };
 
-  const handleViewTransactions = async (billId: string) => {
-    const bill = bills.find((b) => b.id === billId);
 
-    if (!bill) {
-      alert("Bill not found.");
-      return;
-    }
-
-    try {
-      // Fetch all transactions that have this billId in their reconciliation_ids array
-      const { data: transactions, error: transactionsError } = await supabase
-        .from("transactions")
-        .select("*")
-        .in("id", bill.reconciliation_ids || [])
-        .order("date", { ascending: false });
-
-      if (transactionsError) throw transactionsError;
-
-      setTransactions(transactions);
-      setSelectedBill(bill); // Store the selected bill to pass billId to modal
-      setIsTransactionsModalOpen(true);
-    } catch (err) {
-      console.error("Error fetching transactions:", err);
-      alert("Failed to fetch transactions. Please try again.");
-    }
-  };
-
-  const handleDeleteBill = async (billId: string) => {
-    try {
-      // First, fetch the bill details to get the total_bill amount
-      const { data: billData, error: billFetchError } = await supabase
-        .from("monthly_bills")
-        .select("customer_id, total_bill, total_revenue")
-        .eq("id", billId)
-        .single();
-
-      if (billFetchError) {
-        throw billFetchError;
-      }
-
-      const billcustomer = billData.customer_id;
-      // Use total_bill if available, otherwise fall back to total_revenue
-      const billAmount = billData.total_bill || billData.total_revenue;
-
-      // Fetch the current_balance from the customer_balances table
-      const { data: customerBalanceData, error: fetchError } = await supabase
-        .from("customer_balances")
-        .select("current_balance,total_billed")
-        .eq("customer_id", billcustomer)
-        .single();
-
-      if (fetchError) {
-        throw fetchError;
-      }
-
-      // Calculate the new balance by subtracting the bill amount from the current balance
-      const newBalance = customerBalanceData.current_balance - billAmount;
-      const newBalancetotal = customerBalanceData.total_billed - billAmount;
-
-      // Update the customer balance with the new calculated balance
-      const { error: updateError } = await supabase
-        .from("customer_balances")
-        .update({ current_balance: newBalance, total_billed: newBalancetotal })
-        .eq("customer_id", billcustomer);
-
-      if (updateError) {
-        throw updateError;
-      }
-
-      // Now, delete the bill from the monthly_bills table
-      const { error: deleteError } = await supabase
-        .from("monthly_bills")
-        .delete()
-        .eq("id", billId);
-
-      if (deleteError) throw deleteError;
-
-      // Update the state to remove the deleted bill from the UI
-      setBills((prevBills) => prevBills.filter((bill) => bill.id !== billId));
-
-      // Show success messages
-      toast.dismiss();
-      toast.success("Bill deleted successfully and balance updated.");
-    } catch (err) {
-      console.error("Error deleting bill:", err);
-      toast.error("Failed to delete the bill. Please try again.");
-    }
-  };
 
   const handleOpenBillModal = (bill: Bill) => {
     setSelectedBill(bill);
@@ -366,23 +264,6 @@ const BillingScreen = () => {
                 </div>
                 <div className="relative">
                   <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="w-full appearance-none rounded-[7px] border-[1.5px] border-stroke bg-transparent pl-5 pr-10 py-3 text-dark outline-none transition focus:border-primary active:border-primary dark:border-dark-3 dark:bg-dark-2 dark:text-white cursor-pointer hover:border-primary"
-                    style={{ minWidth: '160px' }}
-                  >
-                    <option value="">Status: All</option>
-                    <option value="Paid">Paid</option>
-                    <option value="Pending">Pending</option>
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
-                    <svg className="h-4 w-4 text-dark dark:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </div>
-                <div className="relative">
-                  <select
                     value={dateRange}
                     onChange={(e) => {
                       setDateRange(e.target.value);
@@ -436,7 +317,7 @@ const BillingScreen = () => {
               )}
 
               {/* Active Filters Status */}
-              {(searchTerm || statusFilter || dateRange) && (
+              {(searchTerm || dateRange) && (
                 <div className="flex items-center justify-between rounded-lg bg-primary/10 p-4">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="text-sm font-semibold text-dark dark:text-white">
@@ -445,11 +326,6 @@ const BillingScreen = () => {
                     {searchTerm && (
                       <span className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 text-sm text-white">
                         Search: "{searchTerm}"
-                      </span>
-                    )}
-                    {statusFilter && (
-                      <span className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 text-sm text-white">
-                        Status: {statusFilter}
                       </span>
                     )}
                     {getActiveDateRangeText() && (
@@ -523,9 +399,6 @@ const BillingScreen = () => {
                         </th>
 
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Status
-                        </th>
-                        <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
                           Action
                         </th>
                       </tr>
@@ -533,7 +406,7 @@ const BillingScreen = () => {
                     <tbody>
                       {paginatedBills.length === 0 ? (
                         <tr>
-                          <td colSpan={11} className="px-6.5 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                          <td colSpan={10} className="px-6.5 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                             No bills found matching your criteria.
                           </td>
                         </tr>
@@ -581,47 +454,15 @@ const BillingScreen = () => {
                             </span>
                           </td>
 
-                          <td className="px-6.5 py-4 text-sm dark:text-white">
-                            <span
-                              className={`inline-flex rounded-full px-3 py-1 text-sm font-medium ${
-                                bill.status === "Paid"
-                                  ? "bg-success/10 text-success"
-                                  : "bg-warning/10 text-warning"
-                              }`}
-                            >
-                              {bill.status}
-                            </span>
-                          </td>
                           <td className="flex justify-end space-x-3 px-6.5 py-4 text-sm dark:text-white">
-                            {bill.reconciliation_ids &&
-                              bill.reconciliation_ids.length > 0 && (
-                                <button
-                                  onClick={() =>
-                                    handleViewTransactions(bill.id)
-                                  }
-                                  className="hover:text-dark- rounded-lg bg-gray-50 p-2 text-dark-3 transition hover:bg-gray-200"
-                                  title="View Transactions"
-                                >
-                                  <span className="text-xl">
-                                    <LiaFileInvoiceDollarSolid />
-                                  </span>
-                                </button>
-                              )}
                             <button
                               key={bill.id}
                               onClick={() => handleOpenBillModal(bill)}
                               className="rounded-lg bg-green-50 p-2 text-primary transition hover:bg-primary hover:text-green-50"
+                              title="View Bill PDF"
                             >
                               <span className="text-xl">
                                 <FaRegFilePdf />
-                              </span>
-                            </button>
-                            <button
-                              onClick={() => handleDeleteBill(bill.id)}
-                              className="rounded-lg bg-red-50 p-2 text-red-600 transition hover:bg-red-600 hover:text-red-50"
-                            >
-                              <span className="text-xl">
-                                <FaRegTrashAlt />
                               </span>
                             </button>
                           </td>
@@ -717,14 +558,6 @@ const BillingScreen = () => {
           </div>
         </div>
       </div>
-      {isTransactionsModalOpen && selectedBill && (
-        <TransactionsModal
-          isOpen={isTransactionsModalOpen}
-          onClose={() => setIsTransactionsModalOpen(false)}
-          transactions={transactions}
-          billId={selectedBill.id}
-        />
-      )}
     </>
   );
 };
