@@ -250,9 +250,9 @@ const CustomersListTable = () => {
       console.log("Customer data from database:", data);
       const customersWithBalance = await Promise.all(
         data.map(async (customer) => {
-          const { data: balanceData, error: balanceError } = await supabase
+          const { data: balanceData, error: balanceError} = await supabase
             .from("customer_balances")
-            .select("current_balance")
+            .select("due_balance")
             .eq("customer_id", customer.id)
             .single();
 
@@ -262,7 +262,7 @@ const CustomersListTable = () => {
 
           return {
             ...customer,
-            outstanding_balance: balanceData?.current_balance || 0,
+            outstanding_balance: balanceData?.due_balance || 0,
           };
         }),
       );

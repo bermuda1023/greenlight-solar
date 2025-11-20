@@ -15,7 +15,6 @@ interface Bill {
   total_production?: number; // New field
   effective_rate?: number; // New field
   total_revenue: number;
-  status: string;
   created_at: string;
   invoice_number: string;
   customer_id: string;

@@ -22,9 +22,6 @@ interface MonthlyBill {
   billing_period_end: string;
   total_revenue: number;
   total_bill: number;
-  paid_amount: number;
-  pending_bill: number;
-  status: string;
   created_at: string;
   interest: number;
   last_overdue: number;
@@ -123,20 +120,6 @@ useEffect(() => {
     return <span className="text-xs text-gray-500">Unknown</span>;
   };
 
-  const getBillStatusBadge = (status: string) => {
-    const statusColors: { [key: string]: string } = {
-      Paid: "bg-green-100 text-green-800",
-      Pending: "bg-yellow-100 text-yellow-800",
-      Overdue: "bg-red-100 text-red-800",
-      "Partially Paid": "bg-blue-100 text-blue-800",
-    };
-
-    return (
-      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusColors[status] || "bg-gray-100 text-gray-800"}`}>
-        {status}
-      </span>
-    );
-  };
 
   const getErrorTypeIcon = (errorType: string | null) => {
     if (!errorType) return null;
@@ -154,30 +137,30 @@ useEffect(() => {
   };
 
   return (
-    <div className="fixed inset-0 z-999 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="relative w-full max-w-6xl max-h-[90vh] overflow-hidden rounded-lg bg-white shadow-xl">
+    <div className="fixed inset-0 z-999 flex items-center justify-center bg-black bg-opacity-50 p-2 sm:p-4">
+      <div className="relative w-full max-w-6xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden rounded-lg bg-white shadow-xl flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">
+        <div className="flex items-center justify-between border-b border-gray-200 px-3 sm:px-6 py-3 sm:py-4 flex-shrink-0">
+          <div className="flex-1 min-w-0 pr-2">
+            <h2 className="text-base sm:text-xl font-semibold text-gray-900 truncate">
               Customer Details
             </h2>
-            <p className="text-sm text-gray-600">{customerName}</p>
+            <p className="text-xs sm:text-sm text-gray-600 truncate">{customerName}</p>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition"
+            className="flex-shrink-0 rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition"
           >
-            <FontAwesomeIcon icon={faTimes} className="h-5 w-5" />
+            <FontAwesomeIcon icon={faTimes} className="h-4 w-4 sm:h-5 sm:w-5" />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="border-b border-gray-200 px-6">
-          <nav className="-mb-px flex gap-6">
+        <div className="border-b border-gray-200 px-3 sm:px-6 flex-shrink-0">
+          <nav className="-mb-px flex gap-3 sm:gap-6 overflow-x-auto">
             <button
               onClick={() => setActiveTab("billing")}
-              className={`py-4 text-sm font-medium border-b-2 transition ${
+              className={`py-3 sm:py-4 text-xs sm:text-sm font-medium border-b-2 transition whitespace-nowrap ${
                 activeTab === "billing"
                   ? "border-blue-600 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -187,7 +170,7 @@ useEffect(() => {
             </button>
             <button
               onClick={() => setActiveTab("logs")}
-              className={`py-4 text-sm font-medium border-b-2 transition ${
+              className={`py-3 sm:py-4 text-xs sm:text-sm font-medium border-b-2 transition whitespace-nowrap ${
                 activeTab === "logs"
                   ? "border-blue-600 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -199,7 +182,7 @@ useEffect(() => {
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto p-6" style={{ maxHeight: "calc(90vh - 180px)" }}>
+        <div className="overflow-y-auto p-3 sm:p-6 flex-1">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-gray-500">Loading...</div>
@@ -212,21 +195,20 @@ useEffect(() => {
                   No billing history found for this customer.
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   {billingHistory.map((bill) => (
                     <div
                       key={bill.id}
-                      className="rounded-lg border border-gray-200 bg-white p-4 hover:shadow-md transition"
+                      className="rounded-lg border border-gray-200 bg-white p-3 sm:p-4 hover:shadow-md transition"
                     >
-                      <div className="flex items-start justify-between">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-0">
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
-                            <h3 className="text-sm font-semibold text-gray-900">
+                            <h3 className="text-xs sm:text-sm font-semibold text-gray-900">
                               {bill.invoice_number}
                             </h3>
-                            {getBillStatusBadge(bill.status)}
                           </div>
-                          <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 sm:gap-x-8 gap-y-1.5 sm:gap-y-2 text-xs sm:text-sm">
                             <div>
                               <span className="text-gray-500">Period:</span>
                               <span className="ml-2 text-gray-900">
@@ -244,18 +226,6 @@ useEffect(() => {
                               <span className="text-gray-500">Total Bill:</span>
                               <span className="ml-2 font-medium text-gray-900">
                                 ${bill.total_bill.toFixed(2)}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">Paid:</span>
-                              <span className="ml-2 font-medium text-green-600">
-                                ${bill.paid_amount.toFixed(2)}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">Pending:</span>
-                              <span className="ml-2 font-medium text-red-600">
-                                ${bill.pending_bill.toFixed(2)}
                               </span>
                             </div>
                             {bill.interest > 0 && (
@@ -276,7 +246,7 @@ useEffect(() => {
                             )}
                           </div>
                         </div>
-                        <div className="text-right text-xs text-gray-500">
+                        <div className="text-left sm:text-right text-xs text-gray-500">
                           Created: {new Date(bill.created_at).toLocaleDateString()}
                         </div>
                       </div>
@@ -293,7 +263,7 @@ useEffect(() => {
                   No logs found for this customer.
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2 sm:space-y-3">
                   {logs.map((log) => (
                     <div
                       key={log.id}
@@ -301,15 +271,15 @@ useEffect(() => {
                     >
                       {/* Log Header */}
                       <div
-                        className="flex items-center justify-between p-4 cursor-pointer"
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 sm:p-4 cursor-pointer gap-2"
                         onClick={() =>
                           setExpandedLog(expandedLog === log.id ? null : log.id)
                         }
                       >
-                        <div className="flex items-center gap-4 flex-1">
-                          <div className="flex items-center gap-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
                             {getStatusBadge(log.status)}
-                            <span className="text-sm font-medium text-gray-900">
+                            <span className="text-xs sm:text-sm font-medium text-gray-900">
                               {new Date(log.log_date).toLocaleDateString("en-US", {
                                 weekday: "short",
                                 year: "numeric",
@@ -323,7 +293,7 @@ useEffect(() => {
                             <div className="flex items-center gap-2">
                               <FontAwesomeIcon
                                 icon={getErrorTypeIcon(log.error_type) || faTimesCircle}
-                                className="h-4 w-4 text-red-500"
+                                className="h-3 w-3 sm:h-4 sm:w-4 text-red-500"
                               />
                               <span className="text-xs text-red-600 font-medium">
                                 {log.error_type.replace(/_/g, " ")}
@@ -338,14 +308,14 @@ useEffect(() => {
                           )}
                         </div>
 
-                        <button className="text-sm text-blue-600 hover:text-blue-700">
+                        <button className="text-xs sm:text-sm text-blue-600 hover:text-blue-700 self-start sm:self-auto">
                           {expandedLog === log.id ? "Hide Details" : "View Details"}
                         </button>
                       </div>
 
                       {/* Expanded Log Details */}
                       {expandedLog === log.id && (
-                        <div className="border-t border-gray-200 bg-gray-50 p-4">
+                        <div className="border-t border-gray-200 bg-gray-50 p-3 sm:p-4">
                           <div className="space-y-4">
                             {/* Energy Data */}
                             {log.status === "success" && (
@@ -445,11 +415,11 @@ useEffect(() => {
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-200 px-6 py-4 bg-gray-50">
+        <div className="border-t border-gray-200 px-3 sm:px-6 py-3 sm:py-4 bg-gray-50 flex-shrink-0">
           <div className="flex justify-end">
             <button
               onClick={onClose}
-              className="rounded-lg bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300 transition"
+              className="rounded-lg bg-gray-200 px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-300 transition"
             >
               Close
             </button>

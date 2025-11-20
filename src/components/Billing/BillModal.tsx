@@ -31,7 +31,7 @@ interface CustomerBalanceProp {
   customer_id: string;
   total_billed: number;
   total_paid: number;
-  current_balance: number;
+  overdue: number;
 }
 interface MonthlyBills {
   total_revenue: number;
@@ -661,7 +661,7 @@ const classifyBills = useCallback(() => {
     const balEntry = customerBalance.find(
       (b) => b.customer_id === customerId
     );
-    const outstanding = balEntry?.current_balance ?? 0;
+    const outstanding = balEntry?.overdue ?? 0;
 
     // Use existing interest rate if already set, otherwise use default from parameters
     if (!(customerId in customerInterestRates)) {
@@ -839,7 +839,6 @@ const handlePostBill = async (billData: any) => {
 
       const interestAmount = Number(billData.interest) || 0;
       const total_bill = Number(billData.total_bill) || Number(billData.total_revenue);
-      const pending_bill = Number(billData.pending_bill) || total_bill;
 
       // Calculate the overdue balance (last_overdue)
       const overdueBalance = Number(billData.overdue_balance) || 0;
@@ -854,13 +853,9 @@ const handlePostBill = async (billData: any) => {
         total_revenue: billData.total_revenue,
         effective_rate: billData.effective_rate,
         total_production: billData.total_production,
-        status: billData.status || "Pending",
         interest: interestAmount,
         total_bill,
-        pending_bill,
-        paid_amount: Number(billData.paid_amount) || 0,
         invoice_number: invoiceNumber,
-        reconciliation_ids: [],
         last_overdue: overdueBalance,
       });
 
@@ -877,13 +872,9 @@ const handlePostBill = async (billData: any) => {
             total_revenue: billData.total_revenue,
             effective_rate: billData.effective_rate,
             total_production: billData.total_production,
-            status: billData.status || "Pending",
             interest: interestAmount,
             total_bill,
-            pending_bill,
-            paid_amount: Number(billData.paid_amount) || 0,
             invoice_number: invoiceNumber,
-            reconciliation_ids: [],
             last_overdue: overdueBalance,
           },
         ])
@@ -898,6 +889,7 @@ const handlePostBill = async (billData: any) => {
       await new CustomerBalanceService().addNewBill(
         billData.customer_id,
         total_bill,
+        overdueBalance
       );
 
       console.log("Inserted Bill:", insertedBills?.[0]);
@@ -941,11 +933,8 @@ const handlePostAllBills = async () => {
           total_revenue: billResult.finalRevenue.toFixed(2),
           effective_rate: billResult.effectiveRate.toFixed(3),
           total_production: energy.production || 0,
-          status: "Pending",
           interest: interestAmount.toFixed(2),
           total_bill: totalBillAmount,
-          pending_bill: totalBillAmount,
-          paid_amount: 0,
           overdue_balance: outstanding, // Add overdue balance for last_overdue field
         };
       })
@@ -1288,11 +1277,8 @@ const handlePostAndEmailAllBills = async () => {
           total_revenue: billResult.finalRevenue.toFixed(2),
           effective_rate: billResult.effectiveRate.toFixed(3),
           total_production: energy.production || 0,
-          status: "Pending",
           interest: interestAmount.toFixed(2),
           total_bill: totalBillAmount,
-          pending_bill: totalBillAmount,
-          paid_amount: 0,
           overdue_balance: outstanding, // Add overdue balance for last_overdue field
         };
       })

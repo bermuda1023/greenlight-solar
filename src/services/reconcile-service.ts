@@ -1,24 +1,13 @@
 import { supabase } from "@/utils/supabase/browserClient";
-import { BillingService } from "./billing-service";
 
 export class ReconciliationService {
-  private billingService: BillingService;
+  constructor() {}
 
-  constructor() {
-    this.billingService = new BillingService();
-  }
-
-  private calculateBillStatus(paidAmount: number, totalAmount: number): string {
-    if (paidAmount >= totalAmount) {
-      return "Fully Paid";
-    }
-    if (paidAmount === 0) {
-      return "Pending";
-    }
-    return "Partially Matched";
-  }
-
-  async matchTransactionToBills(transactionId: string, matchedBills: { billId: string; amount: number }[]) {
+  /**
+   * Match a transaction to a customer
+   * Updates customer balance and sets customer_id on transaction
+   */
+  async matchTransactionToCustomer(transactionId: string, customerId: string) {
     try {
       // Fetch the transaction data
       const { data: transaction, error: txError } = await supabase
@@ -31,72 +20,58 @@ export class ReconciliationService {
         throw new Error("Transaction not found");
       }
 
-      // Validate total matched amount
-      const totalMatchedAmount = matchedBills.reduce((sum, match) => sum + match.amount, 0);
-      if (totalMatchedAmount > transaction.amount) {
-        throw new Error("Total matched amount exceeds transaction amount");
+      // Get current customer balance
+      const { data: customerBalance, error: balanceError } = await supabase
+        .from("customer_balances")
+        .select("*")
+        .eq("customer_id", customerId)
+        .single();
+
+      if (balanceError) {
+        throw new Error("Customer balance not found");
       }
 
-      // Update each bill
-      for (const match of matchedBills) {
-        // Get current bill data
-        const { data: currentBill, error: billError } = await supabase
-          .from("monthly_bills")
-          .select("reconciliation_ids")
-          .eq("id", match.billId)
-          .single();
+      // Calculate new totals after matching payment
+      const newTotalPaid = customerBalance.total_paid + transaction.amount;
 
-        if (billError) {
-          throw billError;
-        }
+      // Calculate the new balance difference
+      const balance_difference = customerBalance.total_billed - newTotalPaid;
 
-        // Update bill with new transaction ID in reconciliation_ids
-        const currentReconciliationIds = currentBill.reconciliation_ids || [];
-        const updatedReconciliationIds = [...currentReconciliationIds];
+      // Calculate overdue after payment
+      // If payment fully covers the balance, overdue becomes 0
+      let newOverdue = customerBalance.overdue || 0;
+      if (balance_difference <= 0) {
+        // Payment covers everything, clear overdue
+        newOverdue = 0;
+      }
 
-        if (!updatedReconciliationIds.includes(transactionId)) {
-          updatedReconciliationIds.push(transactionId);
-        }
+      // Calculate due_balance and wallet
+      // due_balance = what customer still owes (total_billed - total_paid, only if positive)
+      // wallet = credit when payment exceeds total_billed
+      const newDueBalance = balance_difference > 0 ? parseFloat(balance_difference.toFixed(2)) : 0;
+      const newWallet = balance_difference < 0 ? parseFloat(Math.abs(balance_difference).toFixed(2)) : 0;
 
-        // Update the bill
-        const { error: updateBillError } = await supabase
-          .from("monthly_bills")
-          .update({
-            reconciliation_ids: updatedReconciliationIds
-          })
-          .eq("id", match.billId);
+      // Update customer balance
+      const { error: updateBalanceError } = await supabase
+        .from("customer_balances")
+        .update({
+          total_paid: newTotalPaid,
+          overdue: newOverdue,
+          due_balance: newDueBalance,
+          wallet: newWallet
+        })
+        .eq("customer_id", customerId);
 
-        if (updateBillError) {
-          throw updateBillError;
-        }
-
-        // Save the allocation record to track exact amount allocated
-        const { error: allocationError } = await supabase
-          .from("transaction_bill_allocations")
-          .upsert({
-            transaction_id: transactionId,
-            bill_id: match.billId,
-            allocated_amount: match.amount
-          }, {
-            onConflict: 'transaction_id,bill_id'
-          });
-
-        if (allocationError) {
-          throw allocationError;
-        }
-
-        // Update bill amounts
-        await this.billingService.updateBillAmounts(match.billId, match.amount);
+      if (updateBalanceError) {
+        throw updateBalanceError;
       }
 
       // Update the transaction
       const { error: updateTxError } = await supabase
         .from("transactions")
         .update({
-          status: totalMatchedAmount === transaction.amount ? "Matched" : "Partially Matched",
-          bill_id: matchedBills[0].billId,
-          paid_amount: totalMatchedAmount,
-          pending_amount: transaction.amount - totalMatchedAmount
+          status: "Matched",
+          customer_id: customerId
         })
         .eq("id", transactionId);
 
@@ -106,11 +81,15 @@ export class ReconciliationService {
 
       return { success: true };
     } catch (error) {
-      console.error("Error in matchTransactionToBills:", error);
+      console.error("Error in matchTransactionToCustomer:", error);
       throw error;
     }
   }
 
+  /**
+   * Undo a transaction match
+   * Reverts customer balance and clears customer_id from transaction
+   */
   async undoTransactionMatch(transactionId: string) {
     try {
       // Fetch the transaction data
@@ -124,64 +103,64 @@ export class ReconciliationService {
         throw new Error("Transaction not found");
       }
 
-      // Fetch all allocations for this transaction to know which bills were affected and by how much
-      const { data: allocations, error: allocError } = await supabase
-        .from("transaction_bill_allocations")
+      if (!transaction.customer_id) {
+        throw new Error("Transaction is not matched to any customer");
+      }
+
+      // Get current customer balance
+      const { data: customerBalance, error: balanceError } = await supabase
+        .from("customer_balances")
         .select("*")
-        .eq("transaction_id", transactionId);
+        .eq("customer_id", transaction.customer_id)
+        .single();
 
-      if (allocError) throw allocError;
+      if (balanceError) {
+        throw new Error("Customer balance not found");
+      }
 
-      // Find all bills that have this transaction ID in their reconciliation_ids
-      const { data: bills, error: billsError } = await supabase
+      // Calculate new totals after undoing payment
+      const newTotalPaid = customerBalance.total_paid - transaction.amount;
+
+      // Calculate the new balance difference
+      const balance_difference = customerBalance.total_billed - newTotalPaid;
+
+      // When undoing, we need to recalculate overdue
+      // Get the most recent bill to restore the overdue amount
+      const { data: recentBill } = await supabase
         .from("monthly_bills")
-        .select("*")
-        .contains("reconciliation_ids", [transactionId]);
+        .select("last_overdue")
+        .eq("customer_id", transaction.customer_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
 
-      if (billsError) throw billsError;
+      const newOverdue = recentBill?.last_overdue || 0;
 
-      // Update each bill to remove this transaction ID
-      for (const bill of bills || []) {
-        const updatedReconciliationIds = (bill.reconciliation_ids || [])
-          .filter((id: string) => id !== transactionId);
+      // Calculate due_balance and wallet
+      const newDueBalance = balance_difference > 0 ? parseFloat(balance_difference.toFixed(2)) : 0;
+      const newWallet = balance_difference < 0 ? parseFloat(Math.abs(balance_difference).toFixed(2)) : 0;
 
-        const { error: updateBillError } = await supabase
-          .from("monthly_bills")
-          .update({
-            reconciliation_ids: updatedReconciliationIds
-          })
-          .eq("id", bill.id);
+      // Update customer balance
+      const { error: updateBalanceError } = await supabase
+        .from("customer_balances")
+        .update({
+          total_paid: newTotalPaid,
+          overdue: newOverdue,
+          due_balance: newDueBalance,
+          wallet: newWallet
+        })
+        .eq("customer_id", transaction.customer_id);
 
-        if (updateBillError) {
-          throw updateBillError;
-        }
-
-        // Find the exact allocation amount for this bill
-        const allocation = allocations?.find(a => a.bill_id === bill.id);
-        if (allocation) {
-          // Undo the bill payment using the exact allocated amount
-          await this.billingService.updateBillAmounts(bill.id, allocation.allocated_amount, true);
-        }
+      if (updateBalanceError) {
+        throw updateBalanceError;
       }
 
-      // Delete all allocation records for this transaction
-      const { error: deleteAllocError } = await supabase
-        .from("transaction_bill_allocations")
-        .delete()
-        .eq("transaction_id", transactionId);
-
-      if (deleteAllocError) {
-        throw deleteAllocError;
-      }
-
-      // Reset the transaction
+      // Reset the transaction and clear customer_id
       const { error: updateTxError } = await supabase
         .from("transactions")
         .update({
           status: "Unmatched",
-          bill_id: null,
-          paid_amount: 0,
-          pending_amount: transaction.amount
+          customer_id: null
         })
         .eq("id", transactionId);
 
@@ -192,6 +171,32 @@ export class ReconciliationService {
       return { success: true };
     } catch (error) {
       console.error("Error in undoTransactionMatch:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get customer balance details
+   */
+  async getCustomerBalance(customerId: string) {
+    try {
+      const { data, error } = await supabase
+        .from("customer_balances")
+        .select("*")
+        .eq("customer_id", customerId)
+        .single();
+
+      if (error) throw error;
+
+      return {
+        total_billed: data.total_billed || 0,
+        total_paid: data.total_paid || 0,
+        overdue: data.overdue || 0,
+        due_balance: data.due_balance || 0,
+        wallet: data.wallet || 0
+      };
+    } catch (error) {
+      console.error("Error getting customer balance:", error);
       throw error;
     }
   }

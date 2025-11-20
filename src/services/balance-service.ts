@@ -4,7 +4,9 @@ export interface CustomerBalance {
   customer_id: string;
   total_billed: number;
   total_paid: number;
-  current_balance: number;
+  overdue: number;
+  due_balance: number;
+  wallet: number;
   last_updated: Date;
 }
 
@@ -23,7 +25,9 @@ export class CustomerBalanceService {
         customer_id,
         total_billed: 0,
         total_paid: 0,
-        current_balance: 0,
+        overdue: 0,
+        due_balance: 0,
+        wallet: 0,
         last_updated: new Date()
       };
 
@@ -62,7 +66,19 @@ export class CustomerBalanceService {
     // Use total_bill (which includes revenue + arrears + interest) instead of just total_revenue
     const total_billed = bills?.reduce((sum, bill) => sum + (bill.total_bill || bill.total_revenue || 0), 0) || 0;
     const total_paid = payments?.reduce((sum, payment) => sum + (payment.paid_amount || 0), 0) || 0;
-    const current_balance = total_billed - total_paid;
+
+    // Calculate overdue: Get the last_overdue from the most recent bill
+    // This represents unpaid amounts from previous billing periods
+    const overdue = bills && bills.length > 0
+      ? (bills[bills.length - 1].last_overdue || 0)
+      : 0;
+
+    // Calculate due_balance and wallet
+    // due_balance = what customer owes (total_billed - total_paid, but only if positive)
+    // wallet = credit balance when payment exceeds what's owed
+    const balance_difference = total_billed - total_paid;
+    const due_balance = balance_difference > 0 ? parseFloat(balance_difference.toFixed(2)) : 0;
+    const wallet = balance_difference < 0 ? parseFloat(Math.abs(balance_difference).toFixed(2)) : 0;
 
     // Update customer balance record
     const { error: updateError } = await supabase
@@ -71,7 +87,9 @@ export class CustomerBalanceService {
         customer_id: customer_id,
         total_billed: total_billed,
         total_paid: total_paid,
-        current_balance: current_balance,
+        overdue: overdue,
+        due_balance: due_balance,
+        wallet: wallet,
         last_updated: new Date()
       });
 
@@ -81,24 +99,41 @@ export class CustomerBalanceService {
       customer_id,
       total_billed,
       total_paid,
-      current_balance,
+      overdue,
+      due_balance,
+      wallet,
       last_updated: new Date()
     };
   }
 
 // Update customer balance when a new bill is generated
-async addNewBill(customer_id: string, billAmount: number): Promise<void> {
+// The overdue amount should be passed from the billing service (last_overdue from the bill)
+async addNewBill(customer_id: string, billAmount: number, overdueAmount: number = 0): Promise<void> {
     const balance = await this.getOrCreateCustomerBalance(customer_id);
-    
+
+    const newTotalBilled = balance.total_billed + billAmount;
+
+    // Overdue is passed from the billing generation logic
+    // It represents the unpaid balance from previous billing periods
+    const newOverdue = overdueAmount;
+
+    // Calculate due_balance: total_billed - total_paid (only if positive)
+    // Wallet remains unchanged when adding a bill (it only changes with payments)
+    const balance_difference = newTotalBilled - balance.total_paid;
+    const newDueBalance = balance_difference > 0 ? parseFloat(balance_difference.toFixed(2)) : 0;
+    const newWallet = balance_difference < 0 ? parseFloat(Math.abs(balance_difference).toFixed(2)) : 0;
+
     const { error } = await supabase
       .from("customer_balances")
       .update({
-        total_billed: balance.total_billed + billAmount,
-        current_balance: balance.current_balance + billAmount,
+        total_billed: newTotalBilled,
+        overdue: newOverdue,
+        due_balance: newDueBalance,
+        wallet: newWallet,
         last_updated: new Date()
       })
       .eq("customer_id", customer_id);
-  
+
     if (error) throw error;
   }
   
@@ -106,12 +141,33 @@ async addNewBill(customer_id: string, billAmount: number): Promise<void> {
   // Update customer balance when a payment is processed
   async processPayment(customer_id: string, paymentAmount: number): Promise<void> {
     const balance = await this.getOrCreateCustomerBalance(customer_id);
-    
+
+    const newTotalPaid = balance.total_paid + paymentAmount;
+
+    // Calculate the new balance difference
+    const balance_difference = balance.total_billed - newTotalPaid;
+
+    // Calculate overdue after payment
+    // If payment fully covers the balance, overdue becomes 0
+    let newOverdue = balance.overdue;
+    if (balance_difference <= 0) {
+      // Payment covers everything, clear overdue
+      newOverdue = 0;
+    }
+
+    // Calculate due_balance and wallet
+    // due_balance = what customer still owes (total_billed - total_paid, only if positive)
+    // wallet = credit when payment exceeds total_billed
+    const newDueBalance = balance_difference > 0 ? parseFloat(balance_difference.toFixed(2)) : 0;
+    const newWallet = balance_difference < 0 ? parseFloat(Math.abs(balance_difference).toFixed(2)) : 0;
+
     const { error } = await supabase
       .from("customer_balances")
       .update({
-        total_paid: balance.total_paid + paymentAmount,
-        current_balance: balance.current_balance - paymentAmount,
+        total_paid: newTotalPaid,
+        overdue: newOverdue,
+        due_balance: newDueBalance,
+        wallet: newWallet,
         last_updated: new Date()
       })
       .eq("customer_id", customer_id);
@@ -119,27 +175,22 @@ async addNewBill(customer_id: string, billAmount: number): Promise<void> {
     if (error) throw error;
   }
 
-  // // Get current balance for a customer
-  // async getCustomerBalance(customer_id: string): Promise<number> {
-  //   const balance = await this.getOrCreateCustomerBalance(customer_id);
-  //   return balance.current_balance;
-  // }
-// old service
-async getCustomerBalance(customerId: string) {
-  const { data, error } = await supabase
-    .from("customer_balances")
-    .select("current_balance")
-    .eq("customer_id", customerId)
-    .single(); // Assumes one record per customer
+  // Get current balance for a customer (returns due_balance)
+  async getCustomerBalance(customerId: string) {
+    const { data, error } = await supabase
+      .from("customer_balances")
+      .select("due_balance")
+      .eq("customer_id", customerId)
+      .single(); // Assumes one record per customer
 
-  if (error) {
-    throw error;
+    if (error) {
+      throw error;
+    }
+
+    // Extract due_balance and ensure it's a number
+    const dueBalance = data?.due_balance ?? 0; // Default to 0 if not found
+    return dueBalance; // Return as a number
   }
-
-  // Extract current_balance and ensure it's a number
-  const currentBalance = data?.current_balance ?? 0; // Default to 0 if not found
-  return currentBalance; // Return as a number
-}
 
 
 }
