@@ -32,6 +32,7 @@ interface CustomerBalanceProp {
   total_billed: number;
   total_paid: number;
   overdue: number;
+  due_balance: number;
 }
 interface MonthlyBills {
   total_revenue: number;
@@ -138,6 +139,14 @@ const BillModal: React.FC<BillModalProps> = ({
   const [tempInterestAmounts, setTempInterestAmounts] = useState<{
     [customerId: string]: number;
   }>({});
+
+  // Track original overdue values for rollback if user doesn't post bills
+  const [originalOverdueValues, setOriginalOverdueValues] = useState<{
+    [customerId: string]: number;
+  }>({});
+
+  // Track which customers had their overdue updated
+  const [customersWithUpdatedOverdue, setCustomersWithUpdatedOverdue] = useState<string[]>([]);
 
   // ADDED: classification + UI state
   const [activeTab, setActiveTab] = useState<"success" | "failed">("success");
@@ -512,6 +521,32 @@ const classifyBills = useCallback(() => {
   const newFailed: any[] = [];
   const newInterestAmounts: { [customerId: string]: number } = {};
   const newCustomerInterestRates: { [customerId: string]: number } = {};
+  const originalOverdue: { [customerId: string]: number } = {};
+  const updatedCustomers: string[] = [];
+
+  // First, check which customers need overdue update and track original values
+  // If due_balance > 0 and overdue == 0, we'll use due_balance as overdue for calculations
+  // but DON'T update database yet - only update when bills are posted
+  selectedBills.forEach((customerId) => {
+    const balEntry = customerBalance.find((b) => b.customer_id === customerId);
+
+    if (balEntry && balEntry.due_balance > 0 && balEntry.overdue === 0) {
+      // Track original overdue value (which is 0)
+      originalOverdue[customerId] = balEntry.overdue;
+
+      // Update local state to use due_balance as overdue for bill calculations
+      balEntry.overdue = balEntry.due_balance;
+
+      // Track this customer for database update later
+      updatedCustomers.push(customerId);
+
+      console.log(`Will move due_balance to overdue for customer ${customerId}: $${balEntry.due_balance}`);
+    }
+  });
+
+  // Save tracking info to state
+  setOriginalOverdueValues(originalOverdue);
+  setCustomersWithUpdatedOverdue(updatedCustomers);
 
   selectedBills.forEach((customerId) => {
     const customer = customers.find((c) => c.id === customerId);
@@ -798,6 +833,22 @@ const applyInterestChanges = (customerId: string) => {
   }
 };
 
+// Handle modal close - revert overdue changes if bills were not posted
+const handleClose = () => {
+  // Revert overdue changes in local state for customers that had updates
+  customersWithUpdatedOverdue.forEach((customerId) => {
+    const balEntry = customerBalance.find((b) => b.customer_id === customerId);
+    if (balEntry && customerId in originalOverdueValues) {
+      // Restore original overdue value (which was 0)
+      balEntry.overdue = originalOverdueValues[customerId];
+      console.log(`Reverted overdue for customer ${customerId} back to $${originalOverdueValues[customerId]}`);
+    }
+  });
+
+  // Close the modal
+  onClose();
+};
+
 const generateInvoiceNumber = async (): Promise<string> => {
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
     const { count, error } = await supabase
@@ -833,6 +884,25 @@ const handlePostBill = async (billData: any) => {
         });
         toast.error("All required fields must be provided.");
         return false;
+      }
+
+      // IMPORTANT: Update overdue in database BEFORE posting bill
+      // This commits the due_balance → overdue transfer for this customer
+      if (customersWithUpdatedOverdue.includes(billData.customer_id)) {
+        const balEntry = customerBalance.find((b) => b.customer_id === billData.customer_id);
+        if (balEntry && balEntry.overdue > 0) {
+          const { error: overdueUpdateError } = await supabase
+            .from("customer_balances")
+            .update({ overdue: balEntry.overdue })
+            .eq("customer_id", billData.customer_id);
+
+          if (overdueUpdateError) {
+            console.error(`Failed to update overdue for customer ${billData.customer_id}:`, overdueUpdateError);
+            toast.error(`Failed to update overdue for customer. Please try again.`);
+            return false;
+          }
+          console.log(`Committed overdue update for customer ${billData.customer_id}: $${balEntry.overdue}`);
+        }
       }
 
       const invoiceNumber = await generateInvoiceNumber();
@@ -1842,7 +1912,7 @@ return (
             {/* Footer Actions */}
             <div className="mt-6 flex justify-end gap-4">
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="rounded bg-gray-3 px-4 py-2 text-dark-2 hover:bg-gray-4"
               >
                 Close

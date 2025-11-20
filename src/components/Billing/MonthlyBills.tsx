@@ -24,6 +24,8 @@ interface Bill {
   invoice_number: string;
   interest?: number;
   last_overdue?: number;
+  due_balance?: number; // Fetched from customer_balances
+  overdue?: number; // Fetched from customer_balances
 }
 
 interface Transaction {
@@ -138,7 +140,29 @@ const BillingScreen = () => {
       const { data, error } = await query;
       console.log("Bill data:", data);
       if (error) throw error;
-      setBills(data || []);
+
+      // Fetch customer balances for each bill
+      const billsWithBalances = await Promise.all(
+        (data || []).map(async (bill) => {
+          const { data: balanceData, error: balanceError } = await supabase
+            .from("customer_balances")
+            .select("due_balance, overdue")
+            .eq("customer_id", bill.customer_id)
+            .single();
+
+          if (balanceError) {
+            console.error("Error fetching balance for customer:", bill.customer_id, balanceError);
+          }
+
+          return {
+            ...bill,
+            due_balance: balanceData?.due_balance || 0,
+            overdue: balanceData?.overdue || 0,
+          };
+        })
+      );
+
+      setBills(billsWithBalances);
     } catch (err) {
       console.error("Error fetching bills:", err);
       setError("Failed to fetch bills. Please try again later.");
@@ -395,7 +419,11 @@ const BillingScreen = () => {
                         </th>
 
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Balance Overdue ($)
+                          Overdue ($)
+                        </th>
+
+                        <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
+                          Due Balance ($)
                         </th>
 
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
@@ -406,7 +434,7 @@ const BillingScreen = () => {
                     <tbody>
                       {paginatedBills.length === 0 ? (
                         <tr>
-                          <td colSpan={10} className="px-6.5 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                          <td colSpan={11} className="px-6.5 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                             No bills found matching your criteria.
                           </td>
                         </tr>
@@ -449,8 +477,14 @@ const BillingScreen = () => {
                           </td>
 
                           <td className="px-6.5 py-4 text-sm dark:text-white">
-                            <span className={`font-semibold ${(bill.last_overdue || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                              ${(bill.last_overdue || 0).toFixed(2)}
+                            <span className={`font-semibold ${(bill.overdue || 0) > 0 ? 'text-orange-600' : 'text-gray-500'}`}>
+                              ${(bill.overdue || 0).toFixed(2)}
+                            </span>
+                          </td>
+
+                          <td className="px-6.5 py-4 text-sm dark:text-white">
+                            <span className={`font-semibold ${(bill.due_balance || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              ${(bill.due_balance || 0).toFixed(2)}
                             </span>
                           </td>
 
