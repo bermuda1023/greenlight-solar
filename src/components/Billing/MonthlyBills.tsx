@@ -325,7 +325,7 @@ const BillingScreen = () => {
                     </span>
                     {searchTerm && (
                       <span className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1 text-sm text-white">
-                        Search: "{searchTerm}"
+                        Search: &quot;{searchTerm}&quot;
                       </span>
                     )}
                     {getActiveDateRangeText() && (

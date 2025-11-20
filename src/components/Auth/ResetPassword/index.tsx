@@ -288,7 +288,7 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ token }) => {
               Almost There!
             </h1>
             <p className="w-full max-w-[375px] font-medium text-white">
-              Choose a strong password that you haven't used elsewhere. Your new
+              Choose a strong password that you haven&apos;t used elsewhere. Your new
               password will take effect immediately after reset.
             </p>
           </div>
