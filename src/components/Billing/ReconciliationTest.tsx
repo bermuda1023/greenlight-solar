@@ -33,7 +33,6 @@ interface CustomerBalance {
   customer_id: string;
   total_billed: number;
   total_paid: number;
-  overdue: number;
   due_balance: number;
   wallet: number;
 }
@@ -96,7 +95,6 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
               customer_id: customer.id,
               total_billed: 0,
               total_paid: 0,
-              overdue: 0,
               due_balance: 0,
               wallet: 0
             }
@@ -191,7 +189,6 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
                     <th className="px-2 sm:px-4 py-2 text-left text-xs sm:text-sm">Select</th>
                     <th className="px-2 sm:px-4 py-2 text-left text-xs sm:text-sm">Site Name</th>
                     <th className="px-2 sm:px-4 py-2 text-left text-xs sm:text-sm hidden md:table-cell">Email</th>
-                    <th className="px-2 sm:px-4 py-2 text-left text-xs sm:text-sm">Overdue</th>
                     <th className="px-2 sm:px-4 py-2 text-left text-xs sm:text-sm">Due</th>
                     <th className="px-2 sm:px-4 py-2 text-left text-xs sm:text-sm">Wallet</th>
                   </tr>
@@ -215,13 +212,6 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
                       </td>
                       <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm">{customer.site_name}</td>
                       <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm hidden md:table-cell truncate max-w-[150px]">{customer.email}</td>
-                      <td className="px-2 sm:px-4 py-2">
-                        <span className={`text-xs sm:text-sm font-semibold ${
-                          customer.balance.overdue > 0 ? 'text-orange-600' : 'text-gray-500'
-                        }`}>
-                          ${customer.balance.overdue.toFixed(2)}
-                        </span>
-                      </td>
                       <td className="px-2 sm:px-4 py-2">
                         <span className={`text-xs sm:text-sm font-semibold ${
                           customer.balance.due_balance > 0 ? 'text-red-600' : 'text-gray-500'
@@ -255,58 +245,12 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
               <p className="text-sm sm:text-base font-semibold">Selected: {selectedCustomer.site_name}</p>
               <p className="text-xs sm:text-sm text-gray-600 truncate">{selectedCustomer.email}</p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 gap-3 sm:gap-4">
               <div>
-                <label className="block text-xs sm:text-sm font-medium mb-1">Current Overdue</label>
-                <p className="rounded-lg border border-gray-300 px-3 sm:px-4 py-2 text-sm sm:text-base font-semibold text-orange-600">
-                  ${selectedCustomer.balance.overdue.toFixed(2)}
-                </p>
-              </div>
-              <div>
-                <label className="block text-xs sm:text-sm font-medium mb-1">Current Due</label>
+                <label className="block text-xs sm:text-sm font-medium mb-1">Current Due Balance</label>
                 <p className="rounded-lg border border-gray-300 px-3 sm:px-4 py-2 text-sm sm:text-base font-semibold text-red-600">
                   ${selectedCustomer.balance.due_balance.toFixed(2)}
                 </p>
-              </div>
-              <div>
-                <label className="block text-xs sm:text-sm font-medium mb-1">Current Wallet</label>
-                <p className="rounded-lg border border-gray-300 px-3 sm:px-4 py-2 text-sm sm:text-base font-semibold text-green-600">
-                  ${selectedCustomer.balance.wallet.toFixed(2)}
-                </p>
-              </div>
-              <div>
-                <label className="block text-xs sm:text-sm font-medium mb-1">Transaction Amount</label>
-                <p className="rounded-lg border border-gray-300 px-3 sm:px-4 py-2 text-sm sm:text-base font-semibold">
-                  ${transaction.amount.toFixed(2)}
-                </p>
-              </div>
-              <div className="sm:col-span-2">
-                <label className="block text-xs sm:text-sm font-medium mb-1">After Payment</label>
-                <div className="rounded-lg border border-gray-300 px-3 sm:px-4 py-2">
-                  {(() => {
-                    // Calculate what the balance will be after payment
-                    const newTotalPaid = selectedCustomer.balance.total_paid + transaction.amount;
-                    const balance_difference = selectedCustomer.balance.total_billed - newTotalPaid;
-                    const newDue = balance_difference > 0 ? balance_difference : 0;
-                    const newWallet = balance_difference < 0 ? Math.abs(balance_difference) : 0;
-
-                    return balance_difference > 0 ? (
-                      <div className="text-sm sm:text-base">
-                        <span className="text-red-600 font-semibold">
-                          Due: ${newDue.toFixed(2)}
-                        </span>
-                        <span className="text-gray-500 ml-2">• Overdue: $0.00</span>
-                      </div>
-                    ) : (
-                      <div className="text-sm sm:text-base">
-                        <span className="text-green-600 font-semibold">
-                          Wallet: ${newWallet.toFixed(2)}
-                        </span>
-                        <span className="text-gray-500 ml-2">• Due: $0.00 • Overdue: $0.00</span>
-                      </div>
-                    );
-                  })()}
-                </div>
               </div>
             </div>
           </div>

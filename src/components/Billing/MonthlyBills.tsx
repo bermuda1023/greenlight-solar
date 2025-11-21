@@ -24,6 +24,7 @@ interface Bill {
   invoice_number: string;
   interest?: number;
   last_overdue?: number;
+  due_balance?: number; // Fetched from customer_balances
 }
 
 interface Transaction {
@@ -138,6 +139,7 @@ const BillingScreen = () => {
       const { data, error } = await query;
       console.log("Bill data:", data);
       if (error) throw error;
+
       setBills(data || []);
     } catch (err) {
       console.error("Error fetching bills:", err);
@@ -395,7 +397,7 @@ const BillingScreen = () => {
                         </th>
 
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                          Balance Overdue ($)
+                          Last Overdue ($)
                         </th>
 
                         <th className="px-6.5 py-4 text-left text-sm font-medium text-dark dark:text-white">
@@ -449,7 +451,7 @@ const BillingScreen = () => {
                           </td>
 
                           <td className="px-6.5 py-4 text-sm dark:text-white">
-                            <span className={`font-semibold ${(bill.last_overdue || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            <span className={`font-semibold ${(bill.last_overdue || 0) > 0 ? 'text-orange-600' : 'text-gray-500'}`}>
                               ${(bill.last_overdue || 0).toFixed(2)}
                             </span>
                           </td>

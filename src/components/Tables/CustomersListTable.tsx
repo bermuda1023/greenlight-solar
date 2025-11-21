@@ -43,6 +43,7 @@ interface Customer {
   export_kwh: number;
   production_kwh: number;
   outstanding_balance: number;
+  due_balance: number;
   savings: number;
   belco_revenue: number;
   greenlight_revenue: number;
@@ -252,7 +253,7 @@ const CustomersListTable = () => {
         data.map(async (customer) => {
           const { data: balanceData, error: balanceError} = await supabase
             .from("customer_balances")
-            .select("due_balance")
+            .select("overdue, due_balance")
             .eq("customer_id", customer.id)
             .single();
 
@@ -262,7 +263,8 @@ const CustomersListTable = () => {
 
           return {
             ...customer,
-            outstanding_balance: balanceData?.due_balance || 0,
+            outstanding_balance: balanceData?.overdue || 0,
+            due_balance: balanceData?.due_balance || 0,
           };
         }),
       );
@@ -690,7 +692,7 @@ const CustomersListTable = () => {
                         Belco Rate
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Outstanding
+                        Due Balance
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Status
@@ -777,7 +779,9 @@ const CustomersListTable = () => {
                           ${customer.belco_rate ? customer.belco_rate.toFixed(2) : '0.00'}
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          {customer.outstanding_balance.toFixed(2)}
+                          <span className={`font-semibold ${customer.due_balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            ${customer.due_balance.toFixed(2)}
+                          </span>
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm">
                           {customer.status === "success" ? (
