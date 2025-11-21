@@ -31,7 +31,6 @@ interface CustomerBalanceProp {
   customer_id: string;
   total_billed: number;
   total_paid: number;
-  overdue: number;
   due_balance: number;
 }
 interface MonthlyBills {
@@ -118,13 +117,6 @@ const BillModal: React.FC<BillModalProps> = ({
     [customerId: string]: EnergyDataError;
   }>({});
 
-  // State for manual overdue adjustments
-  const [overdueAdjustments, setOverdueAdjustments] = useState<{
-    [customerId: string]: number;
-  }>({});
-
-  const [showAdjustmentModal, setShowAdjustmentModal] = useState<string | null>(null);
-
   // State for interest amounts (editable by user)
   const [interestAmounts, setInterestAmounts] = useState<{
     [customerId: string]: number;
@@ -139,14 +131,6 @@ const BillModal: React.FC<BillModalProps> = ({
   const [tempInterestAmounts, setTempInterestAmounts] = useState<{
     [customerId: string]: number;
   }>({});
-
-  // Track original overdue values for rollback if user doesn't post bills
-  const [originalOverdueValues, setOriginalOverdueValues] = useState<{
-    [customerId: string]: number;
-  }>({});
-
-  // Track which customers had their overdue updated
-  const [customersWithUpdatedOverdue, setCustomersWithUpdatedOverdue] = useState<string[]>([]);
 
   // ADDED: classification + UI state
   const [activeTab, setActiveTab] = useState<"success" | "failed">("success");
@@ -504,11 +488,11 @@ const BillModal: React.FC<BillModalProps> = ({
     }
   }, [startDate, endDate, customerData]);
 
-  // Calculate interest for overdue balance
-  const calculateInterest = useCallback((overdueBalance: number): number => {
+  // Calculate interest for due balance
+  const calculateInterest = useCallback((dueBalance: number): number => {
     if (!parameters || parameters.length === 0) return 0;
     const interestRate = parameters[0]?.interest_rate || 0;
-    return overdueBalance * interestRate;
+    return dueBalance * interestRate;
   }, [parameters]);
 
   // classify bills once energySums + parameters are ready
@@ -521,32 +505,6 @@ const classifyBills = useCallback(() => {
   const newFailed: any[] = [];
   const newInterestAmounts: { [customerId: string]: number } = {};
   const newCustomerInterestRates: { [customerId: string]: number } = {};
-  const originalOverdue: { [customerId: string]: number } = {};
-  const updatedCustomers: string[] = [];
-
-  // First, check which customers need overdue update and track original values
-  // If due_balance > 0 and overdue == 0, we'll use due_balance as overdue for calculations
-  // but DON'T update database yet - only update when bills are posted
-  selectedBills.forEach((customerId) => {
-    const balEntry = customerBalance.find((b) => b.customer_id === customerId);
-
-    if (balEntry && balEntry.due_balance > 0 && balEntry.overdue === 0) {
-      // Track original overdue value (which is 0)
-      originalOverdue[customerId] = balEntry.overdue;
-
-      // Update local state to use due_balance as overdue for bill calculations
-      balEntry.overdue = balEntry.due_balance;
-
-      // Track this customer for database update later
-      updatedCustomers.push(customerId);
-
-      console.log(`Will move due_balance to overdue for customer ${customerId}: $${balEntry.due_balance}`);
-    }
-  });
-
-  // Save tracking info to state
-  setOriginalOverdueValues(originalOverdue);
-  setCustomersWithUpdatedOverdue(updatedCustomers);
 
   selectedBills.forEach((customerId) => {
     const customer = customers.find((c) => c.id === customerId);
@@ -696,7 +654,8 @@ const classifyBills = useCallback(() => {
     const balEntry = customerBalance.find(
       (b) => b.customer_id === customerId
     );
-    const outstanding = balEntry?.overdue ?? 0;
+    // Use due_balance as the overdue amount for interest calculation
+    const outstanding = balEntry?.due_balance ?? 0;
 
     // Use existing interest rate if already set, otherwise use default from parameters
     if (!(customerId in customerInterestRates)) {
@@ -833,19 +792,8 @@ const applyInterestChanges = (customerId: string) => {
   }
 };
 
-// Handle modal close - revert overdue changes if bills were not posted
+// Handle modal close
 const handleClose = () => {
-  // Revert overdue changes in local state for customers that had updates
-  customersWithUpdatedOverdue.forEach((customerId) => {
-    const balEntry = customerBalance.find((b) => b.customer_id === customerId);
-    if (balEntry && customerId in originalOverdueValues) {
-      // Restore original overdue value (which was 0)
-      balEntry.overdue = originalOverdueValues[customerId];
-      console.log(`Reverted overdue for customer ${customerId} back to $${originalOverdueValues[customerId]}`);
-    }
-  });
-
-  // Close the modal
   onClose();
 };
 
@@ -886,25 +834,6 @@ const handlePostBill = async (billData: any) => {
         return false;
       }
 
-      // IMPORTANT: Update overdue in database BEFORE posting bill
-      // This commits the due_balance → overdue transfer for this customer
-      if (customersWithUpdatedOverdue.includes(billData.customer_id)) {
-        const balEntry = customerBalance.find((b) => b.customer_id === billData.customer_id);
-        if (balEntry && balEntry.overdue > 0) {
-          const { error: overdueUpdateError } = await supabase
-            .from("customer_balances")
-            .update({ overdue: balEntry.overdue })
-            .eq("customer_id", billData.customer_id);
-
-          if (overdueUpdateError) {
-            console.error(`Failed to update overdue for customer ${billData.customer_id}:`, overdueUpdateError);
-            toast.error(`Failed to update overdue for customer. Please try again.`);
-            return false;
-          }
-          console.log(`Committed overdue update for customer ${billData.customer_id}: $${balEntry.overdue}`);
-        }
-      }
-
       const invoiceNumber = await generateInvoiceNumber();
 
       const interestAmount = Number(billData.interest) || 0;
@@ -912,6 +841,10 @@ const handlePostBill = async (billData: any) => {
 
       // Calculate the overdue balance (last_overdue)
       const overdueBalance = Number(billData.overdue_balance) || 0;
+
+      // Calculate the new bill amount (revenue + interest, NOT including overdue)
+      // This is what should be added to total_billed
+      const newBillAmount = Number(billData.total_revenue) + interestAmount;
 
       console.log("Saving Bill Data:", {
         customer_id: billData.customer_id,
@@ -956,19 +889,20 @@ const handlePostBill = async (billData: any) => {
         throw insertError;
       }
 
-      await new CustomerBalanceService().addNewBill(
+      // Add only the NEW bill amount (revenue + interest) to total_billed
+      // This returns the amount of wallet credit that was auto-applied
+      const { walletApplied } = await new CustomerBalanceService().addNewBill(
         billData.customer_id,
-        total_bill,
-        overdueBalance
+        newBillAmount
       );
 
       console.log("Inserted Bill:", insertedBills?.[0]);
+      console.log("Wallet credit applied:", walletApplied);
 
-      return (
-        insertedBills?.[0] ?? {
-          invoice_number: invoiceNumber,
-        }
-      );
+      return {
+        ...(insertedBills?.[0] ?? { invoice_number: invoiceNumber }),
+        walletApplied: walletApplied // Return wallet applied for use in email/PDF
+      };
     } catch (error) {
       console.error("Error handling bill:", error);
       if (error instanceof Error) {
@@ -1066,7 +1000,7 @@ const handlePostAllBills = async () => {
     onClose();
   };
 
-const handleEmailBill = async (billData: any) => {
+const handleEmailBill = async (billData: any, walletApplied: number = 0) => {
     setStatus("Processing...");
 
     try {
@@ -1081,6 +1015,23 @@ const handleEmailBill = async (billData: any) => {
       // ✅ Calculate interest and total balance
       const interestAmount = parseFloat(billData.interest) || 0;
       const balanceDue = parseFloat(billData.total_revenue) + overdueBalance + interestAmount;
+
+      // ✅ Use the wallet amount that was actually applied during bill posting
+      const walletCreditApplied = walletApplied;
+      const finalBalanceAfterCredit = Math.max(0, balanceDue - walletCreditApplied);
+
+      // ✅ Fetch the current wallet balance (after wallet application)
+      const { data: currentWalletData, error: walletError } = await supabase
+        .from("customer_balances")
+        .select("wallet")
+        .eq("customer_id", billData.customer_id)
+        .single();
+
+      const currentWalletBalance = currentWalletData?.wallet || 0;
+
+      console.log(`Wallet credit applied to bill: $${walletCreditApplied}`);
+      console.log(`Current wallet balance after application: $${currentWalletBalance}`);
+      console.log(`Final balance after wallet credit: $${finalBalanceAfterCredit}`);
 
       // toast.info("Generating invoice PDF...");
 
@@ -1208,6 +1159,18 @@ const handleEmailBill = async (billData: any) => {
         <p>Total Balance</p>
         <span class="ml-20 w-20">$ ${balanceDue.toFixed(2)}</span>
       </div>
+
+      ${walletCreditApplied > 0 || currentWalletBalance > 0 ? `
+      <div class="flex w-full justify-end text-sm font-semibold text-green-600">
+        <p>Amount Credited</p>
+        <span class="ml-20 w-20">$ ${currentWalletBalance.toFixed(2)}</span>
+      </div>
+
+      <div class="flex w-full justify-end text-lg font-bold ${finalBalanceAfterCredit === 0 ? 'text-green-600' : 'text-red-600'}" style="border-top: 2px solid #ddd; padding-top: 8px; margin-top: 8px;">
+        <p>Final Amount Due</p>
+        <span class="ml-20 w-20">$ ${finalBalanceAfterCredit.toFixed(2)}</span>
+      </div>
+      ` : ''}
     </section>
 
     <!-- Direct Deposit Information -->
@@ -1395,8 +1358,11 @@ const handlePostAndEmailAllBills = async () => {
           continue;
         }
 
-        // Then send the email with the posted bill data
-        await handleEmailBill(billData);
+        // Extract wallet applied amount from posted bill result
+        const walletApplied = postedBill.walletApplied || 0;
+
+        // Then send the email with the posted bill data and wallet applied amount
+        await handleEmailBill(billData, walletApplied);
         successCount++;
       } catch (error) {
         console.error("Failed to process bill:", error);

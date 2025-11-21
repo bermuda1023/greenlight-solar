@@ -4,7 +4,6 @@ export interface CustomerBalance {
   customer_id: string;
   total_billed: number;
   total_paid: number;
-  overdue: number;
   due_balance: number;
   wallet: number;
   last_updated: Date;
@@ -25,7 +24,6 @@ export class CustomerBalanceService {
         customer_id,
         total_billed: 0,
         total_paid: 0,
-        overdue: 0,
         due_balance: 0,
         wallet: 0,
         last_updated: new Date()
@@ -67,12 +65,6 @@ export class CustomerBalanceService {
     const total_billed = bills?.reduce((sum, bill) => sum + (bill.total_bill || bill.total_revenue || 0), 0) || 0;
     const total_paid = payments?.reduce((sum, payment) => sum + (payment.paid_amount || 0), 0) || 0;
 
-    // Calculate overdue: Get the last_overdue from the most recent bill
-    // This represents unpaid amounts from previous billing periods
-    const overdue = bills && bills.length > 0
-      ? (bills[bills.length - 1].last_overdue || 0)
-      : 0;
-
     // Calculate due_balance and wallet
     // due_balance = what customer owes (total_billed - total_paid, but only if positive)
     // wallet = credit balance when payment exceeds what's owed
@@ -87,7 +79,6 @@ export class CustomerBalanceService {
         customer_id: customer_id,
         total_billed: total_billed,
         total_paid: total_paid,
-        overdue: overdue,
         due_balance: due_balance,
         wallet: wallet,
         last_updated: new Date()
@@ -99,7 +90,6 @@ export class CustomerBalanceService {
       customer_id,
       total_billed,
       total_paid,
-      overdue,
       due_balance,
       wallet,
       last_updated: new Date()
@@ -107,27 +97,37 @@ export class CustomerBalanceService {
   }
 
 // Update customer balance when a new bill is generated
-// The overdue amount should be passed from the billing service (last_overdue from the bill)
-async addNewBill(customer_id: string, billAmount: number, overdueAmount: number = 0): Promise<void> {
+// Auto-applies wallet credit to reduce due balance
+async addNewBill(customer_id: string, billAmount: number): Promise<{ walletApplied: number }> {
     const balance = await this.getOrCreateCustomerBalance(customer_id);
 
     const newTotalBilled = balance.total_billed + billAmount;
+    let newTotalPaid = balance.total_paid;
+    let newWallet = balance.wallet;
 
-    // Overdue is passed from the billing generation logic
-    // It represents the unpaid balance from previous billing periods
-    const newOverdue = overdueAmount;
+    // Calculate what customer owes before wallet
+    const balance_difference = newTotalBilled - newTotalPaid;
+    let newDueBalance = balance_difference > 0 ? parseFloat(balance_difference.toFixed(2)) : 0;
 
-    // Calculate due_balance: total_billed - total_paid (only if positive)
-    // Wallet remains unchanged when adding a bill (it only changes with payments)
-    const balance_difference = newTotalBilled - balance.total_paid;
-    const newDueBalance = balance_difference > 0 ? parseFloat(balance_difference.toFixed(2)) : 0;
-    const newWallet = balance_difference < 0 ? parseFloat(Math.abs(balance_difference).toFixed(2)) : 0;
+    // Auto-apply wallet credit to due balance
+    let walletApplied = 0;
+    if (newDueBalance > 0 && newWallet > 0) {
+      walletApplied = Math.min(newDueBalance, newWallet);
+      newTotalPaid += walletApplied;  // Credit from wallet counts as payment
+      newWallet -= walletApplied;     // Reduce wallet
+      newDueBalance -= walletApplied; // Reduce due balance
+
+      // Ensure precision
+      newTotalPaid = parseFloat(newTotalPaid.toFixed(2));
+      newWallet = parseFloat(newWallet.toFixed(2));
+      newDueBalance = parseFloat(newDueBalance.toFixed(2));
+    }
 
     const { error } = await supabase
       .from("customer_balances")
       .update({
         total_billed: newTotalBilled,
-        overdue: newOverdue,
+        total_paid: newTotalPaid,
         due_balance: newDueBalance,
         wallet: newWallet,
         last_updated: new Date()
@@ -135,6 +135,8 @@ async addNewBill(customer_id: string, billAmount: number, overdueAmount: number 
       .eq("customer_id", customer_id);
 
     if (error) throw error;
+
+    return { walletApplied };
   }
   
 
@@ -147,14 +149,6 @@ async addNewBill(customer_id: string, billAmount: number, overdueAmount: number 
     // Calculate the new balance difference
     const balance_difference = balance.total_billed - newTotalPaid;
 
-    // Calculate overdue after payment
-    // If payment fully covers the balance, overdue becomes 0
-    let newOverdue = balance.overdue;
-    if (balance_difference <= 0) {
-      // Payment covers everything, clear overdue
-      newOverdue = 0;
-    }
-
     // Calculate due_balance and wallet
     // due_balance = what customer still owes (total_billed - total_paid, only if positive)
     // wallet = credit when payment exceeds total_billed
@@ -165,7 +159,6 @@ async addNewBill(customer_id: string, billAmount: number, overdueAmount: number 
       .from("customer_balances")
       .update({
         total_paid: newTotalPaid,
-        overdue: newOverdue,
         due_balance: newDueBalance,
         wallet: newWallet,
         last_updated: new Date()

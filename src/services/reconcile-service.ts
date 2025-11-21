@@ -37,14 +37,6 @@ export class ReconciliationService {
       // Calculate the new balance difference
       const balance_difference = customerBalance.total_billed - newTotalPaid;
 
-      // Calculate overdue after payment
-      // If payment fully covers the balance, overdue becomes 0
-      let newOverdue = customerBalance.overdue || 0;
-      if (balance_difference <= 0) {
-        // Payment covers everything, clear overdue
-        newOverdue = 0;
-      }
-
       // Calculate due_balance and wallet
       // due_balance = what customer still owes (total_billed - total_paid, only if positive)
       // wallet = credit when payment exceeds total_billed
@@ -56,7 +48,6 @@ export class ReconciliationService {
         .from("customer_balances")
         .update({
           total_paid: newTotalPaid,
-          overdue: newOverdue,
           due_balance: newDueBalance,
           wallet: newWallet
         })
@@ -124,18 +115,6 @@ export class ReconciliationService {
       // Calculate the new balance difference
       const balance_difference = customerBalance.total_billed - newTotalPaid;
 
-      // When undoing, we need to recalculate overdue
-      // Get the most recent bill to restore the overdue amount
-      const { data: recentBill } = await supabase
-        .from("monthly_bills")
-        .select("last_overdue")
-        .eq("customer_id", transaction.customer_id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-
-      const newOverdue = recentBill?.last_overdue || 0;
-
       // Calculate due_balance and wallet
       const newDueBalance = balance_difference > 0 ? parseFloat(balance_difference.toFixed(2)) : 0;
       const newWallet = balance_difference < 0 ? parseFloat(Math.abs(balance_difference).toFixed(2)) : 0;
@@ -145,7 +124,6 @@ export class ReconciliationService {
         .from("customer_balances")
         .update({
           total_paid: newTotalPaid,
-          overdue: newOverdue,
           due_balance: newDueBalance,
           wallet: newWallet
         })
@@ -191,7 +169,6 @@ export class ReconciliationService {
       return {
         total_billed: data.total_billed || 0,
         total_paid: data.total_paid || 0,
-        overdue: data.overdue || 0,
         due_balance: data.due_balance || 0,
         wallet: data.wallet || 0
       };

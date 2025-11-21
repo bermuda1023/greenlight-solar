@@ -692,9 +692,6 @@ const CustomersListTable = () => {
                         Belco Rate
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
-                        Overdue
-                      </th>
-                      <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
                         Due Balance
                       </th>
                       <th className="whitespace-nowrap px-6 py-4 text-left text-sm font-medium text-dark dark:text-white">
@@ -711,7 +708,7 @@ const CustomersListTable = () => {
                   <tbody>
                     {paginatedCustomers.length === 0 ? (
                       <tr>
-                        <td colSpan={16} className="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                        <td colSpan={15} className="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                           No customers found matching your criteria.
                         </td>
                       </tr>
@@ -780,11 +777,6 @@ const CustomersListTable = () => {
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           ${customer.belco_rate ? customer.belco_rate.toFixed(2) : '0.00'}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
-                          <span className={`font-semibold ${customer.outstanding_balance > 0 ? 'text-orange-600' : 'text-gray-500'}`}>
-                            ${customer.outstanding_balance.toFixed(2)}
-                          </span>
                         </td>
                         <td className="whitespace-nowrap px-6 py-4 text-sm dark:text-white">
                           <span className={`font-semibold ${customer.due_balance > 0 ? 'text-red-600' : 'text-green-600'}`}>

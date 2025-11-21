@@ -33,7 +33,6 @@ interface CustomerBalance {
   customer_id: string;
   total_billed: number;
   total_paid: number;
-  overdue: number;
   due_balance: number;
   wallet: number;
 }
@@ -96,7 +95,6 @@ const ReconcileModal: React.FC<ReconcileModalProps> = ({
               customer_id: customer.id,
               total_billed: 0,
               total_paid: 0,
-              overdue: 0,
               due_balance: 0,
               wallet: 0
             }
